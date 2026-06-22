@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 #[derive(Debug, thiserror::Error)]
 pub enum AegisError {
     #[error("I/O error: {0}")]
@@ -19,16 +17,10 @@ pub enum AegisError {
 
     #[error("Source path does not exist")]
     SourcePathMissing,
-
-    #[error("Path is outside the configured corpus root: {0}")]
-    OutsideCorpusRoot(PathBuf),
 }
 
 pub type AegisResult<T> = Result<T, AegisError>;
 
 pub fn to_user_error(error: AegisError) -> String {
-    match error {
-        AegisError::OutsideCorpusRoot(_) => "Path is outside the configured corpus root".to_string(),
-        other => other.to_string(),
-    }
+    error.to_string()
 }
