@@ -52,6 +52,37 @@ impl SourceMetadataInput {
     }
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SourceMetadataPatch {
+    pub title: Option<String>,
+    pub discipline: Option<String>,
+    pub subdiscipline: Option<Option<String>>,
+    pub language: Option<String>,
+    pub tags: Option<Vec<String>>,
+    pub reliability_notes: Option<Option<String>>,
+}
+
+impl SourceMetadataPatch {
+    pub fn validate(&self) -> Result<(), String> {
+        if let Some(title) = &self.title {
+            if title.trim().is_empty() {
+                return Err("title cannot be empty".to_string());
+            }
+        }
+        if let Some(discipline) = &self.discipline {
+            if discipline.trim().is_empty() {
+                return Err("discipline cannot be empty".to_string());
+            }
+        }
+        if let Some(language) = &self.language {
+            if language.trim().is_empty() {
+                return Err("language cannot be empty".to_string());
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceRecord {
     pub source_id: String,
