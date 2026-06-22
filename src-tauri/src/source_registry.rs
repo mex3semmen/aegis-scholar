@@ -1,5 +1,5 @@
 use crate::errors::{AegisError, AegisResult};
-use crate::source_metadata::{CorpusStatus, IngestionStatus, SourceRecord};
+use crate::source_metadata::{CorpusStatus, IngestionStatus, SourceMetadataPatch, SourceRecord};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -40,6 +40,50 @@ impl SourceRegistry {
             .find(|source| source.source_id == source_id)
             .cloned()
             .ok_or_else(|| AegisError::SourceNotFound(source_id.to_string()))
+    }
+
+    pub fn update_metadata(
+        &mut self,
+        source_id: &str,
+        patch: SourceMetadataPatch,
+    ) -> AegisResult<SourceRecord> {
+        patch.validate().map_err(AegisError::InvalidMetadata)?;
+        let source = self
+            .sources
+            .iter_mut()
+            .find(|source| source.source_id == source_id)
+            .ok_or_else(|| AegisError::SourceNotFound(source_id.to_string()))?;
+
+        if let Some(title) = patch.title {
+            source.title = title;
+        }
+        if let Some(discipline) = patch.discipline {
+            source.discipline = discipline;
+        }
+        if let Some(subdiscipline) = patch.subdiscipline {
+            source.subdiscipline = subdiscipline;
+        }
+        if let Some(language) = patch.language {
+            source.language = language;
+        }
+        if let Some(tags) = patch.tags {
+            source.tags = tags;
+        }
+        if let Some(reliability_notes) = patch.reliability_notes {
+            source.reliability_notes = reliability_notes;
+        }
+
+        Ok(source.clone())
+    }
+
+    pub fn mark_removed(&mut self, source_id: &str) -> AegisResult<SourceRecord> {
+        let source = self
+            .sources
+            .iter_mut()
+            .find(|source| source.source_id == source_id)
+            .ok_or_else(|| AegisError::SourceNotFound(source_id.to_string()))?;
+        source.ingestion_status = IngestionStatus::Removed;
+        Ok(source.clone())
     }
 
     pub fn list_sources(&self) -> Vec<SourceRecord> {
