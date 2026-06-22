@@ -1,7 +1,7 @@
 use crate::audit::{append_audit_event, AuditEvent, AuditEventType};
 use crate::corpus_paths::CorpusPaths;
 use crate::errors::{AegisError, AegisResult};
-use crate::source_metadata::{IngestionStatus, SourceMetadataInput, SourceRecord};
+use crate::source_metadata::{IngestionStatus, SourceMetadataInput, SourceMetadataPatch, SourceRecord};
 use crate::source_registry::SourceRegistry;
 use chrono::Utc;
 use sha2::{Digest, Sha256};
@@ -71,6 +71,44 @@ impl CorpusAuthority {
     pub fn list_sources(&self) -> AegisResult<Vec<SourceRecord>> {
         let registry = SourceRegistry::load(&self.paths.registry_path())?;
         Ok(registry.list_sources())
+    }
+
+    pub fn update_source_metadata(
+        &self,
+        source_id: &str,
+        patch: SourceMetadataPatch,
+    ) -> AegisResult<SourceRecord> {
+        self.paths.ensure_layout()?;
+        let mut registry = SourceRegistry::load(&self.paths.registry_path())?;
+        let updated = registry.update_metadata(source_id, patch)?;
+        registry.save(&self.paths.registry_path())?;
+
+        let event = AuditEvent::new(
+            AuditEventType::SourceUpdated,
+            Some(updated.source_id.clone()),
+            Some(updated.version_id.clone()),
+            format!("updated source {}", updated.title),
+        );
+        append_audit_event(&self.paths.audit_events_path(), &event)?;
+
+        Ok(updated)
+    }
+
+    pub fn remove_source(&self, source_id: &str) -> AegisResult<SourceRecord> {
+        self.paths.ensure_layout()?;
+        let mut registry = SourceRegistry::load(&self.paths.registry_path())?;
+        let removed = registry.mark_removed(source_id)?;
+        registry.save(&self.paths.registry_path())?;
+
+        let event = AuditEvent::new(
+            AuditEventType::SourceRemoved,
+            Some(removed.source_id.clone()),
+            Some(removed.version_id.clone()),
+            format!("removed source {}", removed.title),
+        );
+        append_audit_event(&self.paths.audit_events_path(), &event)?;
+
+        Ok(removed)
     }
 
     pub fn get_corpus_status(&self) -> AegisResult<crate::source_metadata::CorpusStatus> {
@@ -165,5 +203,41 @@ mod tests {
         let result = authority.register_source(&source_b, valid_metadata());
 
         assert!(matches!(result, Err(AegisError::DuplicateSource(_))));
+    }
+
+    #[test]
+    fn update_metadata_preserves_source_id_and_hash() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("note.md");
+        fs::write(&source_path, "hello").unwrap();
+
+        let authority = CorpusAuthority::new(temp.path());
+        let record = authority.register_source(&source_path, valid_metadata()).unwrap();
+        let updated = authority
+            .update_source_metadata(
+                &record.source_id,
+                SourceMetadataPatch {
+                    title: Some("Lecture 01 updated".to_string()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        assert_eq!(record.source_id, updated.source_id);
+        assert_eq!(record.content_hash, updated.content_hash);
+        assert_eq!(updated.title, "Lecture 01 updated");
+    }
+
+    #[test]
+    fn remove_source_marks_removed() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("note.md");
+        fs::write(&source_path, "hello").unwrap();
+
+        let authority = CorpusAuthority::new(temp.path());
+        let record = authority.register_source(&source_path, valid_metadata()).unwrap();
+        let removed = authority.remove_source(&record.source_id).unwrap();
+
+        assert_eq!(removed.ingestion_status, IngestionStatus::Removed);
     }
 }
