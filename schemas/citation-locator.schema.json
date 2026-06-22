@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AEGIS Citation Locator",
+  "type": "object",
+  "required": ["locator_type", "label"],
+  "properties": {
+    "locator_type": {
+      "type": "string",
+      "enum": ["page", "slide", "section", "paragraph", "theorem", "definition", "equation", "table", "figure"]
+    },
+    "label": { "type": "string" },
+    "page": { "type": "integer", "minimum": 1 },
+    "slide": { "type": "integer", "minimum": 1 },
+    "section_path": { "type": "array", "items": { "type": "string" } },
+    "character_start": { "type": "integer", "minimum": 0 },
+    "character_end": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false
+}
