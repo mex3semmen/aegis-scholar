@@ -40,8 +40,10 @@ pub enum AegisError {
     #[error("Extraction report write failed")]
     ExtractionReportWriteFailed,
 
+    #[error("Extraction report missing")]
+    ExtractionReportMissing,
+
     #[error("Extraction report read failed")]
-    #[allow(dead_code)]
     ExtractionReportReadFailed,
 }
 

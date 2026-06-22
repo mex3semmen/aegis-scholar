@@ -69,6 +69,13 @@ fn extract_source(root: String, source_id: String) -> Result<ExtractionReport, S
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn get_extraction_report(root: String, source_id: String) -> Result<ExtractionReport, String> {
+    ExtractionService::new(root)
+        .read_extraction_report(&source_id)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -78,7 +85,8 @@ pub fn run() {
             update_source_metadata,
             remove_source,
             get_corpus_status,
-            extract_source
+            extract_source,
+            get_extraction_report
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");

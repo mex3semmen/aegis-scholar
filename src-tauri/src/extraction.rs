@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
+use std::io::Read;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,10 +69,29 @@ impl ExtractionService {
         }
     }
 
+    pub fn read_extraction_report(&self, source_id: &str) -> AegisResult<ExtractionReport> {
+        self.paths.ensure_layout()?;
+        let registry = SourceRegistry::load(&self.paths.registry_path())?;
+        let record = registry.get_source(source_id)?;
+        let path = self.report_path(&record.source_id, &record.version_id);
+        if !path.exists() {
+            return Err(AegisError::ExtractionReportMissing);
+        }
+        let mut file = fs::File::open(&path).map_err(|_| AegisError::ExtractionReportReadFailed)?;
+        let mut content = String::new();
+        file.read_to_string(&mut content).map_err(|_| AegisError::ExtractionReportReadFailed)?;
+        serde_json::from_str(&content).map_err(|_| AegisError::ExtractionReportReadFailed)
+    }
+
     fn extract_record(&self, record: &SourceRecord) -> AegisResult<ExtractionReport> {
         match &record.source_type {
             SourceType::MarkdownNote | SourceType::DatasetNote | SourceType::WebSnapshot => {
-                let text = fs::read_to_string(&record.path).map_err(|_| AegisError::ExtractionInputMissing)?;
+                let mut bytes = Vec::new();
+                fs::File::open(&record.path)
+                    .map_err(|_| AegisError::ExtractionInputMissing)?
+                    .read_to_end(&mut bytes)
+                    .map_err(|_| AegisError::ExtractionInputMissing)?;
+                let text = String::from_utf8(bytes).map_err(|_| AegisError::ExtractionInputNotUtf8)?;
                 self.extract_text(record, text)
             }
             other => Err(AegisError::UnsupportedExtractionType(format!("{other:?}"))),
@@ -338,6 +358,12 @@ mod tests {
         let audit_path = temp.path().join(".aegis").join("audit").join("events.jsonl");
         let audit = fs::read_to_string(audit_path).unwrap();
         assert!(audit.contains("source_extracted"));
+
+        let reread = ExtractionService::new(temp.path())
+            .read_extraction_report(&record.source_id)
+            .unwrap();
+        assert_eq!(reread.source_id, record.source_id);
+        assert_eq!(reread.version_id, record.version_id);
     }
 
     #[test]
@@ -366,5 +392,87 @@ mod tests {
 
         let report_path = ExtractionService::new(temp.path()).report_path(&record.source_id, &record.version_id);
         assert!(!report_path.exists());
+    }
+
+    #[test]
+    fn invalid_utf8_source_returns_typed_error_and_marks_failed() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("note.md");
+        fs::write(&source_path, vec![0xff, 0xfe, 0xfd]).unwrap();
+
+        let authority = CorpusAuthority::new(temp.path());
+        let record = authority.register_source(&source_path, valid_metadata(SourceType::MarkdownNote)).unwrap();
+        let result = ExtractionService::new(temp.path()).extract_source(&record.source_id);
+
+        assert!(matches!(result, Err(AegisError::ExtractionInputNotUtf8)));
+        let updated = CorpusAuthority::new(temp.path()).get_source(&record.source_id).unwrap();
+        assert_eq!(updated.ingestion_status, IngestionStatus::Failed);
+        let report_path = ExtractionService::new(temp.path()).report_path(&record.source_id, &record.version_id);
+        assert!(!report_path.exists());
+    }
+
+    #[test]
+    fn missing_source_id_returns_typed_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = ExtractionService::new(temp.path()).extract_source("src_missing");
+        assert!(matches!(result, Err(AegisError::SourceNotFound(_))));
+    }
+
+    #[test]
+    fn missing_report_returns_typed_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("note.md");
+        fs::write(&source_path, "hello").unwrap();
+
+        let authority = CorpusAuthority::new(temp.path());
+        let record = authority.register_source(&source_path, valid_metadata(SourceType::MarkdownNote)).unwrap();
+        let result = ExtractionService::new(temp.path()).read_extraction_report(&record.source_id);
+        assert!(matches!(result, Err(AegisError::ExtractionReportMissing)));
+    }
+
+    #[test]
+    fn malformed_report_returns_typed_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("note.md");
+        fs::write(&source_path, "hello").unwrap();
+
+        let authority = CorpusAuthority::new(temp.path());
+        let record = authority.register_source(&source_path, valid_metadata(SourceType::MarkdownNote)).unwrap();
+        let path = ExtractionService::new(temp.path()).report_path(&record.source_id, &record.version_id);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "{not json").unwrap();
+        let result = ExtractionService::new(temp.path()).read_extraction_report(&record.source_id);
+        assert!(matches!(result, Err(AegisError::ExtractionReportReadFailed)));
+    }
+
+    #[test]
+    fn crlf_unicode_and_whitespace_offsets_are_slice_valid() {
+        let text = "# One\r\n\r\n  Grüß Gott  \r\n";
+        let units = parse_markdown_text(text, "src_1", "srcv_1").unwrap();
+        assert_eq!(units.len(), 1);
+        assert_eq!(units[0].locator.section_path.as_ref().unwrap(), &vec!["One".to_string()]);
+        assert_eq!(units[0].text, "Grüß Gott");
+        assert_eq!(&text[units[0].char_start..units[0].char_end], "Grüß Gott");
+    }
+
+    #[test]
+    fn final_paragraph_without_trailing_newline_is_extracted() {
+        let units = parse_markdown_text("alpha\n\nomega", "src_1", "srcv_1").unwrap();
+        assert_eq!(units.len(), 2);
+        assert_eq!(units[1].text, "omega");
+    }
+
+    #[test]
+    fn heading_reset_behavior_is_correct() {
+        let units = parse_markdown_text("# A\n## B\npara\n# C\npara2\n", "src_1", "srcv_1").unwrap();
+        assert_eq!(units[0].locator.section_path.as_ref().unwrap(), &vec!["A".to_string(), "B".to_string()]);
+        assert_eq!(units[1].locator.section_path.as_ref().unwrap(), &vec!["C".to_string()]);
+    }
+
+    #[test]
+    fn paragraphs_before_first_heading_have_empty_section_path() {
+        let units = parse_markdown_text("intro\n\n# H\nbody\n", "src_1", "srcv_1").unwrap();
+        assert!(units[0].locator.section_path.is_none());
+        assert_eq!(units[1].locator.section_path.as_ref().unwrap(), &vec!["H".to_string()]);
     }
 }

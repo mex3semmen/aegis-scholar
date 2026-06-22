@@ -21,6 +21,8 @@ pub struct CitationLocator {
     pub page: Option<u32>,
     pub slide: Option<u32>,
     pub section_path: Option<Vec<String>>,
+    // Byte offsets into the original UTF-8 source text. The schema keeps the legacy
+    // char_start/char_end field names for compatibility.
     pub character_start: Option<usize>,
     pub character_end: Option<usize>,
 }
