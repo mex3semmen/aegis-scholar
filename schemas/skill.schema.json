@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AEGIS Skill",
+  "type": "object",
+  "required": ["skill_id", "title", "purpose", "retrieval_profile", "evidence_policy", "outputs"],
+  "properties": {
+    "skill_id": { "type": "string" },
+    "title": { "type": "string" },
+    "purpose": { "type": "string" },
+    "inputs": { "type": "array", "items": { "type": "string" } },
+    "retrieval_profile": { "$ref": "./retrieval-profile.schema.json" },
+    "evidence_policy": {
+      "type": "object",
+      "properties": {
+        "requires_evidence_pack": { "type": "boolean" },
+        "allow_model_memory": { "type": "boolean" },
+        "unsupported_claim_policy": { "enum": ["flag", "block", "allow_with_warning"] }
+      }
+    },
+    "outputs": { "type": "array", "items": { "type": "string" } },
+    "allowed_tools": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}
