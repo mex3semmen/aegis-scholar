@@ -1,0 +1,73 @@
+# 10 — Literature Memory, RAG and Evidence Packs
+
+## Purpose
+
+Literature Memory makes scientific work source-grounded.
+
+It handles:
+
+- registered sources
+- PDFs
+- lecture slides
+- notes
+- papers
+- extracted text
+- chunks
+- retrieval indexes
+- evidence packs
+- citations
+- contradiction warnings
+
+## Evidence Pack
+
+An Evidence Pack is not just search results. It is a grounded context object used before synthesis.
+
+Minimum fields:
+
+- evidence pack ID
+- query
+- retrieval mode
+- created time
+- source references
+- claim units
+- warnings
+- insufficiency notes
+
+## Evidence unit
+
+Each evidence unit must carry:
+
+- source ID
+- source version ID
+- chunk ID
+- title
+- locator
+- excerpt
+- claim
+- confidence
+
+## RAG v1
+
+Start simple:
+
+- registered local source files
+- SQLite source index
+- lexical search baseline
+- chunk retrieval
+- metadata filters
+- evidence pack creation before answer synthesis
+
+No external vector server is required in v1.
+
+## RAG later
+
+Add behind adapters:
+
+- embeddings
+- vector index
+- reranking
+- formula/definition retrieval for mathematics
+
+## Grounding rule
+
+If the system cannot build a sufficient Evidence Pack, it must not present the answer as source-grounded.
