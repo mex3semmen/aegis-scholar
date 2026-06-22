@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AEGIS Retrieval Profile",
+  "type": "object",
+  "required": ["profile_id", "retrieval_mode"],
+  "properties": {
+    "profile_id": { "type": "string" },
+    "retrieval_mode": {
+      "type": "string",
+      "enum": ["fact_lookup", "concept_synthesis", "method_check", "citation_grounded_answer", "study_summary", "scientific_writing"]
+    },
+    "source_priority": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "allowed_source_types": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "discipline_filters": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "requires_locators": { "type": "boolean", "default": true },
+    "top_k": { "type": "integer", "minimum": 1 },
+    "use_lexical": { "type": "boolean", "default": true },
+    "use_vector": { "type": "boolean", "default": false },
+    "use_reranker": { "type": "boolean", "default": false }
+  },
+  "additionalProperties": false
+}
