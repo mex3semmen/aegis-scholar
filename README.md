@@ -4,7 +4,7 @@
 
 AEGIS Scholar is a Windows-first, local-first scientific knowledge OS for literature memory, discipline-grounded RAG, evidence packs, study workflows, scientific writing support, statistics/method support and long-term academic project memory.
 
-This repository currently contains the **v0.7 Research Foundation Edition**: architecture, contracts, schemas, skill definitions and Codex prompts. It is intentionally documentation-first before implementation.
+This repository contains the **v0.7 Research Foundation Edition** plus a minimal **Phase 1 technical scaffold** for Tauri v2, Solid/Vite and Rust Corpus Authority.
 
 ## Product stance
 
@@ -14,8 +14,8 @@ AEGIS Scholar is:
 - a literature memory and source-grounded RAG system
 - a modular skill system for academic workflows
 - a discipline system for psychology, statistics, mathematics and later broader MINT domains
-- a Tauri v2 + Rust authority desktop app later
-- a Solid 1.x + Vite desktop UI later
+- a Tauri v2 + Rust authority desktop app
+- a Solid 1.x + Vite desktop UI
 - a llama.cpp-controlled local model runtime later
 - a corpus, skill, retrieval, evidence and audit system under `.aegis/`
 
@@ -78,6 +78,27 @@ The first skill contracts live under `.aegis/skills/`:
 - `study-course`
 - `literature-review`
 - `statistics-tutor`
+
+## Current code scaffold
+
+The minimal app scaffold lives in:
+
+```text
+package.json
+src/
+src-tauri/
+```
+
+Implemented Rust commands:
+
+```text
+register_source
+get_source
+list_sources
+update_source_metadata
+remove_source
+get_corpus_status
+```
 
 ## Next implementation prompt
 
