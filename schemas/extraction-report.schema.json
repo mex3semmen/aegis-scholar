@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AEGIS Extraction Report",
+  "type": "object",
+  "required": [
+    "source_id",
+    "version_id",
+    "source_type",
+    "extracted_at",
+    "unit_count",
+    "warnings",
+    "units"
+  ],
+  "properties": {
+    "source_id": { "type": "string", "pattern": "^src_[a-zA-Z0-9_-]+$" },
+    "version_id": { "type": "string", "pattern": "^srcv_[a-zA-Z0-9_-]+$" },
+    "source_type": {
+      "type": "string",
+      "enum": ["pdf", "lecture_slides", "paper", "textbook", "markdown_note", "web_snapshot", "dataset_note"]
+    },
+    "extracted_at": { "type": "string", "format": "date-time" },
+    "unit_count": { "type": "integer", "minimum": 0 },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source_id", "version_id", "locator", "text", "text_hash", "char_start", "char_end"],
+        "properties": {
+          "source_id": { "type": "string" },
+          "version_id": { "type": "string" },
+          "locator": { "$ref": "./citation-locator.schema.json" },
+          "text": { "type": "string", "minLength": 1 },
+          "text_hash": { "type": "string", "pattern": "^sha256:.+" },
+          "char_start": { "type": "integer", "minimum": 0 },
+          "char_end": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
