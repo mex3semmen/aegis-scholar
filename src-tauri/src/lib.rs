@@ -1,11 +1,14 @@
 mod audit;
 mod corpus_authority;
 mod corpus_paths;
+mod extraction;
 mod errors;
+mod locators;
 mod source_metadata;
 mod source_registry;
 
 use corpus_authority::CorpusAuthority;
+use extraction::{ExtractionReport, ExtractionService};
 use errors::to_user_error;
 use source_metadata::{CorpusStatus, SourceMetadataInput, SourceMetadataPatch, SourceRecord};
 
@@ -59,6 +62,13 @@ fn get_corpus_status(root: String) -> Result<CorpusStatus, String> {
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn extract_source(root: String, source_id: String) -> Result<ExtractionReport, String> {
+    ExtractionService::new(root)
+        .extract_source(&source_id)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -67,7 +77,8 @@ pub fn run() {
             list_sources,
             update_source_metadata,
             remove_source,
-            get_corpus_status
+            get_corpus_status,
+            extract_source
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");

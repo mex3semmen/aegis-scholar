@@ -26,6 +26,23 @@ pub enum AegisError {
 
     #[error("Registry save failed atomically")]
     AtomicRegistryWriteFailed,
+
+    #[error("Unsupported extraction type: {0}")]
+    UnsupportedExtractionType(String),
+
+    #[error("Extraction input missing")]
+    ExtractionInputMissing,
+
+    #[error("Extraction input is not valid UTF-8")]
+    #[allow(dead_code)]
+    ExtractionInputNotUtf8,
+
+    #[error("Extraction report write failed")]
+    ExtractionReportWriteFailed,
+
+    #[error("Extraction report read failed")]
+    #[allow(dead_code)]
+    ExtractionReportReadFailed,
 }
 
 pub type AegisResult<T> = Result<T, AegisError>;

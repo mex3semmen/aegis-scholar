@@ -44,7 +44,9 @@ Do not implement:
 
 ## Phase 2 — Text Extraction + Locator Preservation
 
-Implement extraction for local PDFs, slides and notes while preserving page, slide, section and paragraph locators.
+Implement extraction for local text sources while preserving paragraph and section locators.
+
+Phase 2.0 stores extraction reports under the managed corpus tree, supports `markdown_note`, `dataset_note` and `web_snapshot`, and returns a typed unsupported error for PDFs and slides until narrow locator-safe extraction is added later.
 
 ## Phase 3 — Chunking + Metadata Index
 
