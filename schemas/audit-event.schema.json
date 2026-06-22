@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AEGIS Audit Event",
+  "type": "object",
+  "required": ["event_id", "event_type", "created_at"],
+  "properties": {
+    "event_id": { "type": "string", "pattern": "^aud_[a-zA-Z0-9_-]+$" },
+    "event_type": {
+      "type": "string",
+      "enum": ["source_registered", "source_updated", "source_removed", "source_extracted", "chunks_created", "retrieval_run", "evidence_pack_created", "skill_run"]
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "source_id": { "type": "string" },
+    "version_id": { "type": "string" },
+    "skill_id": { "type": "string" },
+    "summary": { "type": "string" },
+    "metadata": { "type": "object" }
+  },
+  "additionalProperties": false
+}
