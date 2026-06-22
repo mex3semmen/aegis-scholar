@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AEGIS Eval Case",
+  "type": "object",
+  "required": ["eval_id", "skill_id", "task", "expected_checks"],
+  "properties": {
+    "eval_id": { "type": "string" },
+    "skill_id": { "type": "string" },
+    "corpus_fixture": { "type": "string" },
+    "task": { "type": "string" },
+    "expected_sources": { "type": "array", "items": { "type": "string" } },
+    "expected_locators": { "type": "array", "items": { "$ref": "./citation-locator.schema.json" } },
+    "forbidden_claims": { "type": "array", "items": { "type": "string" } },
+    "expected_checks": {
+      "type": "array",
+      "items": {
+        "enum": ["retrieval_recall", "citation_coverage", "locator_correctness", "faithfulness", "unsupported_claim_scan", "output_contract"]
+      }
+    }
+  },
+  "additionalProperties": false
+}
