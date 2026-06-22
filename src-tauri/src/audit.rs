@@ -51,3 +51,42 @@ pub fn append_audit_event(path: &Path, event: &AuditEvent) -> AegisResult<()> {
     writeln!(file, "{line}")?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn append_audit_event_writes_json_line() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("events.jsonl");
+        let event = AuditEvent::new(
+            AuditEventType::SourceRegistered,
+            Some("src_1".to_string()),
+            Some("srcv_1".to_string()),
+            "registered source",
+        );
+
+        append_audit_event(&path, &event).unwrap();
+
+        let content = fs::read_to_string(path).unwrap();
+        assert_eq!(content.lines().count(), 1);
+        assert!(content.contains("src_1"));
+    }
+
+    #[test]
+    fn append_audit_event_appends_multiple_lines() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("events.jsonl");
+
+        let first = AuditEvent::new(AuditEventType::SourceRegistered, None, None, "one");
+        let second = AuditEvent::new(AuditEventType::SourceRemoved, None, None, "two");
+
+        append_audit_event(&path, &first).unwrap();
+        append_audit_event(&path, &second).unwrap();
+
+        let content = fs::read_to_string(path).unwrap();
+        assert_eq!(content.lines().count(), 2);
+    }
+}

@@ -17,6 +17,15 @@ pub enum AegisError {
 
     #[error("Source path does not exist")]
     SourcePathMissing,
+
+    #[error("Source path must point to a file")]
+    SourcePathNotAFile,
+
+    #[error("Source path cannot be inside the corpus workspace")]
+    SourcePathInsideCorpus,
+
+    #[error("Registry save failed atomically")]
+    AtomicRegistryWriteFailed,
 }
 
 pub type AegisResult<T> = Result<T, AegisError>;

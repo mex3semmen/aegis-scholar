@@ -5,7 +5,7 @@ use crate::source_metadata::{IngestionStatus, SourceMetadataInput, SourceMetadat
 use crate::source_registry::SourceRegistry;
 use chrono::Utc;
 use sha2::{Digest, Sha256};
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -31,17 +31,20 @@ impl CorpusAuthority {
 
         let canonical_path = self.paths.canonicalize_source_path(source_path.as_ref())?;
         let content_hash = calculate_sha256(&canonical_path)?;
+        let source_id = format!("src_{}", Uuid::new_v4().simple());
+        let version_id = format!("srcv_{}", Uuid::new_v4().simple());
+        let stored_path = self.store_source_copy(&canonical_path, &source_id, &version_id)?;
 
         let mut registry = SourceRegistry::load(&self.paths.registry_path())?;
         let record = SourceRecord {
-            source_id: format!("src_{}", Uuid::new_v4().simple()),
-            version_id: format!("srcv_{}", Uuid::new_v4().simple()),
+            source_id,
+            version_id,
             title: metadata.title,
             source_type: metadata.source_type,
             discipline: metadata.discipline,
             subdiscipline: metadata.subdiscipline,
             language: metadata.language,
-            path: canonical_path,
+            path: stored_path,
             content_hash,
             created_at: Utc::now(),
             ingestion_status: IngestionStatus::Registered,
@@ -116,6 +119,23 @@ impl CorpusAuthority {
         let registry = SourceRegistry::load(&self.paths.registry_path())?;
         Ok(registry.status())
     }
+
+    fn store_source_copy(
+        &self,
+        source_path: &Path,
+        source_id: &str,
+        version_id: &str,
+    ) -> AegisResult<PathBuf> {
+        let source_dir = self.paths.source_version_dir(source_id, version_id);
+        fs::create_dir_all(&source_dir)?;
+
+        let file_name = source_path
+            .file_name()
+            .ok_or(AegisError::SourcePathNotAFile)?;
+        let stored_path = source_dir.join(file_name);
+        fs::copy(source_path, &stored_path)?;
+        Ok(stored_path)
+    }
 }
 
 fn calculate_sha256(path: &Path) -> AegisResult<String> {
@@ -174,6 +194,26 @@ mod tests {
         assert!(record.source_id.starts_with("src_"));
         assert!(record.version_id.starts_with("srcv_"));
         assert_eq!(authority.list_sources().unwrap().len(), 1);
+        assert!(record.path.starts_with(temp.path().join(".aegis").join("corpus").join("sources")));
+        assert_eq!(fs::read_to_string(&record.path).unwrap(), "hello");
+    }
+
+    #[test]
+    fn register_source_rejects_internal_corpus_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let internal = temp
+            .path()
+            .join(".aegis")
+            .join("corpus")
+            .join("sources")
+            .join("note.md");
+        fs::create_dir_all(internal.parent().unwrap()).unwrap();
+        fs::write(&internal, "hello").unwrap();
+
+        let authority = CorpusAuthority::new(temp.path());
+        let result = authority.register_source(&internal, valid_metadata());
+
+        assert!(matches!(result, Err(AegisError::SourcePathInsideCorpus)));
     }
 
     #[test]
@@ -239,5 +279,20 @@ mod tests {
         let removed = authority.remove_source(&record.source_id).unwrap();
 
         assert_eq!(removed.ingestion_status, IngestionStatus::Removed);
+    }
+
+    #[test]
+    fn audit_event_is_written_for_registration() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("note.md");
+        fs::write(&source_path, "hello").unwrap();
+
+        let authority = CorpusAuthority::new(temp.path());
+        authority.register_source(&source_path, valid_metadata()).unwrap();
+
+        let audit_path = temp.path().join(".aegis").join("audit").join("events.jsonl");
+        let audit_content = fs::read_to_string(audit_path).unwrap();
+        assert_eq!(audit_content.lines().count(), 1);
+        assert!(audit_content.contains("source_registered"));
     }
 }

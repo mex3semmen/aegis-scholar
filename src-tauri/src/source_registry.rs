@@ -3,6 +3,7 @@ use crate::source_metadata::{CorpusStatus, IngestionStatus, SourceMetadataPatch,
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use tempfile::NamedTempFile;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SourceRegistry {
@@ -22,7 +23,20 @@ impl SourceRegistry {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(path, serde_json::to_string_pretty(self)?)?;
+
+        let mut temp_file = NamedTempFile::new_in(path.parent().unwrap_or_else(|| Path::new(".")))?;
+        serde_json::to_writer_pretty(temp_file.as_file_mut(), self)?;
+        temp_file.as_file_mut().sync_all()?;
+
+        temp_file
+            .persist(path)
+            .map_err(|error| {
+                if error.error.kind() == std::io::ErrorKind::NotFound {
+                    AegisError::AtomicRegistryWriteFailed
+                } else {
+                    error.error.into()
+                }
+            })?;
         Ok(())
     }
 
