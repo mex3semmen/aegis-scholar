@@ -295,4 +295,33 @@ mod tests {
         assert_eq!(audit_content.lines().count(), 1);
         assert!(audit_content.contains("source_registered"));
     }
+
+    #[test]
+    fn audit_event_is_written_for_update_and_remove() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("note.md");
+        fs::write(&source_path, "hello").unwrap();
+
+        let authority = CorpusAuthority::new(temp.path());
+        let record = authority.register_source(&source_path, valid_metadata()).unwrap();
+        authority
+            .update_source_metadata(
+                &record.source_id,
+                SourceMetadataPatch {
+                    title: Some("Updated".to_string()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        authority.remove_source(&record.source_id).unwrap();
+
+        let audit_path = temp.path().join(".aegis").join("audit").join("events.jsonl");
+        let audit_content = fs::read_to_string(audit_path).unwrap();
+        let lines: Vec<_> = audit_content.lines().collect();
+        assert_eq!(lines.len(), 3);
+        for line in lines {
+            let value: serde_json::Value = serde_json::from_str(line).unwrap();
+            assert!(value["event_id"].as_str().unwrap().starts_with("aud_"));
+        }
+    }
 }

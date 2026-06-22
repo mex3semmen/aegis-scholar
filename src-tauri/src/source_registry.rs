@@ -126,3 +126,74 @@ impl SourceRegistry {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::source_metadata::SourceType;
+    use chrono::Utc;
+    use std::fs;
+
+    fn sample_source(path: impl Into<std::path::PathBuf>) -> SourceRecord {
+        SourceRecord {
+            source_id: "src_test".to_string(),
+            version_id: "srcv_test".to_string(),
+            title: "Sample".to_string(),
+            source_type: SourceType::MarkdownNote,
+            discipline: "psychology".to_string(),
+            subdiscipline: None,
+            language: "en".to_string(),
+            path: path.into(),
+            content_hash: "sha256:abc".to_string(),
+            created_at: Utc::now(),
+            ingestion_status: IngestionStatus::Registered,
+            tags: vec!["tag".to_string()],
+            reliability_notes: None,
+        }
+    }
+
+    #[test]
+    fn missing_registry_loads_as_empty() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("registry.json");
+        let registry = SourceRegistry::load(&path).unwrap();
+        assert!(registry.sources.is_empty());
+    }
+
+    #[test]
+    fn malformed_registry_returns_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("registry.json");
+        fs::write(&path, "{not-json").unwrap();
+
+        let result = SourceRegistry::load(&path);
+        assert!(matches!(result, Err(AegisError::Serde(_))));
+    }
+
+    #[test]
+    fn atomic_write_produces_valid_json() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("registry.json");
+        let mut registry = SourceRegistry::default();
+        registry.add_source(sample_source(temp.path().join("copy.md"))).unwrap();
+
+        registry.save(&path).unwrap();
+
+        let saved = fs::read_to_string(&path).unwrap();
+        let parsed: SourceRegistry = serde_json::from_str(&saved).unwrap();
+        assert_eq!(parsed.sources.len(), 1);
+    }
+
+    #[test]
+    fn source_list_survives_reload_after_registration() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("registry.json");
+        let mut registry = SourceRegistry::default();
+        registry.add_source(sample_source(temp.path().join("copy.md"))).unwrap();
+        registry.save(&path).unwrap();
+
+        let loaded = SourceRegistry::load(&path).unwrap();
+        assert_eq!(loaded.list_sources().len(), 1);
+        assert_eq!(loaded.get_source("src_test").unwrap().title, "Sample");
+    }
+}
