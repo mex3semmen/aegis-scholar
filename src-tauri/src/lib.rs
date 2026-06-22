@@ -7,7 +7,7 @@ mod source_registry;
 
 use corpus_authority::CorpusAuthority;
 use errors::to_user_error;
-use source_metadata::{CorpusStatus, SourceMetadataInput, SourceRecord};
+use source_metadata::{CorpusStatus, SourceMetadataInput, SourceMetadataPatch, SourceRecord};
 
 #[tauri::command]
 fn register_source(
@@ -35,6 +35,24 @@ fn list_sources(root: String) -> Result<Vec<SourceRecord>, String> {
 }
 
 #[tauri::command]
+fn update_source_metadata(
+    root: String,
+    source_id: String,
+    metadata_patch: SourceMetadataPatch,
+) -> Result<SourceRecord, String> {
+    CorpusAuthority::new(root)
+        .update_source_metadata(&source_id, metadata_patch)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
+fn remove_source(root: String, source_id: String) -> Result<SourceRecord, String> {
+    CorpusAuthority::new(root)
+        .remove_source(&source_id)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
 fn get_corpus_status(root: String) -> Result<CorpusStatus, String> {
     CorpusAuthority::new(root)
         .get_corpus_status()
@@ -47,6 +65,8 @@ pub fn run() {
             register_source,
             get_source,
             list_sources,
+            update_source_metadata,
+            remove_source,
             get_corpus_status
         ])
         .run(tauri::generate_context!())
