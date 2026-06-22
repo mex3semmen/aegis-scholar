@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AEGIS Evidence Pack",
+  "type": "object",
+  "required": ["evidence_pack_id", "query", "retrieval_mode", "created_at", "evidence_units"],
+  "properties": {
+    "evidence_pack_id": { "type": "string", "pattern": "^evp_[a-zA-Z0-9_-]+$" },
+    "query": { "type": "string", "minLength": 1 },
+    "skill_id": { "type": "string" },
+    "retrieval_mode": {
+      "type": "string",
+      "enum": ["fact_lookup", "concept_synthesis", "method_check", "citation_grounded_answer", "study_summary", "scientific_writing"]
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "evidence_units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source_id", "version_id", "chunk_id", "locator", "excerpt"],
+        "properties": {
+          "source_id": { "type": "string" },
+          "version_id": { "type": "string" },
+          "chunk_id": { "type": "string" },
+          "title": { "type": "string" },
+          "locator": { "$ref": "./citation-locator.schema.json" },
+          "excerpt": { "type": "string" },
+          "claim": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "insufficiency_notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}
