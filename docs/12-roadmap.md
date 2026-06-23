@@ -85,6 +85,14 @@ Implement llama.cpp process lifecycle, health, logs, port/PID ownership and mode
 
 Phase 8.0 introduces a deterministic Final Answer contract built only from Grounded Answers; it does not generate final prose, add semantic ranking, or add LLM inference.
 
+Phase 9.0 documents a stable regression target for the answer contract pipeline:
+`cargo test --manifest-path .\src-tauri\Cargo.toml answer -- --nocapture`
+and
+`cargo test --manifest-path .\src-tauri\Cargo.toml pipeline -- --nocapture`.
+These checks cover mechanical answer draft, grounded answer, and final answer persistence and read-back only.
+
+Phase 9.0 does not add final prose synthesis, semantic ranking, or UI answer presentation.
+
 ## Phase 9 — Composer UI
 
 Show sources, evidence packs, retrieval mode, diagnostics and output controls.

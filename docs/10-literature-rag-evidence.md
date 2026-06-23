@@ -50,6 +50,25 @@ It stores mechanical statement projections under the managed corpus tree and pre
 Phase 8.0 adds a Final Answer contract over Grounded Answers.
 It stores a deterministic contract projection under the managed corpus tree, preserves grounded statement identity and status, and does not generate final prose, rankings, or LLM output.
 
+Phase 9.0 adds a narrow backend smoke test over the persisted answer contract chain.
+It exercises answer draft, grounded answer, and final answer persistence and read-back without adding UI, synthesis, or ranking.
+
+Current regression checks:
+
+- `cargo test --manifest-path .\src-tauri\Cargo.toml answer -- --nocapture`
+- `cargo test --manifest-path .\src-tauri\Cargo.toml pipeline -- --nocapture`
+- `cargo check --manifest-path .\src-tauri\Cargo.toml`
+- `git diff --check`
+
+Current non-goals remain:
+
+- no final prose synthesis
+- no LLM generation
+- no semantic ranking
+- no UI answer display
+- no claim invention
+- no evidence rewriting
+
 ## Evidence unit
 
 Each evidence unit must carry:
