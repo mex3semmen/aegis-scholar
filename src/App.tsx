@@ -117,7 +117,7 @@ type AnswerArtifactExportManifest = {
 
 type ExportedArtifactFile = {
   relative_path: string;
-  artifact_kind: "manifest" | "issues" | "answer_draft" | "grounded_answer" | "final_answer";
+  artifact_kind: "manifest" | "issues" | "summary" | "answer_draft" | "grounded_answer" | "final_answer";
   source_id?: string | null;
   artifact_id?: string | null;
 };
