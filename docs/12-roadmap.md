@@ -391,6 +391,15 @@ Phase 39.0 is a no-op review.
 Existing tests already cover deterministic retrieval results, stable source/chunk metadata, explicit evidence-pack input boundaries, and mechanical answer-draft construction from evidence packs.
 No code, DTO, or validation changes were needed.
 
+## Phase 40 — Retrieval / Evidence Pack Closure and Next Slice
+
+Planning boundary only.
+
+Phase 40.0 closes the retrieval/evidence-pack hardening review block.
+Phases 38-39 did not change production behavior, and the existing coverage was sufficient for the retrieval/evidence-pack contract baseline and fixture contract review.
+Recommended next implementation slice: source/chunk metadata guarantee tightening.
+Rationale: it is upstream of retrieval, improves evidence-pack reliability, can be kept small and test-focused, and does not require generation, ranking, import/share/download, or UI expansion.
+
 Do not implement:
 
 - generation
