@@ -426,6 +426,86 @@ mod tests {
     }
 
     #[test]
+    fn final_answer_listing_orders_results_deterministically() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let first = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let mut second = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        second.final_answer_id = "fan_0000000000000000000000000000000000000000000000000000000000000001".to_string();
+        second.grounded_answer_id = first.grounded_answer_id.clone();
+        second.statement_count = 2;
+        second.unsupported_count = 1;
+        second.statements.push(FinalAnswerStatement {
+            statement_id: "fst_demo".to_string(),
+            grounded_statement_id: "gst_demo".to_string(),
+            status: FinalAnswerStatementStatus::NeedsEvidence,
+            text: "Needs evidence".to_string(),
+            claim_ids: vec!["dcl_demo".to_string()],
+            evidence_ids: vec!["evi_demo".to_string()],
+            chunk_ids: vec!["chk_demo".to_string()],
+            locators: vec![locator()],
+            support_level: FinalAnswerSupportLevel::MissingEvidence,
+        });
+        let path = CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_id, &version_id)
+            .join("final_answers")
+            .join("fan_0000000000000000000000000000000000000000000000000000000000000001.json");
+        fs::write(&path, serde_json::to_string_pretty(&second).unwrap()).unwrap();
+
+        let listed = service.list_final_answers(&source_id).unwrap();
+        assert_eq!(listed.len(), 2);
+        assert!(listed[0].final_answer_id <= listed[1].final_answer_id);
+        assert!(listed.iter().any(|item| item.final_answer_id == first.final_answer_id));
+        assert!(listed.iter().any(|item| item.final_answer_id == "fan_0000000000000000000000000000000000000000000000000000000000000001"));
+    }
+
+    #[test]
+    fn final_answer_listing_counts_mixed_statuses_correctly() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let mut answer = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        answer.final_answer_id = "fan_mixed".to_string();
+        answer.statement_count = 3;
+        answer.unsupported_count = 2;
+        answer.statements.push(FinalAnswerStatement {
+            statement_id: "fst_needs".to_string(),
+            grounded_statement_id: "gst_needs".to_string(),
+            status: FinalAnswerStatementStatus::NeedsEvidence,
+            text: "Needs evidence".to_string(),
+            claim_ids: vec!["dcl_needs".to_string()],
+            evidence_ids: vec!["evi_needs".to_string()],
+            chunk_ids: vec!["chk_needs".to_string()],
+            locators: vec![locator()],
+            support_level: FinalAnswerSupportLevel::MissingEvidence,
+        });
+        answer.statements.push(FinalAnswerStatement {
+            statement_id: "fst_unsupported".to_string(),
+            grounded_statement_id: "gst_unsupported".to_string(),
+            status: FinalAnswerStatementStatus::Unsupported,
+            text: "Unsupported".to_string(),
+            claim_ids: vec!["dcl_unsupported".to_string()],
+            evidence_ids: vec!["evi_unsupported".to_string()],
+            chunk_ids: vec!["chk_unsupported".to_string()],
+            locators: vec![locator()],
+            support_level: FinalAnswerSupportLevel::MissingEvidence,
+        });
+        let path = CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_id, &version_id)
+            .join("final_answers")
+            .join("fan_mixed.json");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, serde_json::to_string_pretty(&answer).unwrap()).unwrap();
+
+        let listed = service.list_final_answers(&source_id).unwrap();
+        let metadata = listed.iter().find(|item| item.final_answer_id == "fan_mixed").unwrap();
+        assert_eq!(metadata.statement_count, 3);
+        assert_eq!(metadata.unsupported_count, 2);
+        assert_eq!(metadata.needs_evidence_count, 1);
+    }
+
+    #[test]
     fn final_answer_listing_is_empty_when_directory_missing() {
         let temp = tempfile::tempdir().unwrap();
         let (source_id, _version_id, _draft_id, _grounded_id) = prepare_grounded(&temp.path().to_path_buf());
@@ -451,6 +531,15 @@ mod tests {
         let service = FinalAnswerService::new(temp.path().to_path_buf());
         assert!(matches!(service.list_final_answers("src_missing"), Err(AegisError::SourceNotFound(_))));
         assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn final_answer_listing_rejects_traversal_like_source_id() {
+        let temp = tempfile::tempdir().unwrap();
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        assert!(matches!(service.list_final_answers("../src"), Err(AegisError::SourceNotFound(_))));
+        assert!(matches!(service.list_final_answers("src\\.."), Err(AegisError::SourceNotFound(_))));
+        assert!(matches!(service.list_final_answers("src/.."), Err(AegisError::SourceNotFound(_))));
     }
 
     #[test]
