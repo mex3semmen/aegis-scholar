@@ -118,15 +118,17 @@ Phase 16.1 hardens that boundary with deterministic ordering, issue-count rollup
 This remains preview-only and still does not provide actual export.
 
 Phase 17.0 adds an explicit manual export step for persisted answer artifacts.
-It exports persisted artifact data only, writes only under the chosen export destination, keeps returned file paths relative, and includes issue information so malformed / unsupported / `needs_evidence` state remains visible.
-It does not generate, build, infer, rank, rewrite, repair, or edit answers.
-The export destination must be explicit and non-empty.
-Phase 17.1 hardens that boundary with deterministic export order, explicit destination handling, and path-safe export output.
+It is explicit user-triggered export only, uses persisted artifact data only, writes manifest JSON and issues JSON under the chosen export destination, and keeps returned file paths relative.
+It exports valid persisted draft, grounded-answer, and final-answer artifacts, while malformed final answers remain visible through issue information and counts rather than being exported as valid final-answer files.
+It does not build missing artifacts and does not generate, build, infer, rank, rewrite, repair, or edit answers.
+The export destination must be explicit and non-empty, and repeated export to the same non-empty destination fails safely.
+Phase 17.1 hardens that boundary with deterministic export order, empty-destination rejection before filesystem access, and path-safe export output.
 
 Manual verification checklist:
 
 - `npm run build`
 - `cargo test --manifest-path .\src-tauri\Cargo.toml answer -- --nocapture`
+- `cargo test --manifest-path .\src-tauri\Cargo.toml final_answer -- --nocapture`
 - `cargo test --manifest-path .\src-tauri\Cargo.toml pipeline -- --nocapture`
 - `cargo check --manifest-path .\src-tauri\Cargo.toml`
 - `git diff --check`
