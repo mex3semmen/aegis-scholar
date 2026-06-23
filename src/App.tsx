@@ -153,6 +153,47 @@ type AnswerArtifactExportIssueKindCount = {
   count: number;
 };
 
+type AnswerArtifactExportBundleInspectionIssueKindCount = {
+  kind:
+    | "missing_manifest"
+    | "manifest_read_failed"
+    | "missing_issues"
+    | "issues_read_failed"
+    | "missing_summary"
+    | "summary_read_failed"
+    | "missing_integrity"
+    | "integrity_read_failed"
+    | "integrity_schema_version_missing"
+    | "integrity_schema_version_unsupported"
+    | "integrity_algorithm_missing"
+    | "integrity_algorithm_unsupported"
+    | "integrity_duplicate_path"
+    | "integrity_path_invalid"
+    | "integrity_missing_file"
+    | "integrity_byte_count_mismatch"
+    | "integrity_digest_mismatch"
+    | "schema_version_missing"
+    | "schema_version_unsupported"
+    | "schema_version_mismatch"
+    | "summary_counts_mismatch"
+    | "summary_issue_count_mismatch"
+    | "summary_issue_kind_counts_mismatch"
+    | "summary_export_id_mismatch"
+    | "summary_metadata_mismatch";
+  count: number;
+};
+
+type AnswerArtifactExportBundleInspectionSummary = {
+  is_consistent: boolean;
+  schema_supported: boolean;
+  integrity_verified: boolean;
+  issue_count: number;
+  warning_count: number;
+  issue_counts_by_kind: AnswerArtifactExportBundleInspectionIssueKindCount[];
+  checked_file_count: number;
+  integrity_file_count: number;
+};
+
 type AnswerArtifactExportSummarySource = {
   source_id: string;
   draft_count: number;
@@ -205,6 +246,7 @@ type AnswerArtifactExportBundleInspection = {
   summary_schema_version?: string | null;
   integrity_schema_version?: string | null;
   integrity_algorithm?: string | null;
+  inspection_summary: AnswerArtifactExportBundleInspectionSummary;
   has_manifest: boolean;
   has_issues: boolean;
   has_summary: boolean;
@@ -745,6 +787,30 @@ export default function App() {
           </div>
           {artifactBundleInspection() ? (
             <>
+              <div class="artifact-overview">
+                <h4>Inspection summary</h4>
+                <div class="contract-meta">
+                  <div><span>Consistent</span><strong>{artifactBundleInspection()!.inspection_summary.is_consistent ? "yes" : "no"}</strong></div>
+                  <div><span>Schema supported</span><strong>{artifactBundleInspection()!.inspection_summary.schema_supported ? "yes" : "no"}</strong></div>
+                  <div><span>Integrity verified</span><strong>{artifactBundleInspection()!.inspection_summary.integrity_verified ? "yes" : "no"}</strong></div>
+                  <div><span>Issues</span><strong>{artifactBundleInspection()!.inspection_summary.issue_count}</strong></div>
+                  <div><span>Warnings</span><strong>{artifactBundleInspection()!.inspection_summary.warning_count}</strong></div>
+                  <div><span>Checked files</span><strong>{artifactBundleInspection()!.inspection_summary.checked_file_count}</strong></div>
+                  <div><span>Integrity files</span><strong>{artifactBundleInspection()!.inspection_summary.integrity_file_count}</strong></div>
+                </div>
+                {artifactBundleInspection()!.inspection_summary.issue_counts_by_kind.length > 0 ? (
+                  <ul class="final-answer-list-items">
+                    {artifactBundleInspection()!.inspection_summary.issue_counts_by_kind.map((item) => (
+                      <li>
+                        <div class="final-answer-list-item">
+                          <span>{item.kind}</span>
+                          <small>count={item.count}</small>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
               <div class="contract-meta">
                 <div><span>Schema</span><strong>{artifactBundleInspection()!.schema_version || "mixed / missing"}</strong></div>
                 <div><span>Has manifest</span><strong>{artifactBundleInspection()!.has_manifest ? "yes" : "no"}</strong></div>

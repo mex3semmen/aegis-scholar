@@ -150,6 +150,11 @@ The inspector validates integrity metadata read-only for presence, schema versio
 It also validates invalid/traversal-style integrity paths when they appear in a bundle.
 It does not import, migrate, repair, rewrite, or share bundles, and it does not add any answer-generation, synthesis, ranking, or editing behavior.
 
+Phase 22.0 adds a read-only inspection summary rollup for export bundle inspection results.
+The summary is derived from the inspector’s parsed bundle state and typed issues only, and it surfaces consistent/unsupported/integrity status plus deterministic issue counts by kind.
+It also exposes checked-file and integrity-file counts when available.
+The rollup is path-free and does not repair, migrate, import, share, upload, download, or generate answers.
+
 Manual verification checklist:
 
 - `npm run build`
