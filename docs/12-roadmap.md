@@ -117,7 +117,8 @@ It remains inspection-only, does not create directories or artifacts, and is sti
 Phase 13.1 hardens that boundary with deterministic ordering, empty-storage behavior, unrelated-file safety, and conservative malformed-final-answer handling.
 
 Phase 14.0 adds a read-only answer artifact health summary for persisted diagnostics.
-It remains inspection-only, reports metadata counts only, and is still not a product answer experience.
+It remains inspection-only, reports persisted metadata counts only, is deterministic by `source_id`, and is still not a product answer experience.
+Phase 14.1 hardens that boundary with zero-count empty-storage behavior, per-source/global count consistency, path-free DTO/debug output, and conservative malformed-final-answer handling.
 
 ## Phase 11 — Obsidian Export
 
