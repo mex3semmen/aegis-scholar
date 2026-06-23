@@ -69,6 +69,29 @@ Current non-goals remain:
 - no claim invention
 - no evidence rewriting
 
+Phase 10.0 adds a read-only Final Answer inspector in the Solid frontend.
+It loads an existing FinalAnswer by `source_id` plus `final_answer_id` through `get_final_answer`, shows the persisted contract read-only, and does not build, edit, or synthesize answers.
+It keeps unsupported and `needs_evidence` statements visible and preserves statement order.
+It shows claim, evidence, chunk, and locator references where present.
+
+Phase 10.1 hardens that inspector boundary.
+It trims IDs before invoking the backend, rejects empty inputs client-side, disables loading during fetch, keeps the last successful FinalAnswer visible until a new load succeeds, masks obvious filesystem-looking substrings in frontend error display, and renders locator summaries safely.
+
+Manual verification checklist:
+
+- `npm run build`
+- `cargo test --manifest-path .\src-tauri\Cargo.toml answer -- --nocapture`
+- `cargo test --manifest-path .\src-tauri\Cargo.toml pipeline -- --nocapture`
+- `cargo check --manifest-path .\src-tauri\Cargo.toml`
+- `git diff --check`
+- open the app and confirm:
+  - empty inputs are rejected
+  - loading is disabled during fetch
+  - supported / `needs_evidence` / unsupported statements remain visible
+  - statement order is preserved
+  - locator summaries render
+  - backend errors do not show raw filesystem paths
+
 ## Evidence unit
 
 Each evidence unit must carry:
