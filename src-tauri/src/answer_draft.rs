@@ -69,12 +69,12 @@ impl AnswerDraftService {
     }
 
     pub fn build_answer_draft(&self, source_id: &str, evidence_pack_id: &str) -> AegisResult<AnswerDraft> {
-        self.paths.ensure_layout()?;
         let result = (|| -> AegisResult<AnswerDraft> {
             if source_id.trim().is_empty() {
-                return Err(AegisError::AnswerDraftInvalidId);
+                return Err(AegisError::AnswerDraftInputMissing);
             }
             validate_answer_draft_id(evidence_pack_id)?;
+            self.paths.ensure_layout()?;
             let evidence = EvidenceService::new(self.paths.root.clone()).read_evidence_pack(source_id, evidence_pack_id)?;
             if evidence.items.is_empty() {
                 return Err(AegisError::AnswerDraftEmptyEvidence);
@@ -113,8 +113,11 @@ impl AnswerDraftService {
     }
 
     pub fn read_answer_draft(&self, source_id: &str, answer_draft_id: &str) -> AegisResult<AnswerDraft> {
-        self.paths.ensure_layout()?;
+        if source_id.trim().is_empty() {
+            return Err(AegisError::AnswerDraftInputMissing);
+        }
         validate_answer_draft_id(answer_draft_id)?;
+        self.paths.ensure_layout()?;
         let registry = SourceRegistry::load(&self.paths.registry_path())?;
         let record = registry.get_source(source_id)?;
         let path = self.draft_path(&record.source_id, &record.version_id, answer_draft_id);
@@ -320,9 +323,15 @@ mod tests {
     fn answer_draft_rejects_missing_or_traversal_ids() {
         let temp = tempfile::tempdir().unwrap();
         let service = AnswerDraftService::new(temp.path().to_path_buf());
+        assert!(matches!(service.read_answer_draft("", "adr_demo"), Err(AegisError::AnswerDraftInputMissing)));
+        assert!(matches!(service.build_answer_draft("", "evp_demo"), Err(AegisError::AnswerDraftInputMissing)));
+        assert!(matches!(service.build_answer_draft("src_demo", ""), Err(AegisError::AnswerDraftInvalidId)));
         assert!(matches!(service.read_answer_draft("src_demo", ""), Err(AegisError::AnswerDraftInvalidId)));
         assert!(matches!(service.read_answer_draft("src_demo", "../x"), Err(AegisError::AnswerDraftInvalidId)));
+        assert!(matches!(service.read_answer_draft("src_demo", "..\\x"), Err(AegisError::AnswerDraftInvalidId)));
+        assert!(matches!(service.read_answer_draft("src_demo", "/x"), Err(AegisError::AnswerDraftInvalidId)));
         assert!(matches!(service.read_answer_draft("src_demo", "x/y"), Err(AegisError::AnswerDraftInvalidId)));
+        assert!(matches!(service.read_answer_draft("src_demo", "x\\y"), Err(AegisError::AnswerDraftInvalidId)));
     }
 
     #[test]
@@ -373,5 +382,37 @@ mod tests {
         assert!(matches!(service.build_answer_draft(&source_id, "evp_empty"), Err(AegisError::AnswerDraftEmptyEvidence)));
         let registry = SourceRegistry::load(&corpus.registry_path()).unwrap();
         assert_ne!(registry.get_source(&source_id).unwrap().ingestion_status, IngestionStatus::AnswerDrafted);
+    }
+
+    #[test]
+    fn answer_draft_build_failure_does_not_write_success_or_mark_ready() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id) = prepare_evidence(&temp.path().to_path_buf());
+        let service = AnswerDraftService::new(temp.path().to_path_buf());
+        let result = service.build_answer_draft(&source_id, "evp_missing");
+        assert!(matches!(result, Err(AegisError::EvidencePackMissing)));
+        let corpus = crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf());
+        let draft_dir = corpus.source_version_dir(&source_id, &version_id).join("answer_drafts");
+        assert!(!draft_dir.exists() || fs::read_dir(draft_dir).unwrap().next().is_none());
+        let registry = SourceRegistry::load(&corpus.registry_path()).unwrap();
+        assert_ne!(registry.get_source(&source_id).unwrap().ingestion_status, IngestionStatus::AnswerDrafted);
+        let audit = fs::read_to_string(corpus.audit_events_path()).unwrap();
+        assert!(audit.contains("answer_draft_failed"));
+        assert!(audit.lines().all(|line| serde_json::from_str::<serde_json::Value>(line).is_ok()));
+    }
+
+    #[test]
+    fn answer_draft_success_emits_audit_and_writes_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id) = prepare_evidence(&temp.path().to_path_buf());
+        let evidence = EvidenceService::new(temp.path().to_path_buf()).build_evidence_pack(&source_id, "alpha", 5).unwrap();
+        let service = AnswerDraftService::new(temp.path().to_path_buf());
+        let draft = service.build_answer_draft(&source_id, &evidence.evidence_pack_id).unwrap();
+        let corpus = crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf());
+        let draft_path = corpus.source_version_dir(&source_id, &version_id).join("answer_drafts").join(format!("{}.json", draft.answer_draft_id));
+        assert!(draft_path.exists());
+        let audit = fs::read_to_string(corpus.audit_events_path()).unwrap();
+        assert!(audit.contains("answer_draft_built"));
+        assert!(audit.lines().all(|line| serde_json::from_str::<serde_json::Value>(line).is_ok()));
     }
 }
