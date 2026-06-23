@@ -2054,6 +2054,19 @@ mod tests {
         fs::write(path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
     }
 
+    fn assert_report_preview_path_free(inspection: &AnswerArtifactExportBundleInspection, temp: &tempfile::TempDir) {
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!format!("{inspection:?}").contains(temp_path.as_ref()));
+        assert!(!format!("{:?}", inspection.report_preview).contains(temp_path.as_ref()));
+    }
+
+    fn assert_report_preview_section_headings(inspection: &AnswerArtifactExportBundleInspection, headings: &[&str]) {
+        assert_eq!(
+            inspection.report_preview.sections.iter().map(|section| section.heading.as_str()).collect::<Vec<_>>(),
+            headings
+        );
+    }
+
     #[test]
     fn final_answer_serializes_with_required_fields_and_enum_values() {
         let temp = tempfile::tempdir().unwrap();
@@ -3092,6 +3105,10 @@ mod tests {
             inspection.inspection_summary.issue_counts_by_kind.iter().map(|item| (&item.kind, item.count)).collect::<Vec<_>>(),
             vec![(&AnswerArtifactExportBundleInspectionIssueKind::MissingIntegrity, 1)]
         );
+        assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
+        assert_eq!(inspection.report_preview.sections[1].lines, vec!["missing_integrity = 1".to_string()]);
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("missing_integrity")));
+        assert_report_preview_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3119,6 +3136,10 @@ mod tests {
             inspection.inspection_summary.issue_counts_by_kind.iter().map(|item| (&item.kind, item.count)).collect::<Vec<_>>(),
             vec![(&AnswerArtifactExportBundleInspectionIssueKind::IntegrityReadFailed, 1)]
         );
+        assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
+        assert_eq!(inspection.report_preview.sections[1].lines, vec!["integrity_read_failed = 1".to_string()]);
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("integrity_read_failed")));
+        assert_report_preview_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3138,6 +3159,10 @@ mod tests {
 
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IntegrityAlgorithmUnsupported));
         assert!(!inspection.is_consistent);
+        assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
+        assert_eq!(inspection.report_preview.sections[1].lines, vec!["integrity_algorithm_unsupported = 1".to_string()]);
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("integrity_algorithm_unsupported")));
+        assert_report_preview_path_free(&inspection, &temp);
     }
 
     #[test]
@@ -3157,6 +3182,10 @@ mod tests {
 
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IntegrityMissingFile));
         assert!(!inspection.is_consistent);
+        assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
+        assert_eq!(inspection.report_preview.sections[1].lines, vec!["integrity_missing_file = 1".to_string()]);
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("integrity_missing_file")));
+        assert_report_preview_path_free(&inspection, &temp);
     }
 
     #[test]
@@ -3220,6 +3249,22 @@ mod tests {
                 (&AnswerArtifactExportBundleInspectionIssueKind::IntegrityDigestMismatch, 1),
             ]
         );
+        assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
+        assert_eq!(
+            inspection.report_preview.sections[1].lines,
+            vec![
+                "integrity_duplicate_path = 1".to_string(),
+                "integrity_path_invalid = 1".to_string(),
+                "integrity_byte_count_mismatch = 1".to_string(),
+                "integrity_digest_mismatch = 1".to_string(),
+            ]
+        );
+        assert_eq!(inspection.report_preview.sections[2].lines.len(), 4);
+        assert!(inspection.report_preview.sections[2].lines[0].contains("integrity_duplicate_path"));
+        assert!(inspection.report_preview.sections[2].lines[1].contains("integrity_path_invalid"));
+        assert!(inspection.report_preview.sections[2].lines[2].contains("integrity_byte_count_mismatch"));
+        assert!(inspection.report_preview.sections[2].lines[3].contains("integrity_digest_mismatch"));
+        assert_report_preview_path_free(&inspection, &temp);
     }
 
     #[test]
@@ -3287,6 +3332,13 @@ mod tests {
         );
         assert_eq!(first.errors, second.errors);
         assert_eq!(before, after);
+        assert_report_preview_section_headings(&first, &["Status", "Issue counts by kind", "Issues"]);
+        let preview_lines = &first.report_preview.sections[1].lines;
+        assert!(preview_lines.iter().any(|line| line == "schema_version_missing = 3"));
+        assert!(preview_lines.iter().any(|line| line == "summary_export_id_mismatch = 1"));
+        assert!(preview_lines.iter().filter(|line| line.starts_with("integrity_")).count() >= 2);
+        assert!(first.report_preview.sections[2].lines.iter().any(|line| line.contains("schema_version_missing")));
+        assert_report_preview_path_free(&first, &temp);
         assert!(!format!("{first:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3329,6 +3381,22 @@ mod tests {
         assert!(inspection.inspection_summary.issue_counts_by_kind.iter().any(|item| item.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionUnsupported && item.count == 3));
         assert!(inspection.inspection_summary.issue_counts_by_kind.iter().any(|item| item.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch && item.count == 1));
         assert_eq!(inspection.inspection_summary.issue_counts_by_kind.iter().map(|item| item.count).sum::<usize>(), inspection.inspection_summary.issue_count);
+        assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
+        assert_eq!(
+            inspection.report_preview.sections[1].lines,
+            vec![
+                "integrity_byte_count_mismatch = 3".to_string(),
+                "integrity_digest_mismatch = 3".to_string(),
+                "schema_version_unsupported = 3".to_string(),
+                "schema_version_mismatch = 1".to_string(),
+                "summary_export_id_mismatch = 1".to_string(),
+            ]
+        );
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("integrity_byte_count_mismatch")));
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("integrity_digest_mismatch")));
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("schema_version_unsupported")));
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("schema_version_mismatch")));
+        assert_report_preview_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3352,6 +3420,9 @@ mod tests {
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed));
         assert!(!inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMissing));
         assert!(!inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionUnsupported));
+        assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("issues_read_failed")));
+        assert_report_preview_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3374,6 +3445,18 @@ mod tests {
         assert_eq!(inspection.summary_schema_version.as_deref(), Some("answer_artifact_export.v2"));
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionUnsupported));
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch));
+        assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
+        assert_eq!(
+            inspection.report_preview.sections[1].lines,
+            vec![
+                "integrity_digest_mismatch = 1".to_string(),
+                "schema_version_unsupported = 1".to_string(),
+                "schema_version_mismatch = 1".to_string(),
+            ]
+        );
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("schema_version_unsupported")));
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("schema_version_mismatch")));
+        assert_report_preview_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3401,6 +3484,9 @@ mod tests {
                 && issue.relative_path.as_deref() == Some("export_issues.json")
         }));
         assert!(!inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed));
+        assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("schema_version_missing")));
+        assert_report_preview_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3427,14 +3513,11 @@ mod tests {
         assert_eq!(first.report_preview.issue_count, 0);
         assert_eq!(first.report_preview.warning_count, 0);
         assert!(first.report_preview.issue_counts_by_kind.is_empty());
-        assert_eq!(
-            first.report_preview.sections.iter().map(|section| section.heading.as_str()).collect::<Vec<_>>(),
-            vec!["Status", "Issue counts by kind"]
-        );
+        assert_report_preview_section_headings(&first, &["Status", "Issue counts by kind"]);
+        assert_eq!(first.report_preview.sections[0].lines.len(), 7);
         assert!(first.report_preview.sections[1].lines.iter().any(|line| line == "No issue kinds reported."));
-        assert!(!format!("{first:?}").contains(temp.path().to_string_lossy().as_ref()));
-        assert!(!format!("{:?}", &first.report_preview).contains(temp.path().to_string_lossy().as_ref()));
-        assert!(!format!("{:?}", &second.report_preview).contains(temp.path().to_string_lossy().as_ref()));
+        assert_report_preview_path_free(&first, &temp);
+        assert_report_preview_path_free(&second, &temp);
     }
 
     #[test]
@@ -3459,14 +3542,21 @@ mod tests {
         assert_eq!(first.report_preview.warning_count, second.report_preview.warning_count);
         assert!(first.report_preview.issue_counts_by_kind.iter().any(|item| item.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionUnsupported && item.count == 3));
         assert!(first.report_preview.issue_counts_by_kind.iter().any(|item| item.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch && item.count == 1));
+        assert_report_preview_section_headings(&first, &["Status", "Issue counts by kind", "Issues"]);
         assert_eq!(
-            first.report_preview.sections.iter().map(|section| section.heading.as_str()).collect::<Vec<_>>(),
-            vec!["Status", "Issue counts by kind", "Issues"]
+            first.report_preview.sections[1].lines,
+            vec![
+                "integrity_byte_count_mismatch = 3".to_string(),
+                "integrity_digest_mismatch = 3".to_string(),
+                "schema_version_unsupported = 3".to_string(),
+                "schema_version_mismatch = 1".to_string(),
+                "summary_export_id_mismatch = 1".to_string(),
+            ]
         );
         assert!(first.report_preview.sections[2].lines.iter().any(|line| line.contains("schema_version_unsupported")));
         assert!(first.report_preview.sections[2].lines.iter().any(|line| line.contains("schema_version_mismatch")));
-        assert!(!format!("{first:?}").contains(temp.path().to_string_lossy().as_ref()));
-        assert!(!format!("{:?}", &first.report_preview).contains(temp.path().to_string_lossy().as_ref()));
+        assert_report_preview_path_free(&first, &temp);
+        assert_report_preview_path_free(&second, &temp);
     }
 
     #[test]
@@ -3519,6 +3609,19 @@ mod tests {
         );
         assert!(inspection.errors.iter().all(|issue| matches!(issue.relative_path.as_deref(), Some("export_manifest.json" | "export_issues.json" | "summary.json" | "export_integrity.json"))));
         assert!(fs::read_dir(&export_root).unwrap().next().is_none());
+        assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
+        assert_eq!(
+            inspection.report_preview.sections[1].lines,
+            vec![
+                "missing_manifest = 1".to_string(),
+                "missing_issues = 1".to_string(),
+                "missing_summary = 1".to_string(),
+                "missing_integrity = 1".to_string(),
+            ]
+        );
+        assert_eq!(inspection.report_preview.sections[2].lines.len(), 4);
+        assert!(inspection.report_preview.sections[2].lines.iter().all(|line| line.contains("missing_")));
+        assert_report_preview_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3543,6 +3646,9 @@ mod tests {
         assert!(inspection.has_manifest);
         assert!(inspection.has_issues);
         assert!(inspection.has_summary);
+        assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind"]);
+        assert_eq!(inspection.report_preview.sections[1].lines, vec!["No issue kinds reported.".to_string()]);
+        assert_report_preview_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3565,6 +3671,8 @@ mod tests {
         assert!(!manifest_inspection.has_manifest);
         assert!(manifest_inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::ManifestReadFailed));
         assert!(!manifest_inspection.is_consistent);
+        assert_report_preview_section_headings(&manifest_inspection, &["Status", "Issue counts by kind", "Issues"]);
+        assert!(manifest_inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("manifest_read_failed")));
 
         let issues_root = temp.path().join("issues-bundle");
         service.export_answer_artifacts(&issues_root).unwrap();
@@ -3573,6 +3681,8 @@ mod tests {
         assert!(!issues_inspection.has_issues);
         assert!(issues_inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed));
         assert!(!issues_inspection.is_consistent);
+        assert_report_preview_section_headings(&issues_inspection, &["Status", "Issue counts by kind", "Issues"]);
+        assert!(issues_inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("issues_read_failed")));
 
         let summary_root = temp.path().join("summary-bundle");
         service.export_answer_artifacts(&summary_root).unwrap();
@@ -3581,6 +3691,8 @@ mod tests {
         assert!(!summary_inspection.has_summary);
         assert!(summary_inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SummaryReadFailed));
         assert!(!summary_inspection.is_consistent);
+        assert_report_preview_section_headings(&summary_inspection, &["Status", "Issue counts by kind", "Issues"]);
+        assert!(summary_inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("summary_read_failed")));
     }
 
     #[test]
@@ -3616,6 +3728,13 @@ mod tests {
         assert!(inspection.manifest_counts.is_some());
         assert!(inspection.summary_counts.is_some());
         assert!(inspection.issue_kind_counts.as_ref().unwrap().is_empty());
+        assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("summary_counts_mismatch")));
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("summary_issue_count_mismatch")));
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("summary_issue_kind_counts_mismatch")));
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("summary_export_id_mismatch")));
+        assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("summary_metadata_mismatch")));
+        assert_report_preview_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
