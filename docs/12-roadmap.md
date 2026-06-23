@@ -105,7 +105,8 @@ Phase 10.0 and Phase 10.1 implement only a read-only Final Answer inspector for 
 This is not a product answer experience, and it does not add generation, synthesis, or editing workflows.
 
 Phase 11.0 adds read-only discovery for already persisted Final Answer contracts so the inspector can list and select them.
-This remains inspection-only and does not introduce generation, synthesis, ranking, or editing.
+Phase 11.1 hardens that discovery boundary with deterministic ordering, metadata-only output, typed malformed-file handling, and no directory-creation side effects.
+This remains inspection-only and is still not a product answer experience; it does not introduce generation, synthesis, ranking, or editing.
 
 ## Phase 11 — Obsidian Export
 
