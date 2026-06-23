@@ -107,6 +107,7 @@ type AnswerArtifactExportSource = {
 };
 
 type AnswerArtifactExportManifest = {
+  schema_version: string;
   source_count: number;
   draft_count: number;
   grounded_answer_count: number;
@@ -123,6 +124,7 @@ type ExportedArtifactFile = {
 };
 
 type AnswerArtifactExportResult = {
+  schema_version: string;
   manifest: AnswerArtifactExportManifest;
   exported_source_count: number;
   exported_draft_count: number;
@@ -147,6 +149,7 @@ type AnswerArtifactExportSummarySource = {
 };
 
 type AnswerArtifactExportSummary = {
+  schema_version: string;
   export_id: string;
   generated_from: string;
   export_scope: string;
@@ -167,6 +170,9 @@ type AnswerArtifactExportBundleInspectionIssueKind =
   | "issues_read_failed"
   | "missing_summary"
   | "summary_read_failed"
+  | "schema_version_missing"
+  | "schema_version_unsupported"
+  | "schema_version_mismatch"
   | "summary_counts_mismatch"
   | "summary_issue_count_mismatch"
   | "summary_issue_kind_counts_mismatch"
@@ -180,6 +186,10 @@ type AnswerArtifactExportBundleInspectionIssue = {
 };
 
 type AnswerArtifactExportBundleInspection = {
+  schema_version?: string | null;
+  manifest_schema_version?: string | null;
+  issues_schema_version?: string | null;
+  summary_schema_version?: string | null;
   has_manifest: boolean;
   has_issues: boolean;
   has_summary: boolean;
@@ -625,6 +635,7 @@ export default function App() {
           {artifactManifest() ? (
             <>
               <div class="contract-meta">
+                <div><span>Schema</span><strong>{artifactManifest()!.schema_version || "missing"}</strong></div>
                 <div><span>Sources</span><strong>{artifactManifest()!.source_count}</strong></div>
                 <div><span>Drafts</span><strong>{artifactManifest()!.draft_count}</strong></div>
                 <div><span>Grounded answers</span><strong>{artifactManifest()!.grounded_answer_count}</strong></div>
@@ -662,6 +673,7 @@ export default function App() {
           {artifactExportResult() ? (
             <>
               <div class="contract-meta">
+                <div><span>Schema</span><strong>{artifactExportResult()!.schema_version || "missing"}</strong></div>
                 <div><span>Export ID</span><strong>{artifactExportResult()!.export_id}</strong></div>
                 <div><span>Sources</span><strong>{artifactExportResult()!.exported_source_count}</strong></div>
                 <div><span>Drafts</span><strong>{artifactExportResult()!.exported_draft_count}</strong></div>
@@ -716,6 +728,7 @@ export default function App() {
           {artifactBundleInspection() ? (
             <>
               <div class="contract-meta">
+                <div><span>Schema</span><strong>{artifactBundleInspection()!.schema_version || "mixed / missing"}</strong></div>
                 <div><span>Has manifest</span><strong>{artifactBundleInspection()!.has_manifest ? "yes" : "no"}</strong></div>
                 <div><span>Has issues</span><strong>{artifactBundleInspection()!.has_issues ? "yes" : "no"}</strong></div>
                 <div><span>Has summary</span><strong>{artifactBundleInspection()!.has_summary ? "yes" : "no"}</strong></div>
@@ -727,6 +740,7 @@ export default function App() {
                 <div class="artifact-overview">
                   <h4>Manifest counts</h4>
                   <div class="contract-meta">
+                    <div><span>Schema</span><strong>{artifactBundleInspection()!.manifest_counts!.schema_version || "missing"}</strong></div>
                     <div><span>Sources</span><strong>{artifactBundleInspection()!.manifest_counts!.source_count}</strong></div>
                     <div><span>Drafts</span><strong>{artifactBundleInspection()!.manifest_counts!.draft_count}</strong></div>
                     <div><span>Grounded answers</span><strong>{artifactBundleInspection()!.manifest_counts!.grounded_answer_count}</strong></div>
@@ -760,6 +774,7 @@ export default function App() {
                 <div class="artifact-overview">
                   <h4>Summary counts</h4>
                   <div class="contract-meta">
+                    <div><span>Schema</span><strong>{artifactBundleInspection()!.summary_counts!.schema_version || "missing"}</strong></div>
                     <div><span>Export ID</span><strong>{artifactBundleInspection()!.summary_counts!.export_id}</strong></div>
                     <div><span>Generated from</span><strong>{artifactBundleInspection()!.summary_counts!.generated_from}</strong></div>
                     <div><span>Scope</span><strong>{artifactBundleInspection()!.summary_counts!.export_scope}</strong></div>

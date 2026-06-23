@@ -12,6 +12,8 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub const ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION: &str = "answer_artifact_export.v1";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FinalAnswer {
     pub final_answer_id: String,
@@ -98,6 +100,8 @@ pub struct AnswerArtifactIssue {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnswerArtifactExportManifest {
+    #[serde(default)]
+    pub schema_version: String,
     pub source_count: usize,
     pub draft_count: usize,
     pub grounded_answer_count: usize,
@@ -117,7 +121,15 @@ pub struct AnswerArtifactExportSource {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnswerArtifactExportIssues {
+    #[serde(default)]
+    pub schema_version: String,
+    pub issues: Vec<AnswerArtifactIssue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnswerArtifactExportResult {
+    pub schema_version: String,
     pub manifest: AnswerArtifactExportManifest,
     pub exported_source_count: usize,
     pub exported_draft_count: usize,
@@ -138,6 +150,8 @@ pub struct ExportedArtifactFile {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AnswerArtifactExportSummary {
+    #[serde(default)]
+    pub schema_version: String,
     pub export_id: String,
     pub generated_from: String,
     pub export_scope: String,
@@ -168,6 +182,10 @@ pub struct AnswerArtifactExportIssueKindCount {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnswerArtifactExportBundleInspection {
+    pub schema_version: Option<String>,
+    pub manifest_schema_version: Option<String>,
+    pub issues_schema_version: Option<String>,
+    pub summary_schema_version: Option<String>,
     pub has_manifest: bool,
     pub has_issues: bool,
     pub has_summary: bool,
@@ -197,6 +215,9 @@ pub enum AnswerArtifactExportBundleInspectionIssueKind {
     IssuesReadFailed,
     MissingSummary,
     SummaryReadFailed,
+    SchemaVersionMissing,
+    SchemaVersionUnsupported,
+    SchemaVersionMismatch,
     SummaryCountsMismatch,
     SummaryIssueCountMismatch,
     SummaryIssueKindCountsMismatch,
@@ -599,6 +620,7 @@ impl FinalAnswerService {
 
         sources.sort_by(|left, right| left.source_id.cmp(&right.source_id));
         Ok(AnswerArtifactExportManifest {
+            schema_version: ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION.to_string(),
             source_count,
             draft_count,
             grounded_answer_count,
@@ -623,6 +645,10 @@ impl FinalAnswerService {
         let manifest = self.get_answer_artifact_export_manifest()?;
         let registry = SourceRegistry::load(&self.paths.registry_path())?;
         let issues = self.list_answer_artifact_issues()?;
+        let export_issues = AnswerArtifactExportIssues {
+            schema_version: ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION.to_string(),
+            issues: issues.clone(),
+        };
         let mut written_files = Vec::new();
         let mut exported_source_count = 0;
         let mut exported_draft_count = 0;
@@ -677,7 +703,7 @@ impl FinalAnswerService {
         });
 
         let issues_path = export_root.join("export_issues.json");
-        fs::write(&issues_path, serde_json::to_string_pretty(&issues)?).map_err(|_| AegisError::FinalAnswerWriteFailed)?;
+        fs::write(&issues_path, serde_json::to_string_pretty(&export_issues)?).map_err(|_| AegisError::FinalAnswerWriteFailed)?;
         written_files.push(ExportedArtifactFile {
             relative_path: "export_issues.json".to_string(),
             artifact_kind: ExportedArtifactKind::Issues,
@@ -685,7 +711,7 @@ impl FinalAnswerService {
             artifact_id: None,
         });
 
-        let summary = build_export_summary(&manifest, &issues)?;
+        let summary = build_export_summary(&manifest, &export_issues)?;
         let summary_path = export_root.join("summary.json");
         fs::write(&summary_path, serde_json::to_string_pretty(&summary)?).map_err(|_| AegisError::FinalAnswerWriteFailed)?;
         written_files.push(ExportedArtifactFile {
@@ -709,6 +735,7 @@ impl FinalAnswerService {
         });
 
         Ok(AnswerArtifactExportResult {
+            schema_version: ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION.to_string(),
             manifest,
             exported_source_count,
             exported_draft_count,
@@ -911,9 +938,10 @@ fn issue_kind_rank(issue_kind: &AnswerArtifactIssueKind) -> usize {
 
 fn build_export_summary(
     manifest: &AnswerArtifactExportManifest,
-    issues: &[AnswerArtifactIssue],
+    export_issues: &AnswerArtifactExportIssues,
 )
 -> AegisResult<AnswerArtifactExportSummary> {
+    let issues = &export_issues.issues;
     let issue_kinds = [
         AnswerArtifactIssueKind::MalformedFinalAnswer,
         AnswerArtifactIssueKind::NeedsEvidenceStatement,
@@ -941,10 +969,11 @@ fn build_export_summary(
 
     let mut hasher = Sha256::new();
     hasher.update(serde_json::to_string(manifest)?);
-    hasher.update(serde_json::to_string(issues)?);
+    hasher.update(serde_json::to_string(export_issues)?);
     let export_id = format!("sha256:{:x}", hasher.finalize());
 
     Ok(AnswerArtifactExportSummary {
+        schema_version: ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION.to_string(),
         export_id,
         generated_from: "persisted_artifacts".to_string(),
         export_scope: "manual_artifact_export".to_string(),
@@ -980,11 +1009,8 @@ fn inspect_answer_artifact_export_bundle_impl(export_root: PathBuf) -> AegisResu
         AnswerArtifactExportBundleInspectionIssueKind::ManifestReadFailed,
         &mut errors,
     );
-    let issues: Option<Vec<AnswerArtifactIssue>> = read_bundle_json_file(
+    let issues: Option<AnswerArtifactExportIssues> = read_bundle_issues_file(
         &export_root,
-        "export_issues.json",
-        AnswerArtifactExportBundleInspectionIssueKind::MissingIssues,
-        AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed,
         &mut errors,
     );
     let summary: Option<AnswerArtifactExportSummary> = read_bundle_json_file(
@@ -995,7 +1021,11 @@ fn inspect_answer_artifact_export_bundle_impl(export_root: PathBuf) -> AegisResu
         &mut errors,
     );
 
-    let issue_kind_counts = issues.as_ref().map(|items| issue_kind_counts_from_export_issues(items));
+    let issue_kind_counts = issues
+        .as_ref()
+        .map(|items| issue_kind_counts_from_export_issues(&items.issues));
+
+    validate_export_bundle_schema_versions(manifest.as_ref(), issues.as_ref(), summary.as_ref(), &mut errors);
 
     if let (Some(manifest), Some(issues), Some(summary)) = (manifest.as_ref(), issues.as_ref(), summary.as_ref()) {
         let expected_summary = build_export_summary(manifest, issues)?;
@@ -1070,6 +1100,10 @@ fn inspect_answer_artifact_export_bundle_impl(export_root: PathBuf) -> AegisResu
     });
 
     Ok(AnswerArtifactExportBundleInspection {
+        schema_version: common_export_bundle_schema_version(manifest.as_ref(), issues.as_ref(), summary.as_ref()),
+        manifest_schema_version: non_empty_schema_version(manifest.as_ref().map(|value| value.schema_version.as_str())),
+        issues_schema_version: non_empty_schema_version(issues.as_ref().map(|value| value.schema_version.as_str())),
+        summary_schema_version: non_empty_schema_version(summary.as_ref().map(|value| value.schema_version.as_str())),
         has_manifest: manifest.is_some(),
         has_issues: issues.is_some(),
         has_summary: summary.is_some(),
@@ -1126,6 +1160,158 @@ fn read_bundle_json_file<T: DeserializeOwned>(
     }
 }
 
+fn read_bundle_issues_file(
+    export_root: &Path,
+    issues: &mut Vec<AnswerArtifactExportBundleInspectionIssue>,
+) -> Option<AnswerArtifactExportIssues> {
+    let relative_path = "export_issues.json";
+    let path = export_root.join(relative_path);
+    if !path.exists() {
+        issues.push(inspection_issue(
+            AnswerArtifactExportBundleInspectionIssueKind::MissingIssues,
+            format!("{relative_path} is missing"),
+            Some(relative_path.to_string()),
+        ));
+        return None;
+    }
+
+    let content = match fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(_) => {
+            issues.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed,
+                format!("{relative_path} could not be read"),
+                Some(relative_path.to_string()),
+            ));
+            return None;
+        }
+    };
+
+    let value = match serde_json::from_str::<serde_json::Value>(&content) {
+        Ok(value) => value,
+        Err(_) => {
+            issues.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed,
+                format!("{relative_path} is malformed"),
+                Some(relative_path.to_string()),
+            ));
+            return None;
+        }
+    };
+
+    if value.is_array() {
+        return match serde_json::from_value::<Vec<AnswerArtifactIssue>>(value) {
+            Ok(items) => Some(AnswerArtifactExportIssues {
+                schema_version: String::new(),
+                issues: items,
+            }),
+            Err(_) => {
+                issues.push(inspection_issue(
+                    AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed,
+                    format!("{relative_path} is malformed"),
+                    Some(relative_path.to_string()),
+                ));
+                None
+            }
+        };
+    }
+
+    match serde_json::from_value::<AnswerArtifactExportIssues>(value) {
+        Ok(value) => Some(value),
+        Err(_) => {
+            issues.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed,
+                format!("{relative_path} is malformed"),
+                Some(relative_path.to_string()),
+            ));
+            None
+        }
+    }
+}
+
+fn validate_export_bundle_schema_versions(
+    manifest: Option<&AnswerArtifactExportManifest>,
+    issues: Option<&AnswerArtifactExportIssues>,
+    summary: Option<&AnswerArtifactExportSummary>,
+    errors: &mut Vec<AnswerArtifactExportBundleInspectionIssue>,
+) {
+    let versions = [
+        ("export_manifest.json", manifest.map(|value| value.schema_version.as_str())),
+        ("export_issues.json", issues.map(|value| value.schema_version.as_str())),
+        ("summary.json", summary.map(|value| value.schema_version.as_str())),
+    ];
+
+    for (relative_path, version) in versions {
+        let Some(version) = version else {
+            continue;
+        };
+        let trimmed = version.trim();
+        if trimmed.is_empty() {
+            errors.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMissing,
+                format!("{relative_path} is missing schema_version"),
+                Some(relative_path.to_string()),
+            ));
+        } else if trimmed != ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION {
+            errors.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionUnsupported,
+                format!("{relative_path} has unsupported schema_version"),
+                Some(relative_path.to_string()),
+            ));
+        }
+    }
+
+    let mut present_versions = [
+        manifest.map(|value| value.schema_version.trim()),
+        issues.map(|value| value.schema_version.trim()),
+        summary.map(|value| value.schema_version.trim()),
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|version| !version.is_empty())
+    .collect::<Vec<_>>();
+    present_versions.sort_unstable();
+    present_versions.dedup();
+
+    if present_versions.len() > 1 {
+        errors.push(inspection_issue(
+            AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch,
+            "bundle files do not use the same schema_version".to_string(),
+            None,
+        ));
+    }
+}
+
+fn non_empty_schema_version(version: Option<&str>) -> Option<String> {
+    version
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn common_export_bundle_schema_version(
+    manifest: Option<&AnswerArtifactExportManifest>,
+    issues: Option<&AnswerArtifactExportIssues>,
+    summary: Option<&AnswerArtifactExportSummary>,
+) -> Option<String> {
+    let mut versions = [
+        manifest.map(|value| value.schema_version.trim()),
+        issues.map(|value| value.schema_version.trim()),
+        summary.map(|value| value.schema_version.trim()),
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|version| !version.is_empty())
+    .collect::<Vec<_>>();
+    versions.sort_unstable();
+    versions.dedup();
+    if versions.len() == 1 {
+        Some(versions[0].to_string())
+    } else {
+        None
+    }
+}
+
 fn issue_kind_counts_from_export_issues(issues: &[AnswerArtifactIssue]) -> Vec<AnswerArtifactExportIssueKindCount> {
     let mut counts = [
         AnswerArtifactIssueKind::MalformedFinalAnswer,
@@ -1160,11 +1346,14 @@ fn export_bundle_issue_kind_rank(kind: &AnswerArtifactExportBundleInspectionIssu
         AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed => 3,
         AnswerArtifactExportBundleInspectionIssueKind::MissingSummary => 4,
         AnswerArtifactExportBundleInspectionIssueKind::SummaryReadFailed => 5,
-        AnswerArtifactExportBundleInspectionIssueKind::SummaryCountsMismatch => 6,
-        AnswerArtifactExportBundleInspectionIssueKind::SummaryIssueCountMismatch => 7,
-        AnswerArtifactExportBundleInspectionIssueKind::SummaryIssueKindCountsMismatch => 8,
-        AnswerArtifactExportBundleInspectionIssueKind::SummaryExportIdMismatch => 9,
-        AnswerArtifactExportBundleInspectionIssueKind::SummaryMetadataMismatch => 10,
+        AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMissing => 6,
+        AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionUnsupported => 7,
+        AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch => 8,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryCountsMismatch => 9,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryIssueCountMismatch => 10,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryIssueKindCountsMismatch => 11,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryExportIdMismatch => 12,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryMetadataMismatch => 13,
     }
 }
 
@@ -1372,6 +1561,31 @@ mod tests {
 
     fn read_export_summary(export_root: &PathBuf) -> AnswerArtifactExportSummary {
         serde_json::from_str(&fs::read_to_string(export_root.join("summary.json")).unwrap()).unwrap()
+    }
+
+    fn read_export_manifest(export_root: &PathBuf) -> AnswerArtifactExportManifest {
+        serde_json::from_str(&fs::read_to_string(export_root.join("export_manifest.json")).unwrap()).unwrap()
+    }
+
+    fn read_export_issues(export_root: &PathBuf) -> AnswerArtifactExportIssues {
+        serde_json::from_str(&fs::read_to_string(export_root.join("export_issues.json")).unwrap()).unwrap()
+    }
+
+    fn remove_bundle_schema_version(export_root: &PathBuf, relative_path: &str) {
+        let path = export_root.join(relative_path);
+        let mut value: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        value.as_object_mut().unwrap().remove("schema_version");
+        fs::write(path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
+    }
+
+    fn set_bundle_schema_version(export_root: &PathBuf, relative_path: &str, schema_version: &str) {
+        let path = export_root.join(relative_path);
+        let mut value: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        value.as_object_mut().unwrap().insert(
+            "schema_version".to_string(),
+            serde_json::Value::String(schema_version.to_string()),
+        );
+        fs::write(path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
     }
 
     #[test]
@@ -1989,6 +2203,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let service = FinalAnswerService::new(temp.path().to_path_buf());
         let manifest = service.get_answer_artifact_export_manifest().unwrap();
+        assert_eq!(manifest.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
         assert_eq!(manifest.source_count, 0);
         assert_eq!(manifest.draft_count, 0);
         assert_eq!(manifest.grounded_answer_count, 0);
@@ -2046,6 +2261,7 @@ mod tests {
         let manifest = service.get_answer_artifact_export_manifest().unwrap();
         let issues = service.list_answer_artifact_issues().unwrap();
 
+        assert_eq!(manifest.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
         assert_eq!(manifest.source_count, 2);
         assert_eq!(manifest.draft_count, 3);
         assert_eq!(manifest.grounded_answer_count, 3);
@@ -2105,6 +2321,8 @@ mod tests {
         let result = service.export_answer_artifacts(&export_root).unwrap();
         let after_snapshot = snapshot_export_source_state(&source_root);
 
+        assert_eq!(result.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert_eq!(result.manifest.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
         assert_eq!(result.manifest.source_count, manifest.source_count);
         assert_eq!(result.manifest.issue_count, manifest.issue_count);
         assert_eq!(result.exported_source_count, manifest.source_count);
@@ -2120,6 +2338,9 @@ mod tests {
         assert!(export_root.join("export_manifest.json").exists());
         assert!(export_root.join("export_issues.json").exists());
         assert!(export_root.join("summary.json").exists());
+        assert_eq!(read_export_manifest(&export_root).schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert_eq!(read_export_issues(&export_root).schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert_eq!(read_export_summary(&export_root).schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
         assert!(export_root.join(&source_id).join("answer_drafts").join(format!("{draft_id}.json")).exists());
         assert!(export_root.join(&source_id).join("grounded_answers").join(format!("{grounded_id}.json")).exists());
         assert!(export_root.join(&source_id).join("final_answers").join(format!("{}.json", final_answer.final_answer_id)).exists());
@@ -2149,6 +2370,8 @@ mod tests {
         let summary_json = fs::read_to_string(export_root.join("summary.json")).unwrap();
 
         assert!(!summary.export_id.is_empty());
+        assert_eq!(summary.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert_eq!(result.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
         assert_eq!(summary.generated_from, "persisted_artifacts");
         assert_eq!(summary.export_scope, "manual_artifact_export");
         assert_eq!(summary.source_count, 0);
@@ -2205,6 +2428,8 @@ mod tests {
         assert!(!summary_a.export_id.is_empty());
         assert!(!summary_b.export_id.is_empty());
         assert_eq!(summary_a.export_id, summary_b.export_id);
+        assert_eq!(summary_a.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert_eq!(summary_b.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
         assert_eq!(summary_a.source_count, first.manifest.source_count);
         assert_eq!(summary_a.draft_count, first.manifest.draft_count);
         assert_eq!(summary_a.grounded_answer_count, first.manifest.grounded_answer_count);
@@ -2281,6 +2506,10 @@ mod tests {
         assert!(inspection.has_manifest);
         assert!(inspection.has_issues);
         assert!(inspection.has_summary);
+        assert_eq!(inspection.schema_version.as_deref(), Some(ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION));
+        assert_eq!(inspection.manifest_schema_version.as_deref(), Some(ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION));
+        assert_eq!(inspection.issues_schema_version.as_deref(), Some(ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION));
+        assert_eq!(inspection.summary_schema_version.as_deref(), Some(ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION));
         assert!(inspection.is_consistent);
         assert_eq!(inspection.issue_count, 0);
         assert_eq!(inspection.warning_count, 0);
@@ -2298,11 +2527,173 @@ mod tests {
         assert_eq!(inspection.manifest_counts.as_ref().unwrap().sources[0].source_id, result.manifest.sources[0].source_id);
         assert_eq!(inspection.manifest_counts.as_ref().unwrap().sources[0].final_answers.len(), result.manifest.sources[0].final_answers.len());
         assert_eq!(inspection.summary_counts.as_ref().unwrap(), &summary);
+        assert_eq!(inspection.manifest_counts.as_ref().unwrap().schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert_eq!(inspection.summary_counts.as_ref().unwrap().schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
         assert!(inspection.summary_counts.as_ref().unwrap().issue_kinds.is_empty());
         assert!(inspection.issue_kind_counts.as_ref().unwrap().is_empty());
         assert!(inspection.summary_counts.as_ref().unwrap().sources.windows(2).all(|pair| pair[0].source_id <= pair[1].source_id));
         assert!(format!("{inspection:?}").find(temp.path().to_string_lossy().as_ref()).is_none());
         assert!(!final_answer.final_answer_id.is_empty());
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_schema_version_is_written_to_bundle_metadata() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("schema-version-bundle");
+
+        let result = service.export_answer_artifacts(&export_root).unwrap();
+        let manifest = read_export_manifest(&export_root);
+        let issues = read_export_issues(&export_root);
+        let summary = read_export_summary(&export_root);
+
+        assert_eq!(result.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert_eq!(result.manifest.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert_eq!(manifest.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert_eq!(issues.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert_eq!(summary.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert_eq!(issues.issues.len(), result.exported_issue_count);
+        assert!(!format!("{result:?}{manifest:?}{issues:?}{summary:?}").contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_detects_missing_schema_version_deterministically() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("missing-schema-bundle");
+        service.export_answer_artifacts(&export_root).unwrap();
+        remove_bundle_schema_version(&export_root, "export_manifest.json");
+        remove_bundle_schema_version(&export_root, "export_issues.json");
+        remove_bundle_schema_version(&export_root, "summary.json");
+        let before = [
+            fs::read_to_string(export_root.join("export_manifest.json")).unwrap(),
+            fs::read_to_string(export_root.join("export_issues.json")).unwrap(),
+            fs::read_to_string(export_root.join("summary.json")).unwrap(),
+        ];
+
+        let first = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+        let second = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+        let schema_errors = first
+            .errors
+            .iter()
+            .filter(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMissing)
+            .map(|issue| (issue.kind.clone(), issue.relative_path.clone()))
+            .collect::<Vec<_>>();
+        let after = [
+            fs::read_to_string(export_root.join("export_manifest.json")).unwrap(),
+            fs::read_to_string(export_root.join("export_issues.json")).unwrap(),
+            fs::read_to_string(export_root.join("summary.json")).unwrap(),
+        ];
+
+        assert!(!first.is_consistent);
+        assert_eq!(first.schema_version, None);
+        assert_eq!(first.manifest_schema_version, None);
+        assert_eq!(first.issues_schema_version, None);
+        assert_eq!(first.summary_schema_version, None);
+        assert_eq!(schema_errors.len(), 3);
+        assert_eq!(
+            schema_errors,
+            vec![
+                (
+                    AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMissing,
+                    Some("export_issues.json".to_string())
+                ),
+                (
+                    AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMissing,
+                    Some("export_manifest.json".to_string())
+                ),
+                (
+                    AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMissing,
+                    Some("summary.json".to_string())
+                ),
+            ]
+        );
+        assert_eq!(first.errors, second.errors);
+        assert_eq!(before, after);
+        assert!(!format!("{first:?}").contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_detects_unsupported_schema_version() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("unsupported-schema-bundle");
+        service.export_answer_artifacts(&export_root).unwrap();
+        set_bundle_schema_version(&export_root, "export_manifest.json", "answer_artifact_export.v999");
+        set_bundle_schema_version(&export_root, "export_issues.json", "answer_artifact_export.v999");
+        set_bundle_schema_version(&export_root, "summary.json", "answer_artifact_export.v999");
+
+        let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+        let unsupported = inspection
+            .errors
+            .iter()
+            .filter(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionUnsupported)
+            .collect::<Vec<_>>();
+
+        assert!(!inspection.is_consistent);
+        assert_eq!(inspection.schema_version.as_deref(), Some("answer_artifact_export.v999"));
+        assert_eq!(unsupported.len(), 3);
+        assert!(unsupported.iter().all(|issue| matches!(
+            issue.relative_path.as_deref(),
+            Some("export_manifest.json" | "export_issues.json" | "summary.json")
+        )));
+        assert!(!inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch));
+        assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_detects_mismatched_schema_versions() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("mismatched-schema-bundle");
+        service.export_answer_artifacts(&export_root).unwrap();
+        set_bundle_schema_version(&export_root, "summary.json", "answer_artifact_export.v2");
+
+        let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+
+        assert!(!inspection.is_consistent);
+        assert_eq!(inspection.schema_version, None);
+        assert_eq!(inspection.manifest_schema_version.as_deref(), Some(ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION));
+        assert_eq!(inspection.issues_schema_version.as_deref(), Some(ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION));
+        assert_eq!(inspection.summary_schema_version.as_deref(), Some("answer_artifact_export.v2"));
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionUnsupported));
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch));
+        assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_reports_legacy_issue_array_as_missing_schema_version() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("legacy-issues-bundle");
+        service.export_answer_artifacts(&export_root).unwrap();
+        let legacy_issues = read_export_issues(&export_root).issues;
+        fs::write(
+            export_root.join("export_issues.json"),
+            serde_json::to_string_pretty(&legacy_issues).unwrap(),
+        )
+        .unwrap();
+
+        let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+
+        assert!(inspection.has_issues);
+        assert_eq!(inspection.issues_schema_version, None);
+        assert!(inspection.errors.iter().any(|issue| {
+            issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMissing
+                && issue.relative_path.as_deref() == Some("export_issues.json")
+        }));
+        assert!(!inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed));
+        assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
     #[test]
