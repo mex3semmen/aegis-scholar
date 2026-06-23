@@ -1294,19 +1294,18 @@ fn common_export_bundle_schema_version(
     issues: Option<&AnswerArtifactExportIssues>,
     summary: Option<&AnswerArtifactExportSummary>,
 ) -> Option<String> {
-    let mut versions = [
-        manifest.map(|value| value.schema_version.trim()),
-        issues.map(|value| value.schema_version.trim()),
-        summary.map(|value| value.schema_version.trim()),
-    ]
-    .into_iter()
-    .flatten()
-    .filter(|version| !version.is_empty())
-    .collect::<Vec<_>>();
-    versions.sort_unstable();
-    versions.dedup();
-    if versions.len() == 1 {
-        Some(versions[0].to_string())
+    let manifest_version = manifest.map(|value| value.schema_version.trim());
+    let issues_version = issues.map(|value| value.schema_version.trim());
+    let summary_version = summary.map(|value| value.schema_version.trim());
+    let versions = [manifest_version, issues_version, summary_version]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    if versions.len() == 3
+        && versions.iter().all(|version| !version.is_empty())
+        && versions.iter().all(|version| *version == ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION)
+    {
+        Some(ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION.to_string())
     } else {
         None
     }
@@ -2637,13 +2636,36 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert!(!inspection.is_consistent);
-        assert_eq!(inspection.schema_version.as_deref(), Some("answer_artifact_export.v999"));
+        assert_eq!(inspection.schema_version, None);
         assert_eq!(unsupported.len(), 3);
         assert!(unsupported.iter().all(|issue| matches!(
             issue.relative_path.as_deref(),
             Some("export_manifest.json" | "export_issues.json" | "summary.json")
         )));
         assert!(!inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch));
+        assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_reports_malformed_versioned_issues_object() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("malformed-issues-bundle");
+        service.export_answer_artifacts(&export_root).unwrap();
+        fs::write(
+            export_root.join("export_issues.json"),
+            r#"{"schema_version":"answer_artifact_export.v1","issues":"not-an-array"}"#,
+        )
+        .unwrap();
+
+        let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+
+        assert!(!inspection.is_consistent);
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed));
+        assert!(!inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMissing));
+        assert!(!inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionUnsupported));
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
