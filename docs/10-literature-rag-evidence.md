@@ -157,9 +157,11 @@ The rollup is path-free and does not repair, migrate, import, share, upload, dow
 Phase 22.1 was reviewed and required no code, UI, or docs changes.
 Phase 22.2 is this docs-sync/finalization pass.
 
-Phase 23.0 adds a read-only inspection report preview derived from the existing inspection summary and typed inspection issues.
-The preview is non-persistent and path-free, does not expose raw internal filesystem paths, does not write report files, and does not add import, share, download, repair, generate, or editing workflows.
+Phase 23.0 adds a read-only inspection report preview as part of the existing export bundle inspector DTO.
+The preview is derived from the existing inspection summary and typed inspection issues only, is deterministic, path-free, and non-persistent, and does not write report files or expose raw internal filesystem paths.
 It surfaces a title, schema version, high-level status, issue and warning counts, issue counts by kind, and compact status/issue sections for inspection results.
+Phase 23.1 hardens that preview boundary with tests only and does not change production behavior.
+It does not import, migrate, repair, rewrite, share, download, generate, or edit bundles or answers.
 
 Manual verification checklist:
 
