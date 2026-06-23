@@ -77,6 +77,11 @@ It shows claim, evidence, chunk, and locator references where present.
 Phase 10.1 hardens that inspector boundary.
 It trims IDs before invoking the backend, rejects empty inputs client-side, disables loading during fetch, keeps the last successful FinalAnswer visible until a new load succeeds, masks obvious filesystem-looking substrings in frontend error display, and renders locator summaries safely.
 
+Phase 11.0 adds read-only discovery for existing Final Answers.
+The inspector can list already persisted FinalAnswer contracts for a source and then select one for display.
+Discovery only reads metadata from persisted contracts; it does not build, synthesize, or edit answers.
+It does not hide unsupported or `needs_evidence` statements.
+
 Manual verification checklist:
 
 - `npm run build`
@@ -87,6 +92,8 @@ Manual verification checklist:
 - open the app and confirm:
   - empty inputs are rejected
   - loading is disabled during fetch
+  - the list shows existing final answers when a source ID is entered
+  - selecting a listed final answer fills the ID and loads it read-only
   - supported / `needs_evidence` / unsupported statements remain visible
   - statement order is preserved
   - locator summaries render

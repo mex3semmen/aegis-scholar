@@ -46,6 +46,15 @@ pub struct FinalAnswerStatement {
     pub support_level: FinalAnswerSupportLevel,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FinalAnswerMetadata {
+    pub final_answer_id: String,
+    pub grounded_answer_id: String,
+    pub statement_count: usize,
+    pub unsupported_count: usize,
+    pub needs_evidence_count: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum FinalAnswerStatementStatus {
@@ -71,6 +80,10 @@ pub fn build_final_answer(root: impl Into<PathBuf>, source_id: &str, grounded_an
 
 pub fn read_final_answer(root: impl Into<PathBuf>, source_id: &str, final_answer_id: &str) -> AegisResult<FinalAnswer> {
     FinalAnswerService::new(root).read_final_answer(source_id, final_answer_id)
+}
+
+pub fn list_final_answers(root: impl Into<PathBuf>, source_id: &str) -> AegisResult<Vec<FinalAnswerMetadata>> {
+    FinalAnswerService::new(root).list_final_answers(source_id)
 }
 
 pub fn build_final_answer_from_grounded_answer(grounded_answer: &GroundedAnswer) -> AegisResult<FinalAnswer> {
@@ -137,6 +150,42 @@ impl FinalAnswerService {
         }
         let content = fs::read_to_string(&path).map_err(|_| AegisError::FinalAnswerReadFailed)?;
         serde_json::from_str(&content).map_err(|_| AegisError::FinalAnswerReadFailed)
+    }
+
+    pub fn list_final_answers(&self, source_id: &str) -> AegisResult<Vec<FinalAnswerMetadata>> {
+        if source_id.trim().is_empty() {
+            return Err(AegisError::FinalAnswerInputMissing);
+        }
+        let registry = SourceRegistry::load(&self.paths.registry_path())?;
+        let record = registry.get_source(source_id)?;
+        let final_answer_dir = self.paths.source_version_dir(&record.source_id, &record.version_id).join("final_answers");
+        if !final_answer_dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut items = Vec::new();
+        for entry in fs::read_dir(&final_answer_dir).map_err(|_| AegisError::FinalAnswerReadFailed)? {
+            let entry = entry.map_err(|_| AegisError::FinalAnswerReadFailed)?;
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let content = fs::read_to_string(&path).map_err(|_| AegisError::FinalAnswerReadFailed)?;
+            let answer: FinalAnswer = serde_json::from_str(&content).map_err(|_| AegisError::FinalAnswerReadFailed)?;
+            items.push(FinalAnswerMetadata {
+                final_answer_id: answer.final_answer_id,
+                grounded_answer_id: answer.grounded_answer_id,
+                statement_count: answer.statement_count,
+                unsupported_count: answer.unsupported_count,
+                needs_evidence_count: answer
+                    .statements
+                    .iter()
+                    .filter(|statement| statement.status == FinalAnswerStatementStatus::NeedsEvidence)
+                    .count(),
+            });
+        }
+        items.sort_by(|left, right| left.final_answer_id.cmp(&right.final_answer_id));
+        Ok(items)
     }
 
     fn write_final_answer(&self, final_answer: &FinalAnswer) -> AegisResult<()> {
@@ -357,6 +406,67 @@ mod tests {
         assert_eq!(final_answer.version_id, version_id);
         assert_eq!(final_answer.grounded_answer_id, grounded_id);
         assert!(!draft_id.is_empty());
+    }
+
+    #[test]
+    fn final_answer_listing_returns_metadata_without_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let answer = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let listed = service.list_final_answers(&source_id).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].final_answer_id, answer.final_answer_id);
+        assert_eq!(listed[0].grounded_answer_id, answer.grounded_answer_id);
+        assert_eq!(listed[0].statement_count, 1);
+        assert_eq!(listed[0].unsupported_count, 0);
+        assert_eq!(listed[0].needs_evidence_count, 0);
+        let json = serde_json::to_string(&listed[0]).unwrap();
+        assert!(!json.contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn final_answer_listing_is_empty_when_directory_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, _grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let listed = service.list_final_answers(&source_id).unwrap();
+        assert!(listed.is_empty());
+        let final_answer_dir = CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_id, "srcv_demo")
+            .join("final_answers");
+        assert!(!final_answer_dir.exists());
+    }
+
+    #[test]
+    fn final_answer_listing_rejects_empty_source_id() {
+        let temp = tempfile::tempdir().unwrap();
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        assert!(matches!(service.list_final_answers(""), Err(AegisError::FinalAnswerInputMissing)));
+    }
+
+    #[test]
+    fn final_answer_listing_reports_missing_source() {
+        let temp = tempfile::tempdir().unwrap();
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        assert!(matches!(service.list_final_answers("src_missing"), Err(AegisError::SourceNotFound(_))));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn final_answer_listing_returns_typed_error_for_malformed_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let answer = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let bad_path = CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_id, &version_id)
+            .join("final_answers")
+            .join("fan_bad.json");
+        fs::write(&bad_path, "{not-json").unwrap();
+        assert!(matches!(service.list_final_answers(&source_id), Err(AegisError::FinalAnswerReadFailed)));
+        assert!(bad_path.exists());
+        assert!(answer.final_answer_id.starts_with("fan_"));
     }
 
     #[test]

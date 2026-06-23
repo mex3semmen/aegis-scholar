@@ -43,6 +43,14 @@ type FinalAnswer = {
   warnings: string[];
 };
 
+type FinalAnswerMetadata = {
+  final_answer_id: string;
+  grounded_answer_id: string;
+  statement_count: number;
+  unsupported_count: number;
+  needs_evidence_count: number;
+};
+
 function sanitizeBackendError(error: unknown) {
   const message = String(error);
   return message.replace(/[A-Za-z]:\\[^"]+/g, "[path hidden]").replace(/E:\\[^"]+/g, "[path hidden]");
@@ -63,6 +71,9 @@ export default function App() {
   const [finalAnswer, setFinalAnswer] = createSignal<FinalAnswer | null>(null);
   const [finalAnswerError, setFinalAnswerError] = createSignal<string | null>(null);
   const [finalAnswerLoading, setFinalAnswerLoading] = createSignal(false);
+  const [finalAnswerList, setFinalAnswerList] = createSignal<FinalAnswerMetadata[]>([]);
+  const [finalAnswerListError, setFinalAnswerListError] = createSignal<string | null>(null);
+  const [finalAnswerListLoading, setFinalAnswerListLoading] = createSignal(false);
 
   async function loadStatus() {
     setStatusError(null);
@@ -77,9 +88,10 @@ export default function App() {
   }
 
   async function loadFinalAnswer() {
-    const trimmedSourceId = sourceId().trim();
-    const trimmedFinalAnswerId = finalAnswerId().trim();
+    await loadFinalAnswerByIds(sourceId().trim(), finalAnswerId().trim());
+  }
 
+  async function loadFinalAnswerByIds(trimmedSourceId: string, trimmedFinalAnswerId: string) {
     if (!trimmedSourceId || !trimmedFinalAnswerId) {
       setFinalAnswerError("Source ID and final answer ID are required.");
       return;
@@ -103,6 +115,36 @@ export default function App() {
     } finally {
       setFinalAnswerLoading(false);
     }
+  }
+
+  async function loadFinalAnswerList() {
+    const trimmedSourceId = sourceId().trim();
+    if (!trimmedSourceId) {
+      setFinalAnswerListError("Source ID is required to list final answers.");
+      return;
+    }
+    if (finalAnswerListLoading()) {
+      return;
+    }
+    setFinalAnswerListLoading(true);
+    setFinalAnswerListError(null);
+    try {
+      const result = await invoke<FinalAnswerMetadata[]>("list_final_answers", {
+        root: ".",
+        source_id: trimmedSourceId,
+      });
+      setFinalAnswerList(result);
+    } catch (err) {
+      setFinalAnswerList([]);
+      setFinalAnswerListError(sanitizeBackendError(err));
+    } finally {
+      setFinalAnswerListLoading(false);
+    }
+  }
+
+  async function selectFinalAnswer(finalAnswerMetadata: FinalAnswerMetadata) {
+    setFinalAnswerId(finalAnswerMetadata.final_answer_id);
+    await loadFinalAnswerByIds(sourceId().trim(), finalAnswerMetadata.final_answer_id);
   }
 
   return (
@@ -158,8 +200,31 @@ export default function App() {
           <button onClick={loadFinalAnswer} disabled={finalAnswerLoading()}>
             {finalAnswerLoading() ? "Loading..." : "Load final answer"}
           </button>
+          <button onClick={loadFinalAnswerList} disabled={finalAnswerListLoading()}>
+            {finalAnswerListLoading() ? "Listing..." : "List final answers"}
+          </button>
         </div>
         {finalAnswerError() && <p class="error">{finalAnswerError()}</p>}
+        {finalAnswerListError() && <p class="error">{finalAnswerListError()}</p>}
+        <div class="final-answer-list">
+          <h3>Existing final answers</h3>
+          {finalAnswerList().length > 0 ? (
+            <ul class="final-answer-list-items">
+              {finalAnswerList().map((item) => (
+                <li>
+                  <button class="final-answer-list-item" onClick={() => selectFinalAnswer(item)}>
+                    <span>{item.final_answer_id}</span>
+                    <small>
+                      {item.grounded_answer_id} | statements={item.statement_count} | needs_evidence={item.needs_evidence_count} | unsupported={item.unsupported_count}
+                    </small>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No final answers listed yet.</p>
+          )}
+        </div>
         {finalAnswer() ? (
           <div class="contract-view">
             <div class="contract-meta">
