@@ -7,7 +7,7 @@
     "event_id": { "type": "string", "pattern": "^aud_[a-zA-Z0-9_-]+$" },
     "event_type": {
       "type": "string",
-      "enum": ["source_registered", "source_updated", "source_removed", "source_extracted", "source_extraction_failed", "source_chunked", "source_chunking_failed", "chunks_created", "retrieval_run", "evidence_pack_created", "skill_run"]
+      "enum": ["source_registered", "source_updated", "source_removed", "source_extracted", "source_extraction_failed", "source_chunked", "source_chunking_failed", "source_indexed", "source_indexing_failed", "evidence_pack_built", "evidence_pack_failed", "chunks_created", "retrieval_run", "evidence_pack_created", "skill_run"]
     },
     "created_at": { "type": "string", "format": "date-time" },
     "source_id": { "type": "string" },

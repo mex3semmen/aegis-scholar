@@ -22,6 +22,7 @@ pub enum IngestionStatus {
     Extracted,
     Chunked,
     Indexed,
+    EvidenceReady,
     Failed,
     Removed,
 }

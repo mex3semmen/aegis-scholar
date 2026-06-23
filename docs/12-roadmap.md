@@ -65,6 +65,8 @@ Phase 4.1 hardens read-back, query normalization, on-demand index build, and det
 
 Build source-grounded evidence packs before answer synthesis.
 
+Phase 5.0 stores deterministic evidence packs as JSON under the managed corpus tree and does not add embeddings, vector search, or answer synthesis.
+
 ## Phase 6 — Skill Runtime MVP
 
 Load declarative skills and route tasks to retrieval profiles and output contracts.
