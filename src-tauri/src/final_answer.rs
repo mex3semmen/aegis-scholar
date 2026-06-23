@@ -1049,6 +1049,19 @@ mod tests {
         assert_eq!(health.needs_evidence_statement_count, 0);
         assert!(health.sources.windows(2).all(|pair| pair[0].source_id <= pair[1].source_id));
         assert!(health.sources.iter().all(|item| !format!("{item:?}").contains(".aegis")));
+        let per_source_drafts: usize = health.sources.iter().map(|item| item.draft_count).sum();
+        let per_source_grounded: usize = health.sources.iter().map(|item| item.grounded_answer_count).sum();
+        let per_source_final: usize = health.sources.iter().map(|item| item.final_answer_count).sum();
+        let per_source_malformed: usize = health.sources.iter().map(|item| item.malformed_final_answer_count).sum();
+        let per_source_unsupported: usize = health.sources.iter().map(|item| item.unsupported_statement_count).sum();
+        let per_source_needs_evidence: usize = health.sources.iter().map(|item| item.needs_evidence_statement_count).sum();
+        assert_eq!(health.draft_count, per_source_drafts);
+        assert_eq!(health.grounded_answer_count, per_source_grounded);
+        assert_eq!(health.final_answer_count, per_source_final);
+        assert_eq!(health.malformed_final_answer_count, per_source_malformed);
+        assert_eq!(health.unsupported_statement_count, per_source_unsupported);
+        assert_eq!(health.needs_evidence_statement_count, per_source_needs_evidence);
+        assert!(!format!("{health:?}").contains(".aegis"));
     }
 
     #[test]
