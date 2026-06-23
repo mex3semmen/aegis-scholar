@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://aegis.local/schemas/final-answer.schema.json",
-  "title": "FinalAnswer",
+  "title": "AEGIS Final Answer",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -23,7 +23,8 @@
       "pattern": "^fan_[0-9a-f]+$"
     },
     "grounded_answer_id": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^gan_[a-f0-9]+$"
     },
     "source_id": {
       "type": "string"
@@ -114,7 +115,7 @@
         "locators": {
           "type": "array",
           "items": {
-            "$ref": "https://aegis.local/schemas/citation-locator.schema.json"
+            "$ref": "./citation-locator.schema.json"
           }
         },
         "support_level": {
