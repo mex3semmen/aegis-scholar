@@ -160,6 +160,12 @@ pub enum AegisError {
     #[error("Final answer empty grounded answer")]
     FinalAnswerEmptyGroundedAnswer,
 
+    #[error("Export destination already exists")]
+    ExportDestinationExists,
+
+    #[error("Export destination cannot be inside the corpus workspace")]
+    ExportDestinationInsideCorpus,
+
 }
 
 pub type AegisResult<T> = Result<T, AegisError>;

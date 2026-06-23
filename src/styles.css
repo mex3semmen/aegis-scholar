@@ -221,6 +221,12 @@ pre {
   color: #94a3b8;
 }
 
+.inline-field {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 240px;
+}
+
 .link-button {
   background: none;
   border: none;
