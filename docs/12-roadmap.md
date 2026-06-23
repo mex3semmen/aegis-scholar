@@ -174,9 +174,10 @@ Phase 22.0 is an audit/diagnostic pass, not a repair/import/share/download workf
 Phase 22.1 was reviewed as a no-op boundary review.
 Phase 22.2 is this docs-sync/finalization pass.
 
-Phase 23.0 adds a read-only inspection report preview derived from the existing inspection summary and typed inspection issues.
-It is path-free, non-persistent, does not expose raw internal filesystem paths, and does not write report files or add import/share/download/repair workflows.
+Phase 23.0 adds a read-only inspection report preview as part of the existing export bundle inspector DTO.
+It is derived from the existing inspection summary and typed inspection issues only, is deterministic, path-free, non-persistent, and does not write report files or expose raw internal filesystem paths.
 Phase 23.0 is implemented as an audit/diagnostic preview, not a product answer workflow.
+Phase 23.1 is a tests-only boundary hardening pass.
 
 ## Phase 11 — Obsidian Export
 
