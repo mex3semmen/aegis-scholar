@@ -163,6 +163,12 @@ It surfaces a title, schema version, high-level status, issue and warning counts
 Phase 23.1 hardens that preview boundary with tests only and does not change production behavior.
 It does not import, migrate, repair, rewrite, share, download, generate, or edit bundles or answers.
 
+Phase 24.0 adds a read-only inspection issue detail view as part of the existing export bundle inspector DTO.
+The issue detail view is derived only from existing typed inspection issues, is deterministic and path-free, and does not read additional files, write report artifacts, or mutate inspected bundles.
+It groups existing issues into compact detail lines so review flows can inspect malformed final answers, schema-version problems, integrity problems, and other typed diagnostics without exposing raw internal filesystem paths.
+Phase 24.1, if added later, should remain a tests-only boundary hardening pass.
+It does not import, migrate, repair, rewrite, share, download, generate, or edit bundles or answers.
+
 Manual verification checklist:
 
 - `npm run build`

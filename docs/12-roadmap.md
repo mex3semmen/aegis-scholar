@@ -179,6 +179,11 @@ It is derived from the existing inspection summary and typed inspection issues o
 Phase 23.0 is implemented as an audit/diagnostic preview, not a product answer workflow.
 Phase 23.1 is a tests-only boundary hardening pass.
 
+Phase 24.0 adds a read-only inspection issue detail view as part of the existing export bundle inspector DTO.
+It groups existing typed inspection issues into deterministic, path-free compact detail lines and does not read additional files, write report artifacts, or mutate inspected bundles.
+Phase 24.0 is an audit/diagnostic UI aid, not a product answer workflow.
+Phase 24.1, if added later, should remain tests-only boundary hardening.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
