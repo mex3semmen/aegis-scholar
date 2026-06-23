@@ -82,6 +82,10 @@ The inspector can list already persisted FinalAnswer contracts for a source and 
 Discovery only reads metadata from persisted contracts; it does not build, synthesize, or edit answers.
 It does not hide unsupported or `needs_evidence` statements.
 
+Phase 11.1 hardens that discovery boundary.
+Listing remains read-only and returns metadata only, not filesystem paths.
+Ordering is deterministic, metadata counts are derived from the persisted FinalAnswer statements, malformed files are treated as typed read failures, traversal-like `source_id` inputs stay away from arbitrary path access, and listing does not create missing directories as a side effect.
+
 Manual verification checklist:
 
 - `npm run build`
