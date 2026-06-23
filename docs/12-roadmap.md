@@ -383,6 +383,27 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 39 — Retrieval / Evidence Pack Fixture Contract Review
+
+Planning boundary only.
+
+Phase 39.0 is a no-op review.
+Existing tests already cover deterministic retrieval results, stable source/chunk metadata, explicit evidence-pack input boundaries, and mechanical answer-draft construction from evidence packs.
+No code, DTO, or validation changes were needed.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
