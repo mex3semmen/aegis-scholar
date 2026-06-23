@@ -130,6 +130,8 @@ Phase 18.1 hardens that summary boundary with deterministic hash-derived summary
 Phase 19.0 adds a read-only export bundle inspector for an existing manual export bundle.
 It validates the persisted `export_manifest.json`, `export_issues.json`, and `summary.json` metadata only, compares the parsed summary against the derived manifest/issues summary, and reports typed inspection issues for missing or malformed bundle files.
 It remains path-free, does not mutate the bundle, does not import, repair, rewrite, or regenerate anything, and does not add a share/download workflow.
+Phase 19.1 hardens that inspector boundary with deterministic missing-file ordering and safe ignoring of unrelated files and nested noise inside the export bundle.
+Empty bundle input is rejected with `ExportBundleInputMissing` before filesystem access, and valid exported bundles inspect as consistent.
 
 Manual verification checklist:
 
@@ -152,6 +154,7 @@ Manual verification checklist:
   - empty export bundles report missing-file inspection issues
   - malformed export bundle files report typed inspection issues
   - export bundle inspection stays path-free and read-only
+  - unrelated files and nested noise inside the export bundle are ignored safely
   - selecting a listed final answer fills the ID and loads it read-only
   - the list shows existing final answers when a source ID is entered
   - supported / `needs_evidence` / unsupported statements remain visible
