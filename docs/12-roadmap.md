@@ -121,8 +121,9 @@ It remains inspection-only, reports persisted metadata counts only, is determini
 Phase 14.1 hardens that boundary with zero-count empty-storage behavior, per-source/global count consistency, path-free DTO/debug output, and conservative malformed-final-answer handling.
 
 Phase 15.0 adds a read-only answer artifact issue list for persisted diagnostics.
-It remains inspection-only, reports malformed finals plus unsupported / `needs_evidence` statements, and is still not a product answer experience.
-Phase 15.1 hardens that boundary with deterministic ordering and supported-statement exclusion.
+It remains inspection-only, reports persisted issue metadata only, and is still not a product answer experience.
+There are no repair/fix actions yet.
+Phase 15.1 hardens that boundary with deterministic ordering, supported-statement exclusion, and path-free diagnostics.
 
 ## Phase 11 — Obsidian Export
 
