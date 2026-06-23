@@ -103,8 +103,10 @@ It reports persisted metadata only, including global and per-source counts for `
 The output is deterministic by `source_id`, global counts equal the sum of the per-source counts where applicable, empty storage returns a zero-count summary, and malformed final answers are counted conservatively without exposing filesystem paths.
 It does not create directories or artifacts, does not build or generate answers, and does not synthesize, rank, infer, rewrite, or edit anything.
 Phase 15.0 adds a read-only answer artifact issue list for persisted diagnostics.
-It reports metadata-only issues for malformed final answers plus unsupported and `needs_evidence` statements, keeps output deterministic, and stays path-free.
-It does not repair artifacts, does not build or generate answers, and does not synthesize, rank, infer, rewrite, or edit anything.
+It reports persisted artifact issues only, with issue kinds `malformed_final_answer`, `unsupported_statement`, and `needs_evidence_statement`.
+Empty storage returns an empty list, supported statements do not produce issues, ordering is deterministic by `source_id`, issue kind, `final_answer_id`, and `statement_index`, and malformed finals are reported conservatively without filesystem paths.
+Unsupported and `needs_evidence` issues include path-free source/final/statement metadata.
+It does not create directories or artifacts, and it does not build, generate, synthesize, rank, infer, rewrite, repair, or edit anything.
 Phase 15.1 hardens that boundary with supported-statement exclusion, deterministic ordering, and path-free diagnostics.
 
 Manual verification checklist:
