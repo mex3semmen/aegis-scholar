@@ -277,6 +277,27 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 34 — Answer/Evidence Typed Error Boundary Review
+
+Planning boundary only.
+
+Phase 34.0 is a no-op review.
+Existing tests already cover invalid ID rejection, empty ID rejection, traversal-like ID rejection, missing-file typed errors, malformed-file typed errors, failure-side-effect checks, and path-free metadata/error output for answer drafts, grounded answers, final answers, and the pipeline smoke contract.
+No code, DTO, or validation changes were needed.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
