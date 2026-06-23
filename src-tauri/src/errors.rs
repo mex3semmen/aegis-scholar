@@ -97,6 +97,9 @@ pub enum AegisError {
     #[error("Evidence pack input missing")]
     EvidencePackInputMissing,
 
+    #[error("Evidence pack invalid id")]
+    EvidencePackInvalidId,
+
     #[error("Evidence pack empty")]
     EvidencePackEmpty,
 

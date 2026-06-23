@@ -198,10 +198,10 @@ fn deterministic_evidence_item_id(result: &RetrievalResult) -> String {
 
 fn validate_evidence_pack_id(evidence_pack_id: &str) -> AegisResult<()> {
     if evidence_pack_id.trim().is_empty() {
-        return Err(AegisError::EvidencePackInputMissing);
+        return Err(AegisError::EvidencePackInvalidId);
     }
     if evidence_pack_id.contains('/') || evidence_pack_id.contains('\\') || evidence_pack_id.contains("..") {
-        return Err(AegisError::EvidencePackInputMissing);
+        return Err(AegisError::EvidencePackInvalidId);
     }
     Ok(())
 }
@@ -213,7 +213,7 @@ mod tests {
     use crate::corpus_authority::CorpusAuthority;
     use crate::locators::CitationLocator;
     use crate::retrieval::{RetrievalIndex, RetrievalIndexEntry, RetrievalResult};
-    use crate::source_metadata::{SourceMetadataInput, SourceType};
+    use crate::source_metadata::{IngestionStatus, SourceMetadataInput, SourceType};
     use std::fs;
 
     fn valid_metadata() -> SourceMetadataInput {
@@ -325,6 +325,14 @@ mod tests {
         assert_eq!(read_back.items[0].chunk_id, "chk_demo");
         assert_eq!(read_back.items[0].preview, "alpha beta gamma");
         assert!(read_back.items[0].evidence_id.starts_with("evi_"));
+
+        let registry = SourceRegistry::load(&crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf()).registry_path()).unwrap();
+        let record = registry.get_source(&source_id).unwrap();
+        assert_eq!(record.ingestion_status, IngestionStatus::EvidenceReady);
+
+        let audit = fs::read_to_string(crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf()).audit_events_path()).unwrap();
+        assert!(audit.contains("evidence_pack_built"));
+        assert!(audit.lines().all(|line| serde_json::from_str::<serde_json::Value>(line).is_ok()));
     }
 
     #[test]
@@ -383,8 +391,85 @@ mod tests {
     fn evidence_pack_rejects_path_traversal_ids() {
         let temp = tempfile::tempdir().unwrap();
         let service = EvidenceService::new(temp.path().to_path_buf());
-        assert!(matches!(service.read_evidence_pack("src_demo", "../evil"), Err(AegisError::EvidencePackInputMissing)));
-        assert!(matches!(service.read_evidence_pack("src_demo", "evil/pack"), Err(AegisError::EvidencePackInputMissing)));
-        assert!(matches!(service.read_evidence_pack("src_demo", ""), Err(AegisError::EvidencePackInputMissing)));
+        assert!(matches!(service.read_evidence_pack("src_demo", "../evil"), Err(AegisError::EvidencePackInvalidId)));
+        assert!(matches!(service.read_evidence_pack("src_demo", "..\\evil"), Err(AegisError::EvidencePackInvalidId)));
+        assert!(matches!(service.read_evidence_pack("src_demo", "/evil"), Err(AegisError::EvidencePackInvalidId)));
+        assert!(matches!(service.read_evidence_pack("src_demo", "evil/pack"), Err(AegisError::EvidencePackInvalidId)));
+        assert!(matches!(service.read_evidence_pack("src_demo", "evil\\pack"), Err(AegisError::EvidencePackInvalidId)));
+        assert!(matches!(service.read_evidence_pack("src_demo", ""), Err(AegisError::EvidencePackInvalidId)));
+    }
+
+    #[test]
+    fn read_back_missing_and_malformed_pack_are_typed_errors() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = prepare_index(&temp.path().to_path_buf());
+        let service = EvidenceService::new(temp.path().to_path_buf());
+        assert!(matches!(service.read_evidence_pack(&source_id, "evp_missing"), Err(AegisError::EvidencePackMissing)));
+
+        let registry = SourceRegistry::load(&crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf()).registry_path()).unwrap();
+        let record = registry.get_source(&source_id).unwrap();
+        let malformed_path = crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&record.source_id, &record.version_id)
+            .join("evidence")
+            .join("evp_bad.json");
+        fs::create_dir_all(malformed_path.parent().unwrap()).unwrap();
+        fs::write(&malformed_path, "{not-json").unwrap();
+        assert!(matches!(service.read_evidence_pack(&source_id, "evp_bad"), Err(AegisError::EvidencePackReadFailed)));
+    }
+
+    #[test]
+    fn no_match_query_fails_without_writing_pack_or_marking_status() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = prepare_index(&temp.path().to_path_buf());
+        let service = EvidenceService::new(temp.path().to_path_buf());
+        let result = service.build_evidence_pack(&source_id, "nomatch", 5);
+        assert!(matches!(result, Err(AegisError::EvidencePackEmpty)));
+
+        let registry = SourceRegistry::load(&crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf()).registry_path()).unwrap();
+        let record = registry.get_source(&source_id).unwrap();
+        assert_ne!(record.ingestion_status, IngestionStatus::EvidenceReady);
+        let pack_dir = crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&record.source_id, &record.version_id)
+            .join("evidence");
+        assert!(!pack_dir.exists() || fs::read_dir(pack_dir).unwrap().next().is_none());
+        let audit = fs::read_to_string(crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf()).audit_events_path()).unwrap();
+        assert!(audit.contains("evidence_pack_failed"));
+        assert!(audit.lines().all(|line| serde_json::from_str::<serde_json::Value>(line).is_ok()));
+    }
+
+    #[test]
+    fn invalid_limit_fails_before_writing_pack() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = prepare_index(&temp.path().to_path_buf());
+        let service = EvidenceService::new(temp.path().to_path_buf());
+        let result = service.build_evidence_pack(&source_id, "alpha", 0);
+        assert!(matches!(result, Err(AegisError::EvidencePackInvalidLimit)));
+
+        let registry = SourceRegistry::load(&crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf()).registry_path()).unwrap();
+        let record = registry.get_source(&source_id).unwrap();
+        assert_ne!(record.ingestion_status, IngestionStatus::EvidenceReady);
+        let pack_dir = crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&record.source_id, &record.version_id)
+            .join("evidence");
+        assert!(!pack_dir.exists() || fs::read_dir(pack_dir).unwrap().next().is_none());
+    }
+
+    #[test]
+    fn failed_build_propagates_retrieval_errors_without_fake_success() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = prepare_index(&temp.path().to_path_buf());
+        let service = EvidenceService::new(temp.path().to_path_buf());
+        let registry = SourceRegistry::load(&crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf()).registry_path()).unwrap();
+        let record = registry.get_source(&source_id).unwrap();
+        let chunk_report = crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_id, &record.version_id)
+            .join("chunks")
+            .join("chunks.json");
+        fs::remove_file(chunk_report).unwrap();
+        let result = service.build_evidence_pack(&source_id, "alpha", 5);
+        assert!(matches!(result, Err(AegisError::ChunkingReportMissing) | Err(AegisError::ChunkingReportReadFailed) | Err(AegisError::RetrievalIndexMissing) | Err(AegisError::RetrievalIndexReadFailed)));
+        assert_ne!(record.ingestion_status, IngestionStatus::EvidenceReady);
+        let audit = fs::read_to_string(crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf()).audit_events_path()).unwrap();
+        assert!(audit.contains("evidence_pack_failed"));
     }
 }
