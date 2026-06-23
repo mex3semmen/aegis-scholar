@@ -210,6 +210,12 @@ type AnswerArtifactExportBundleInspectionReportPreview = {
   sections: AnswerArtifactExportBundleInspectionReportSection[];
 };
 
+type AnswerArtifactExportBundleInspectionIssueGroup = {
+  kind: AnswerArtifactExportBundleInspectionIssueKind;
+  count: number;
+  lines: string[];
+};
+
 type AnswerArtifactExportSummarySource = {
   source_id: string;
   draft_count: number;
@@ -264,6 +270,7 @@ type AnswerArtifactExportBundleInspection = {
   integrity_algorithm?: string | null;
   inspection_summary: AnswerArtifactExportBundleInspectionSummary;
   report_preview: AnswerArtifactExportBundleInspectionReportPreview;
+  issue_groups: AnswerArtifactExportBundleInspectionIssueGroup[];
   has_manifest: boolean;
   has_issues: boolean;
   has_summary: boolean;
@@ -858,6 +865,34 @@ export default function App() {
                   ))
                 ) : (
                   <p>No preview sections available.</p>
+                )}
+              </div>
+              <div class="artifact-overview">
+                <h4>Issue detail groups</h4>
+                {artifactBundleInspection()!.issue_groups.length > 0 ? (
+                  artifactBundleInspection()!.issue_groups.map((group) => (
+                    <div class="artifact-overview">
+                      <h5>{group.kind}</h5>
+                      <div class="contract-meta">
+                        <div><span>Count</span><strong>{group.count}</strong></div>
+                      </div>
+                      {group.lines.length > 0 ? (
+                        <ul class="final-answer-list-items">
+                          {group.lines.map((line) => (
+                            <li>
+                              <div class="final-answer-list-item">
+                                <span>{line}</span>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>No lines available.</p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p>No issue groups available.</p>
                 )}
               </div>
               <div class="contract-meta">
