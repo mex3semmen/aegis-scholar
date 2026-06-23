@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AEGIS Grounded Answer",
+  "type": "object",
+  "required": ["grounded_answer_id", "answer_draft_id", "evidence_pack_id", "source_id", "version_id", "query", "created_at", "answer_mode", "statement_count", "unsupported_count", "statements", "warnings"],
+  "properties": {
+    "grounded_answer_id": { "type": "string", "pattern": "^gan_[a-f0-9]+$" },
+    "answer_draft_id": { "type": "string", "pattern": "^adr_[a-f0-9]+$" },
+    "evidence_pack_id": { "type": "string", "pattern": "^evp_[a-f0-9]+$" },
+    "source_id": { "type": "string", "pattern": "^src_[a-zA-Z0-9_-]+$" },
+    "version_id": { "type": "string", "pattern": "^srcv_[a-zA-Z0-9_-]+$" },
+    "query": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "answer_mode": { "type": "string", "enum": ["contract_only"] },
+    "statement_count": { "type": "integer", "minimum": 0 },
+    "unsupported_count": { "type": "integer", "minimum": 0 },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "statements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["statement_id", "status", "text", "claim_ids", "evidence_ids", "chunk_ids", "locators", "support_level"],
+        "properties": {
+          "statement_id": { "type": "string", "pattern": "^gst_[a-f0-9]+$" },
+          "status": { "type": "string", "enum": ["supported", "needs_evidence", "unsupported"] },
+          "text": { "type": "string" },
+          "claim_ids": { "type": "array", "items": { "type": "string" } },
+          "evidence_ids": { "type": "array", "items": { "type": "string" } },
+          "chunk_ids": { "type": "array", "items": { "type": "string" } },
+          "locators": { "type": "array", "items": { "$ref": "./citation-locator.schema.json" } },
+          "support_level": { "type": "string", "enum": ["direct_claim", "missing_evidence"] }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

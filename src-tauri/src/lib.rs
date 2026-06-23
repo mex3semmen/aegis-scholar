@@ -5,6 +5,7 @@ mod chunking;
 mod extraction;
 mod evidence;
 mod answer_draft;
+mod grounded_answer;
 mod errors;
 mod locators;
 mod retrieval;
@@ -17,6 +18,7 @@ use extraction::{ExtractionReport, ExtractionService};
 use errors::to_user_error;
 use answer_draft::{AnswerDraft, AnswerDraftService};
 use evidence::{EvidencePack, EvidenceService};
+use grounded_answer::{GroundedAnswer, GroundedAnswerService};
 use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
 use source_metadata::{CorpusStatus, SourceMetadataInput, SourceMetadataPatch, SourceRecord};
 
@@ -147,6 +149,20 @@ fn get_answer_draft(root: String, source_id: String, answer_draft_id: String) ->
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn build_grounded_answer(root: String, source_id: String, answer_draft_id: String) -> Result<GroundedAnswer, String> {
+    GroundedAnswerService::new(root)
+        .build_grounded_answer(&source_id, &answer_draft_id)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
+fn get_grounded_answer(root: String, source_id: String, grounded_answer_id: String) -> Result<GroundedAnswer, String> {
+    GroundedAnswerService::new(root)
+        .read_grounded_answer(&source_id, &grounded_answer_id)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -166,7 +182,9 @@ pub fn run() {
             build_evidence_pack,
             get_evidence_pack,
             build_answer_draft,
-            get_answer_draft
+            get_answer_draft,
+            build_grounded_answer,
+            get_grounded_answer
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");

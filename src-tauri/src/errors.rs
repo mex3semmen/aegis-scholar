@@ -124,6 +124,24 @@ pub enum AegisError {
     #[error("Answer draft empty evidence")]
     AnswerDraftEmptyEvidence,
 
+    #[error("Grounded answer missing")]
+    GroundedAnswerMissing,
+
+    #[error("Grounded answer read failed")]
+    GroundedAnswerReadFailed,
+
+    #[error("Grounded answer write failed")]
+    GroundedAnswerWriteFailed,
+
+    #[error("Grounded answer input missing")]
+    GroundedAnswerInputMissing,
+
+    #[error("Grounded answer invalid id")]
+    GroundedAnswerInvalidId,
+
+    #[error("Grounded answer empty draft")]
+    GroundedAnswerEmptyDraft,
+
 }
 
 pub type AegisResult<T> = Result<T, AegisError>;

@@ -22,6 +22,8 @@ pub enum AuditEventType {
     EvidencePackFailed,
     AnswerDraftBuilt,
     AnswerDraftFailed,
+    GroundedAnswerBuilt,
+    GroundedAnswerFailed,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
