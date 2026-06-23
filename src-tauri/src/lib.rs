@@ -19,7 +19,7 @@ use extraction::{ExtractionReport, ExtractionService};
 use errors::to_user_error;
 use answer_draft::{AnswerDraft, AnswerDraftService};
 use evidence::{EvidencePack, EvidenceService};
-use final_answer::{build_final_answer as build_final_answer_impl, read_final_answer as read_final_answer_impl, FinalAnswer};
+use final_answer::{build_final_answer as build_final_answer_impl, list_final_answers as list_final_answers_impl, read_final_answer as read_final_answer_impl, FinalAnswer, FinalAnswerMetadata};
 use grounded_answer::{build_grounded_answer as build_grounded_answer_impl, read_grounded_answer as read_grounded_answer_impl, GroundedAnswer};
 use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
 use source_metadata::{CorpusStatus, SourceMetadataInput, SourceMetadataPatch, SourceRecord};
@@ -175,6 +175,12 @@ fn get_final_answer(root: String, source_id: String, final_answer_id: String) ->
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn list_final_answers(root: String, source_id: String) -> Result<Vec<FinalAnswerMetadata>, String> {
+    list_final_answers_impl(root, &source_id)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -198,7 +204,8 @@ pub fn run() {
             build_grounded_answer,
             get_grounded_answer,
             build_final_answer,
-            get_final_answer
+            get_final_answer,
+            list_final_answers
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");

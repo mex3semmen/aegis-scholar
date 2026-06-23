@@ -197,3 +197,26 @@ pre {
   display: grid;
   gap: 0.35rem;
 }
+
+.final-answer-list {
+  margin: 1rem 0;
+}
+
+.final-answer-list-items {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.final-answer-list-item {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.final-answer-list-item small {
+  color: #94a3b8;
+}

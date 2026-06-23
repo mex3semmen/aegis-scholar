@@ -104,6 +104,9 @@ Add mathematics, computer science, biology and related discipline profiles gradu
 Phase 10.0 and Phase 10.1 implement only a read-only Final Answer inspector for debugging and contract inspection.
 This is not a product answer experience, and it does not add generation, synthesis, or editing workflows.
 
+Phase 11.0 adds read-only discovery for already persisted Final Answer contracts so the inspector can list and select them.
+This remains inspection-only and does not introduce generation, synthesis, ranking, or editing.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
