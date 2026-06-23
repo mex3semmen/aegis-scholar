@@ -433,6 +433,49 @@ mod tests {
     }
 
     #[test]
+    fn final_answer_adapter_rejects_empty_source_id() {
+        let temp = tempfile::tempdir().unwrap();
+        assert!(matches!(build_final_answer(temp.path().to_path_buf(), "", "gan_x"), Err(AegisError::FinalAnswerInputMissing)));
+        assert!(matches!(read_final_answer(temp.path().to_path_buf(), "", "fan_x"), Err(AegisError::FinalAnswerInputMissing)));
+    }
+
+    #[test]
+    fn final_answer_deterministic_id_is_stable_for_identical_grounded_answer() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let grounded = read_grounded_answer(temp.path().to_path_buf(), &source_id, &grounded_id).unwrap();
+        let first = build_final_answer_from_grounded_answer(&grounded).unwrap();
+        let second = build_final_answer_from_grounded_answer(&grounded).unwrap();
+        assert_eq!(first.final_answer_id, second.final_answer_id);
+        assert_eq!(first.statements[0].statement_id, second.statements[0].statement_id);
+    }
+
+    #[test]
+    fn final_answer_deterministic_id_changes_when_statement_changes() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let grounded = read_grounded_answer(temp.path().to_path_buf(), &source_id, &grounded_id).unwrap();
+        let baseline = build_final_answer_from_grounded_answer(&grounded).unwrap();
+        let mut changed = grounded.clone();
+        changed.statements[0].text = "Evidence states: changed".to_string();
+        let revised = build_final_answer_from_grounded_answer(&changed).unwrap();
+        assert_ne!(baseline.final_answer_id, revised.final_answer_id);
+        assert_ne!(baseline.statements[0].statement_id, revised.statements[0].statement_id);
+    }
+
+    #[test]
+    fn final_answer_read_failure_does_not_create_side_effects() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let corpus = CorpusPaths::new(temp.path().to_path_buf());
+        let read_result = read_final_answer(temp.path().to_path_buf(), &source_id, "fan_missing");
+        assert!(matches!(read_result, Err(AegisError::FinalAnswerMissing)));
+        let final_answer_dir = corpus.source_version_dir(&source_id, &version_id).join("final_answers");
+        assert!(!final_answer_dir.exists());
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), &source_id, &grounded_id), Ok(_)));
+    }
+
+    #[test]
     fn final_answer_adapter_preserves_supported_needs_evidence_and_unsupported_statuses() {
         let temp = tempfile::tempdir().unwrap();
         let (source_id, version_id, draft_id, _grounded_id) = prepare_grounded(&temp.path().to_path_buf());
