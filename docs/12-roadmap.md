@@ -188,7 +188,8 @@ Phase 24.2 is this docs-sync/finalization pass.
 
 Phase 25.0 adds a read-only file status view to the existing export bundle inspector DTO and UI.
 It reports deterministic rows for `export_manifest.json`, `export_issues.json`, `summary.json`, and `export_integrity.json`, with path-free present, parsed, malformed, schema, integrity, issue-count, and compact status metadata derived from existing inspection state only.
-Phase 25.0 does not change validation semantics, read additional files, write report artifacts, mutate inspected bundles, or add import/migration/repair/share/download/generation/editing workflows.
+Phase 25.0 does not change validation semantics, read extra files beyond the inspector’s existing bundle reads, write report artifacts, mutate inspected bundles, or add import/migration/repair/share/download/generation/editing workflows.
+Phase 25.1 is a no-op boundary review with verification only.
 
 ## Phase 11 — Obsidian Export
 
