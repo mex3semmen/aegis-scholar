@@ -179,6 +179,12 @@ The frontend renders these rows read-only below the existing summary, report pre
 Phase 25.1 was a no-op boundary review that required no code, UI, or docs changes beyond verification.
 It does not import, migrate, repair, rewrite, share, download, generate, or edit bundles or answers.
 
+Phase 26.0 adds a read-only `inspection_status` field to the existing export bundle inspector DTO and UI.
+The status is a compact machine-readable code/label/severity/reason summary derived only from existing inspection summary data, typed issues, file statuses, and schema/integrity state.
+The status follows deterministic precedence across malformed bundle, missing required files, integrity failed, schema unsupported, warnings, invalid, and valid states.
+It remains path-free, does not change validation semantics, and does not read extra files beyond current inspector behavior.
+It does not repair, migrate, import, share, upload, download, write reports, generate answers, or mutate inspected bundles.
+
 Manual verification checklist:
 
 - `npm run build`

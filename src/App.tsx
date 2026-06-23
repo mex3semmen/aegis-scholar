@@ -216,6 +216,13 @@ type AnswerArtifactExportBundleInspectionIssueGroup = {
   lines: string[];
 };
 
+type AnswerArtifactExportBundleInspectionStatus = {
+  code: string;
+  label: string;
+  severity: string;
+  reason: string;
+};
+
 type AnswerArtifactExportBundleFileStatus = {
   file_label: string;
   present: boolean;
@@ -291,6 +298,7 @@ type AnswerArtifactExportBundleInspection = {
   summary_schema_version?: string | null;
   integrity_schema_version?: string | null;
   integrity_algorithm?: string | null;
+  inspection_status: AnswerArtifactExportBundleInspectionStatus;
   inspection_summary: AnswerArtifactExportBundleInspectionSummary;
   report_preview: AnswerArtifactExportBundleInspectionReportPreview;
   issue_groups: AnswerArtifactExportBundleInspectionIssueGroup[];
@@ -837,6 +845,12 @@ export default function App() {
             <>
               <div class="artifact-overview">
                 <h4>Inspection summary</h4>
+                <div class="contract-meta">
+                  <div><span>Status code</span><strong>{artifactBundleInspection()!.inspection_status.code}</strong></div>
+                  <div><span>Status label</span><strong>{artifactBundleInspection()!.inspection_status.label}</strong></div>
+                  <div><span>Severity</span><strong>{artifactBundleInspection()!.inspection_status.severity}</strong></div>
+                </div>
+                <p class="muted">{artifactBundleInspection()!.inspection_status.reason}</p>
                 <div class="contract-meta">
                   <div><span>Consistent</span><strong>{artifactBundleInspection()!.inspection_summary.is_consistent ? "yes" : "no"}</strong></div>
                   <div><span>Schema supported</span><strong>{artifactBundleInspection()!.inspection_summary.schema_supported ? "yes" : "no"}</strong></div>
