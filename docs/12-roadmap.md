@@ -122,6 +122,7 @@ Phase 14.1 hardens that boundary with zero-count empty-storage behavior, per-sou
 
 Phase 15.0 adds a read-only answer artifact issue list for persisted diagnostics.
 It remains inspection-only, reports malformed finals plus unsupported / `needs_evidence` statements, and is still not a product answer experience.
+Phase 15.1 hardens that boundary with deterministic ordering and supported-statement exclusion.
 
 ## Phase 11 — Obsidian Export
 

@@ -105,6 +105,7 @@ It does not create directories or artifacts, does not build or generate answers,
 Phase 15.0 adds a read-only answer artifact issue list for persisted diagnostics.
 It reports metadata-only issues for malformed final answers plus unsupported and `needs_evidence` statements, keeps output deterministic, and stays path-free.
 It does not repair artifacts, does not build or generate answers, and does not synthesize, rank, infer, rewrite, or edit anything.
+Phase 15.1 hardens that boundary with supported-statement exclusion, deterministic ordering, and path-free diagnostics.
 
 Manual verification checklist:
 

@@ -1303,6 +1303,17 @@ mod tests {
     }
 
     #[test]
+    fn answer_artifact_issues_do_not_include_supported_statements() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+
+        let issues = service.list_answer_artifact_issues().unwrap();
+        assert!(issues.is_empty());
+    }
+
+    #[test]
     fn answer_artifact_issues_are_deterministic_across_multiple_sources() {
         let temp = tempfile::tempdir().unwrap();
         let (source_a, version_a, _draft_a, grounded_a) = prepare_grounded(&temp.path().to_path_buf());
