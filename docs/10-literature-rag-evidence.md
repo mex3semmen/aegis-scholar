@@ -125,6 +125,7 @@ The export destination must be explicit and non-empty, and repeated export to th
 Phase 17.1 hardens that boundary with deterministic export order, empty-destination rejection before filesystem access, and path-safe export output.
 Phase 18.0 adds a read-only `summary.json` audit file inside the manual export bundle.
 The summary is derived only from the persisted manifest and issues data, stays deterministic and path-free, includes compact per-source and issue-kind counts, and is for audit/review only rather than import, share, or product answer flow.
+Phase 18.1 hardens that summary boundary with deterministic hash-derived summary identity, manifest/issues alignment, and path-free export bundle output.
 
 Manual verification checklist:
 
