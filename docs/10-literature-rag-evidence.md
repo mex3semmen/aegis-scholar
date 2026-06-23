@@ -56,6 +56,7 @@ It exercises answer draft, grounded answer, and final answer persistence and rea
 The next implementation milestone is retrieval / evidence pack hardening, focused on upstream lexical retrieval and evidence-pack metadata boundaries before any new answer work.
 Phase 38.0 is the retrieval / evidence pack contract baseline.
 Phase 39.0 is a no-op fixture-contract review for the same retrieval/evidence-pack boundary.
+Phase 40.0 closes that review block and selects source/chunk metadata guarantee tightening as the next implementation slice.
 
 Current regression checks:
 
