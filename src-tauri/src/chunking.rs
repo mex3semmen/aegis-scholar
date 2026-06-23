@@ -133,14 +133,6 @@ impl ChunkingService {
     }
 }
 
-impl SourceRegistry {
-    fn replace(&mut self, source: SourceRecord) -> AegisResult<()> {
-        self.sources.retain(|item| item.source_id != source.source_id);
-        self.sources.push(source);
-        Ok(())
-    }
-}
-
 pub fn chunk_from_report(report: &ExtractionReport) -> AegisResult<Vec<ChunkRecord>> {
     if report.units.is_empty() {
         return Err(AegisError::ChunkingInputEmpty);
