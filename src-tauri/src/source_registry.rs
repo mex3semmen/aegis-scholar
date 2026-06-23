@@ -104,6 +104,12 @@ impl SourceRegistry {
         self.sources.clone()
     }
 
+    pub fn replace(&mut self, source: SourceRecord) -> AegisResult<()> {
+        self.sources.retain(|item| item.source_id != source.source_id);
+        self.sources.push(source);
+        Ok(())
+    }
+
     pub fn status(&self) -> CorpusStatus {
         let mut registered_count = 0;
         let mut extracted_count = 0;

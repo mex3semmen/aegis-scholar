@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AEGIS Retrieval Index",
+  "type": "object",
+  "required": [
+    "source_id",
+    "version_id",
+    "indexed_at",
+    "chunk_count",
+    "index_version",
+    "chunk_report_hash",
+    "entries",
+    "warnings"
+  ],
+  "properties": {
+    "source_id": { "type": "string", "pattern": "^src_[a-zA-Z0-9_-]+$" },
+    "version_id": { "type": "string", "pattern": "^srcv_[a-zA-Z0-9_-]+$" },
+    "indexed_at": { "type": "string", "format": "date-time" },
+    "chunk_count": { "type": "integer", "minimum": 0 },
+    "index_version": { "type": "string" },
+    "chunk_report_hash": { "type": "string", "pattern": "^sha256:.+" },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["chunk_id", "source_id", "version_id", "locator", "text_hash", "normalized_terms"],
+        "properties": {
+          "chunk_id": { "type": "string", "pattern": "^chk_[a-zA-Z0-9_-]+$" },
+          "source_id": { "type": "string", "pattern": "^src_[a-zA-Z0-9_-]+$" },
+          "version_id": { "type": "string", "pattern": "^srcv_[a-zA-Z0-9_-]+$" },
+          "locator": { "$ref": "./citation-locator.schema.json" },
+          "text_hash": { "type": "string", "pattern": "^sha256:.+" },
+          "normalized_terms": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

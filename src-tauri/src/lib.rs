@@ -5,6 +5,7 @@ mod chunking;
 mod extraction;
 mod errors;
 mod locators;
+mod retrieval;
 mod source_metadata;
 mod source_registry;
 
@@ -12,6 +13,7 @@ use corpus_authority::CorpusAuthority;
 use chunking::{ChunkingReport, ChunkingService};
 use extraction::{ExtractionReport, ExtractionService};
 use errors::to_user_error;
+use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
 use source_metadata::{CorpusStatus, SourceMetadataInput, SourceMetadataPatch, SourceRecord};
 
 #[tauri::command]
@@ -92,6 +94,27 @@ fn get_chunking_report(root: String, source_id: String) -> Result<ChunkingReport
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn build_retrieval_index(root: String, source_id: String) -> Result<RetrievalIndex, String> {
+    RetrievalService::new(root)
+        .build_index(&source_id)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
+fn get_retrieval_index(root: String, source_id: String) -> Result<RetrievalIndex, String> {
+    RetrievalService::new(root)
+        .read_index(&source_id)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
+fn search_source(root: String, source_id: String, query: String, max_results: usize) -> Result<RetrievalResponse, String> {
+    RetrievalService::new(root)
+        .search_source(&source_id, &query, max_results)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -104,7 +127,10 @@ pub fn run() {
             extract_source,
             get_extraction_report,
             chunk_source,
-            get_chunking_report
+            get_chunking_report,
+            build_retrieval_index,
+            get_retrieval_index,
+            search_source
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");

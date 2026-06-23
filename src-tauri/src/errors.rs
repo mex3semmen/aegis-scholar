@@ -61,6 +61,21 @@ pub enum AegisError {
     #[error("Chunking input empty")]
     ChunkingInputEmpty,
 
+    #[error("Retrieval index missing")]
+    RetrievalIndexMissing,
+
+    #[error("Retrieval index read failed")]
+    RetrievalIndexReadFailed,
+
+    #[error("Retrieval index write failed")]
+    RetrievalIndexWriteFailed,
+
+    #[error("Retrieval input missing")]
+    RetrievalInputMissing,
+
+    #[error("Retrieval query empty")]
+    RetrievalQueryEmpty,
+
 }
 
 pub type AegisResult<T> = Result<T, AegisError>;

@@ -56,3 +56,13 @@ SQLite may index metadata, source identity and audit state. Vector storage may l
 ## Failure rule
 
 If retrieval cannot produce sufficient evidence, the skill output must say so instead of fabricating source-grounded claims.
+
+## Phase 4.0 note
+
+Phase 4.0 adds a deterministic local lexical index over chunk reports under:
+
+```text
+.aegis/corpus/sources/{source_id}/versions/{version_id}/retrieval/index.json
+```
+
+This phase uses normalized term matching only. It does not add embeddings, answer synthesis or Evidence Packs.
