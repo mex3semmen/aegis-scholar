@@ -99,8 +99,9 @@ It orders results deterministically by `source_id`, returns an empty index when 
 Phase 13.1 hardens that boundary with deterministic ordering, empty-storage behavior, unrelated-file safety, and conservative malformed-final-answer handling.
 
 Phase 14.0 adds a read-only answer artifact health summary for persisted diagnostics.
-It reports global and per-source artifact counts, including malformed final answers and supported status breakdowns, while keeping output metadata-only and path-free.
-It does not create directories or artifacts, does not build or generate answers, and does not synthesize, rank, or edit anything.
+It reports persisted metadata only, including global and per-source counts for `source_count`, `draft_count`, `grounded_answer_count`, `final_answer_count`, `malformed_final_answer_count`, `unsupported_statement_count`, and `needs_evidence_statement_count`.
+The output is deterministic by `source_id`, global counts equal the sum of the per-source counts where applicable, empty storage returns a zero-count summary, and malformed final answers are counted conservatively without exposing filesystem paths.
+It does not create directories or artifacts, does not build or generate answers, and does not synthesize, rank, infer, rewrite, or edit anything.
 
 Manual verification checklist:
 
@@ -115,6 +116,7 @@ Manual verification checklist:
   - artifact overview shows persisted draft, grounded answer, and final answer counts
   - source artifact index shows only sources with persisted artifacts
   - artifact health shows persisted diagnostic counts only
+  - artifact health output stays path-free and deterministic by source
   - selecting a listed final answer fills the ID and loads it read-only
   - the list shows existing final answers when a source ID is entered
   - supported / `needs_evidence` / unsupported statements remain visible
