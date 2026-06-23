@@ -340,6 +340,28 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 37 — Next Implementation Milestone Selection
+
+Planning boundary only.
+
+Phase 37.0 is next-milestone selection only.
+Recommended next implementation milestone: retrieval / evidence pack hardening.
+Rationale: it is the next upstream boundary feeding answer drafts, grounded answers, and final answers, so strengthening retrieval inputs and evidence-pack metadata gives the most useful leverage without changing the inspector or answer contracts.
+No production behavior changed in this pass.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
