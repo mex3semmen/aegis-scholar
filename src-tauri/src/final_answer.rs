@@ -625,6 +625,63 @@ mod tests {
     }
 
     #[test]
+    fn answer_artifact_overview_matches_list_final_answers_and_is_deterministic() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let mut first = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        first.final_answer_id = "fan_b".to_string();
+        let mut second = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        second.final_answer_id = "fan_a".to_string();
+        let final_dir = CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_id, &version_id)
+            .join("final_answers");
+        fs::create_dir_all(&final_dir).unwrap();
+        fs::write(final_dir.join("fan_b.json"), serde_json::to_string_pretty(&first).unwrap()).unwrap();
+        fs::write(final_dir.join("fan_a.json"), serde_json::to_string_pretty(&second).unwrap()).unwrap();
+        let listed = service.list_final_answers(&source_id).unwrap();
+        let overview = service.get_answer_artifact_overview(&source_id).unwrap();
+        let listed_ids: Vec<_> = listed.iter().map(|item| item.final_answer_id.clone()).collect();
+        let overview_ids: Vec<_> = overview.final_answers.iter().map(|item| item.final_answer_id.clone()).collect();
+        assert!(listed_ids.windows(2).all(|pair| pair[0] <= pair[1]));
+        assert!(listed_ids.contains(&"fan_a".to_string()));
+        assert!(listed_ids.contains(&"fan_b".to_string()));
+        assert_eq!(overview_ids, listed_ids);
+        assert_eq!(overview.final_answer_count, listed_ids.len());
+    }
+
+    #[test]
+    fn answer_artifact_overview_counts_multiple_artifacts_correctly() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let draft = crate::answer_draft::AnswerDraftService::new(temp.path().to_path_buf())
+            .read_answer_draft(&source_id, &draft_id)
+            .unwrap();
+        let draft_dir = CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_id, &version_id)
+            .join("answer_drafts");
+        fs::create_dir_all(&draft_dir).unwrap();
+        fs::write(draft_dir.join("adr_extra.json"), serde_json::to_string_pretty(&draft).unwrap()).unwrap();
+
+        let grounded = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let grounded_dir = CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_id, &version_id)
+            .join("grounded_answers");
+        fs::create_dir_all(&grounded_dir).unwrap();
+        let mut grounded_extra = crate::grounded_answer::read_grounded_answer(temp.path().to_path_buf(), &source_id, &grounded.grounded_answer_id).unwrap();
+        grounded_extra.grounded_answer_id = "gan_extra".to_string();
+        fs::write(grounded_dir.join("gan_extra.json"), serde_json::to_string_pretty(&grounded_extra).unwrap()).unwrap();
+
+        let overview = service.get_answer_artifact_overview(&source_id).unwrap();
+        assert_eq!(overview.draft_count, 2);
+        assert_eq!(overview.grounded_answer_count, 2);
+        assert_eq!(overview.final_answer_count, overview.final_answers.len());
+        assert_eq!(overview.final_answers.len(), 1);
+        assert_eq!(overview.final_answers[0].final_answer_id, grounded.final_answer_id);
+    }
+
+    #[test]
     fn answer_artifact_overview_reports_typed_error_for_malformed_final_answer() {
         let temp = tempfile::tempdir().unwrap();
         let (source_id, version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
