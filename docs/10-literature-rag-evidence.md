@@ -174,8 +174,9 @@ It does not import, migrate, repair, rewrite, share, download, generate, or edit
 Phase 25.0 adds a read-only file status view to the existing export bundle inspector DTO.
 The file status view reports deterministic status rows for the expected bundle files: `export_manifest.json`, `export_issues.json`, `summary.json`, and `export_integrity.json`.
 Each row uses public relative file labels only and reports present, parsed, malformed, schema, integrity, issue-count, and compact status metadata derived from the inspector’s existing parsed state, typed issues, schema metadata, and integrity metadata.
-It does not change validation semantics, read additional files, write report artifacts, mutate inspected bundles, or expose raw internal filesystem paths.
+It does not change validation semantics, read extra files beyond the inspector’s existing bundle reads, write report artifacts, mutate inspected bundles, or expose raw internal filesystem paths.
 The frontend renders these rows read-only below the existing summary, report preview, and issue groups.
+Phase 25.1 was a no-op boundary review that required no code, UI, or docs changes beyond verification.
 It does not import, migrate, repair, rewrite, share, download, generate, or edit bundles or answers.
 
 Manual verification checklist:
