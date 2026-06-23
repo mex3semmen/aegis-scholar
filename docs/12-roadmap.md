@@ -126,7 +126,7 @@ There are no repair/fix actions yet.
 Phase 15.1 hardens that boundary with deterministic ordering, supported-statement exclusion, and path-free diagnostics.
 
 Phase 16.0 adds a read-only answer artifact export manifest for preview-only inspection.
-It remains inspection-only, does not write export files, and is still not a product answer experience.
+It remains inspection-only, reports persisted metadata only, does not write export or manifest files, does not add download buttons, and is still not a product answer experience.
 There are no repair/fix actions yet.
 Phase 16.1 hardens that boundary with deterministic ordering, issue-count rollup, and tolerant preview handling for malformed finals.
 This remains preview-only; there is no actual export workflow yet.
