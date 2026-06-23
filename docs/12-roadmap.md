@@ -206,6 +206,11 @@ Phase 28.0 is a frontend-only empty-state and label consistency pass for the exi
 It keeps the inspector read-only, keeps the existing diagnostic order, and only clarifies empty-state copy and section labels for existing DTO fields.
 It does not change backend inspection, export, validation, schema, integrity, or status semantics, and it does not add import/repair/share/download/report-writing behavior.
 
+Phase 29.0 is a no-op copy/accessibility review.
+It confirmed the inspector remained read-only and path-free, with no backend, export, validation, or DTO semantics changes.
+Phase 30.0 is this milestone-closure review for the export bundle inspector stack.
+It closes out the read-only inspector phases as implemented and keeps future import/repair/share/download/export-writing work out of scope.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
