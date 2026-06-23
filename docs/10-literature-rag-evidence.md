@@ -109,6 +109,11 @@ Unsupported and `needs_evidence` issues include path-free source/final/statement
 It does not create directories or artifacts, and it does not build, generate, synthesize, rank, infer, rewrite, repair, or edit anything.
 Phase 15.1 hardens that boundary with supported-statement exclusion, deterministic ordering, and path-free diagnostics.
 
+Phase 16.0 adds a read-only answer artifact export manifest for preview-only inspection.
+It reports persisted metadata only, includes per-source final-answer metadata, and derives `issue_count` from the issue-list diagnostics.
+It does not write export files, does not create directories or artifacts, and does not build, generate, synthesize, rank, infer, rewrite, repair, or edit anything.
+Phase 16.1 hardens that boundary with deterministic ordering, path-free metadata, and tolerant handling of malformed final answers in the preview.
+
 Manual verification checklist:
 
 - `npm run build`
@@ -124,6 +129,7 @@ Manual verification checklist:
   - artifact health shows persisted diagnostic counts only
   - artifact health output stays path-free and deterministic by source
   - artifact issues show malformed finals and unsupported / `needs_evidence` statements only
+  - export manifest shows preview-only metadata and issue counts only
   - selecting a listed final answer fills the ID and loads it read-only
   - the list shows existing final answers when a source ID is entered
   - supported / `needs_evidence` / unsupported statements remain visible
