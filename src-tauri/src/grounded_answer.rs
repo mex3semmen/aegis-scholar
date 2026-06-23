@@ -289,8 +289,7 @@ mod tests {
     fn build_and_read_grounded_answer_round_trips() {
         let temp = tempfile::tempdir().unwrap();
         let (source_id, version_id, draft_id) = prepare_draft(&temp.path().to_path_buf());
-        let service = GroundedAnswerService::new(temp.path().to_path_buf());
-        let answer = service.build_grounded_answer(&source_id, &draft_id).unwrap();
+        let answer = build_grounded_answer(temp.path().to_path_buf(), &source_id, &draft_id).unwrap();
         assert!(answer.grounded_answer_id.starts_with("gan_"));
         assert_eq!(answer.source_id, source_id);
         assert_eq!(answer.version_id, version_id);
@@ -298,7 +297,7 @@ mod tests {
         assert_eq!(answer.statements[0].text, "Evidence states: alpha beta gamma");
         assert_eq!(answer.statements[0].status, GroundedStatementStatus::Supported);
         assert_eq!(answer.statements[0].support_level, GroundedSupportLevel::DirectClaim);
-        let read_back = service.read_grounded_answer(&source_id, &answer.grounded_answer_id).unwrap();
+        let read_back = read_grounded_answer(temp.path().to_path_buf(), &source_id, &answer.grounded_answer_id).unwrap();
         assert_eq!(read_back.grounded_answer_id, answer.grounded_answer_id);
         let registry = SourceRegistry::load(&CorpusPaths::new(temp.path().to_path_buf()).registry_path()).unwrap();
         assert_eq!(registry.get_source(&source_id).unwrap().ingestion_status, IngestionStatus::GroundedAnswerReady);
@@ -328,14 +327,13 @@ mod tests {
     fn grounded_answer_missing_and_malformed_are_typed_errors() {
         let temp = tempfile::tempdir().unwrap();
         let (source_id, version_id, draft_id) = prepare_draft(&temp.path().to_path_buf());
-        let service = GroundedAnswerService::new(temp.path().to_path_buf());
-        assert!(matches!(service.read_grounded_answer(&source_id, "gan_missing"), Err(AegisError::GroundedAnswerMissing)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), &source_id, "gan_missing"), Err(AegisError::GroundedAnswerMissing)));
 
         let corpus = CorpusPaths::new(temp.path().to_path_buf());
         let bad_path = corpus.source_version_dir(&source_id, &version_id).join("grounded_answers").join("gan_bad.json");
         fs::create_dir_all(bad_path.parent().unwrap()).unwrap();
         fs::write(&bad_path, "{not-json").unwrap();
-        assert!(matches!(service.read_grounded_answer(&source_id, "gan_bad"), Err(AegisError::GroundedAnswerReadFailed)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), &source_id, "gan_bad"), Err(AegisError::GroundedAnswerReadFailed)));
 
         let draft_path = corpus.source_version_dir(&source_id, &version_id).join("answer_drafts").join(format!("{}.json", draft_id));
         assert!(draft_path.exists());
@@ -345,8 +343,7 @@ mod tests {
     fn grounded_answer_failure_and_status_hardening() {
         let temp = tempfile::tempdir().unwrap();
         let (source_id, version_id, draft_id) = prepare_draft(&temp.path().to_path_buf());
-        let service = GroundedAnswerService::new(temp.path().to_path_buf());
-        let result = service.build_grounded_answer(&source_id, "gan_missing");
+        let result = build_grounded_answer(temp.path().to_path_buf(), &source_id, "gan_missing");
         assert!(matches!(result, Err(AegisError::AnswerDraftMissing)));
         let corpus = CorpusPaths::new(temp.path().to_path_buf());
         let grounded_dir = corpus.source_version_dir(&source_id, &version_id).join("grounded_answers");
@@ -363,7 +360,7 @@ mod tests {
         draft.claims[0].status = crate::answer_draft::DraftClaimStatus::NeedsEvidence;
         draft.claims[0].confidence = crate::answer_draft::DraftClaimConfidence::MissingEvidence;
         write_manual_draft(&temp.path().to_path_buf(), &source_id, &version_id, draft);
-        let answer = service.build_grounded_answer(&source_id, &draft_id).unwrap();
+        let answer = build_grounded_answer(temp.path().to_path_buf(), &source_id, &draft_id).unwrap();
         assert_eq!(answer.statements[0].status, GroundedStatementStatus::NeedsEvidence);
         assert_eq!(answer.statements[0].support_level, GroundedSupportLevel::MissingEvidence);
         assert_eq!(answer.unsupported_count, 1);
@@ -375,8 +372,7 @@ mod tests {
     fn grounded_answer_mechanical_projection_preserves_claim_scope() {
         let temp = tempfile::tempdir().unwrap();
         let (source_id, _version_id, draft_id) = prepare_draft(&temp.path().to_path_buf());
-        let service = GroundedAnswerService::new(temp.path().to_path_buf());
-        let answer = service.build_grounded_answer(&source_id, &draft_id).unwrap();
+        let answer = build_grounded_answer(temp.path().to_path_buf(), &source_id, &draft_id).unwrap();
         assert_eq!(answer.statements.len(), 1);
         assert_eq!(answer.statements[0].claim_ids.len(), 1);
         assert_eq!(answer.statements[0].text, "Evidence states: alpha beta gamma");
@@ -391,5 +387,35 @@ mod tests {
         assert!(answer.evidence_pack_id.starts_with("evp_"));
         assert_eq!(answer.statement_count, answer.statements.len());
         assert_eq!(answer.unsupported_count, 0);
+    }
+
+    #[test]
+    fn grounded_answer_adapter_boundary_rejects_invalid_ids() {
+        let temp = tempfile::tempdir().unwrap();
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "", "gan_x"), Err(AegisError::GroundedAnswerInputMissing)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "src_demo", ""), Err(AegisError::GroundedAnswerInvalidId)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "src_demo", "../x"), Err(AegisError::GroundedAnswerInvalidId)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "src_demo", "..\\x"), Err(AegisError::GroundedAnswerInvalidId)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "src_demo", "/x"), Err(AegisError::GroundedAnswerInvalidId)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "src_demo", "\\x"), Err(AegisError::GroundedAnswerInvalidId)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "src_demo", "x/y"), Err(AegisError::GroundedAnswerInvalidId)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "src_demo", "x\\y"), Err(AegisError::GroundedAnswerInvalidId)));
+    }
+
+    #[test]
+    fn grounded_answer_adapter_boundary_keeps_status_and_projection() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, draft_id) = prepare_draft(&temp.path().to_path_buf());
+        let mut draft = AnswerDraftService::new(temp.path().to_path_buf())
+            .read_answer_draft(&source_id, &draft_id)
+            .unwrap();
+        draft.claims[0].status = crate::answer_draft::DraftClaimStatus::Unsupported;
+        draft.claims[0].confidence = crate::answer_draft::DraftClaimConfidence::MissingEvidence;
+        write_manual_draft(&temp.path().to_path_buf(), &source_id, &version_id, draft);
+        let answer = build_grounded_answer(temp.path().to_path_buf(), &source_id, &draft_id).unwrap();
+        assert_eq!(answer.statements[0].status, GroundedStatementStatus::Unsupported);
+        assert_eq!(answer.statements[0].support_level, GroundedSupportLevel::MissingEvidence);
+        assert_eq!(answer.statement_count, 1);
+        assert_eq!(answer.unsupported_count, 1);
     }
 }
