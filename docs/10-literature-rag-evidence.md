@@ -154,6 +154,8 @@ Phase 22.0 adds a read-only inspection summary rollup for export bundle inspecti
 The summary is derived from the inspector’s parsed bundle state and typed issues only, and it surfaces consistent/unsupported/integrity status plus deterministic issue counts by kind.
 It also exposes checked-file and integrity-file counts when available.
 The rollup is path-free and does not repair, migrate, import, share, upload, download, or generate answers.
+Phase 22.1 was reviewed and required no code, UI, or docs changes.
+Phase 22.2 is this docs-sync/finalization pass.
 
 Manual verification checklist:
 

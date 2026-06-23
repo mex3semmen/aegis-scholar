@@ -171,6 +171,8 @@ Phase 22.0 adds a read-only inspection summary rollup for export bundle inspecti
 It is derived from parsed bundle metadata and typed inspection issues only, and it keeps the bundle inspector path-free and read-only.
 The rollup reports deterministic consistency, schema support, integrity verification, and issue counts by kind.
 Phase 22.0 is an audit/diagnostic pass, not a repair/import/share/download workflow.
+Phase 22.1 was reviewed as a no-op boundary review.
+Phase 22.2 is this docs-sync/finalization pass.
 
 ## Phase 11 — Obsidian Export
 
