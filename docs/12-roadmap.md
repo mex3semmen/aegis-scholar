@@ -434,6 +434,28 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 42 — Developer-Facing Diagnostics and Onboarding Cleanup
+
+Planning boundary only.
+
+Phase 42.0 closes the source/chunk metadata review slice.
+Phase 41 did not change production behavior, and the existing coverage was sufficient for the source/chunk metadata guarantee baseline.
+Recommended next implementation slice: developer-facing diagnostics and onboarding cleanup.
+Rationale: it is a low-risk, docs/test-command focused follow-up that can improve README/docs navigation, verification command consolidation, and the architecture map without changing product workflows.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.

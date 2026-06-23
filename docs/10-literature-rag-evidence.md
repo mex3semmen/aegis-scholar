@@ -58,6 +58,7 @@ Phase 38.0 is the retrieval / evidence pack contract baseline.
 Phase 39.0 is a no-op fixture-contract review for the same retrieval/evidence-pack boundary.
 Phase 40.0 closes that review block and selects source/chunk metadata guarantee tightening as the next implementation slice.
 Phase 41.0 is the source/chunk metadata guarantee baseline: deterministic source/chunk IDs and ordering, path-free metadata, and previews derived only from chunk text.
+Phase 42.0 closes the source/chunk metadata review slice and selects developer-facing diagnostics and onboarding cleanup as the next implementation slice.
 
 Current regression checks:
 
