@@ -142,6 +142,11 @@ It remains artifact-only, is derived from persisted manifest and issues data onl
 There is no automatic export and no repair/fix action yet.
 Phase 18.1 hardens that boundary with deterministic hash-derived summary identity and manifest/issues alignment.
 
+Phase 19.0 adds a read-only export bundle inspector for existing manual export bundles.
+It validates persisted `export_manifest.json`, `export_issues.json`, and `summary.json` metadata only, compares the parsed summary against the derived manifest/issues summary, and reports typed inspection issues without mutating the bundle.
+It remains artifact-only and is still not a product answer or share workflow.
+There is no import workflow, no automatic export, and no repair/fix action yet.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.

@@ -19,7 +19,7 @@ use extraction::{ExtractionReport, ExtractionService};
 use errors::to_user_error;
 use answer_draft::{AnswerDraft, AnswerDraftService};
 use evidence::{EvidencePack, EvidenceService};
-use final_answer::{build_final_answer as build_final_answer_impl, export_answer_artifacts as export_answer_artifacts_impl, get_answer_artifact_export_manifest as get_answer_artifact_export_manifest_impl, get_answer_artifact_health as get_answer_artifact_health_impl, list_answer_artifact_issues as list_answer_artifact_issues_impl, get_answer_artifact_overview as get_answer_artifact_overview_impl, list_answer_artifact_sources as list_answer_artifact_sources_impl, list_final_answers as list_final_answers_impl, read_final_answer as read_final_answer_impl, AnswerArtifactExportManifest, AnswerArtifactExportResult, AnswerArtifactHealth, AnswerArtifactIssue, AnswerArtifactOverview, AnswerArtifactSourceMetadata, FinalAnswer, FinalAnswerMetadata};
+use final_answer::{build_final_answer as build_final_answer_impl, export_answer_artifacts as export_answer_artifacts_impl, get_answer_artifact_export_manifest as get_answer_artifact_export_manifest_impl, get_answer_artifact_health as get_answer_artifact_health_impl, inspect_answer_artifact_export_bundle as inspect_answer_artifact_export_bundle_impl, list_answer_artifact_issues as list_answer_artifact_issues_impl, get_answer_artifact_overview as get_answer_artifact_overview_impl, list_answer_artifact_sources as list_answer_artifact_sources_impl, list_final_answers as list_final_answers_impl, read_final_answer as read_final_answer_impl, AnswerArtifactExportBundleInspection, AnswerArtifactExportManifest, AnswerArtifactExportResult, AnswerArtifactHealth, AnswerArtifactIssue, AnswerArtifactOverview, AnswerArtifactSourceMetadata, FinalAnswer, FinalAnswerMetadata};
 use grounded_answer::{build_grounded_answer as build_grounded_answer_impl, read_grounded_answer as read_grounded_answer_impl, GroundedAnswer};
 use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
 use source_metadata::{CorpusStatus, SourceMetadataInput, SourceMetadataPatch, SourceRecord};
@@ -212,6 +212,12 @@ fn get_answer_artifact_export_manifest(root: String) -> Result<AnswerArtifactExp
 }
 
 #[tauri::command]
+fn inspect_answer_artifact_export_bundle(export_root: String) -> Result<AnswerArtifactExportBundleInspection, String> {
+    inspect_answer_artifact_export_bundle_impl(export_root)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
 fn export_answer_artifacts(root: String, export_root: String) -> Result<AnswerArtifactExportResult, String> {
     export_answer_artifacts_impl(root, export_root)
         .map_err(to_user_error)
@@ -247,6 +253,7 @@ pub fn run() {
             get_answer_artifact_health,
             list_answer_artifact_issues,
             get_answer_artifact_export_manifest,
+            inspect_answer_artifact_export_bundle,
             export_answer_artifacts
         ])
         .run(tauri::generate_context!())

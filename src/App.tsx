@@ -133,6 +133,66 @@ type AnswerArtifactExportResult = {
   written_files: ExportedArtifactFile[];
 };
 
+type AnswerArtifactExportIssueKindCount = {
+  issue_kind: "malformed_final_answer" | "needs_evidence_statement" | "unsupported_statement";
+  count: number;
+};
+
+type AnswerArtifactExportSummarySource = {
+  source_id: string;
+  draft_count: number;
+  grounded_answer_count: number;
+  final_answer_count: number;
+  issue_count: number;
+};
+
+type AnswerArtifactExportSummary = {
+  export_id: string;
+  generated_from: string;
+  export_scope: string;
+  non_goals: string[];
+  source_count: number;
+  draft_count: number;
+  grounded_answer_count: number;
+  final_answer_count: number;
+  issue_count: number;
+  issue_kinds: AnswerArtifactExportIssueKindCount[];
+  sources: AnswerArtifactExportSummarySource[];
+};
+
+type AnswerArtifactExportBundleInspectionIssueKind =
+  | "missing_manifest"
+  | "manifest_read_failed"
+  | "missing_issues"
+  | "issues_read_failed"
+  | "missing_summary"
+  | "summary_read_failed"
+  | "summary_counts_mismatch"
+  | "summary_issue_count_mismatch"
+  | "summary_issue_kind_counts_mismatch"
+  | "summary_export_id_mismatch"
+  | "summary_metadata_mismatch";
+
+type AnswerArtifactExportBundleInspectionIssue = {
+  kind: AnswerArtifactExportBundleInspectionIssueKind;
+  message: string;
+  relative_path?: string | null;
+};
+
+type AnswerArtifactExportBundleInspection = {
+  has_manifest: boolean;
+  has_issues: boolean;
+  has_summary: boolean;
+  is_consistent: boolean;
+  issue_count: number;
+  warning_count: number;
+  errors: AnswerArtifactExportBundleInspectionIssue[];
+  warnings: AnswerArtifactExportBundleInspectionIssue[];
+  manifest_counts?: AnswerArtifactExportManifest | null;
+  summary_counts?: AnswerArtifactExportSummary | null;
+  issue_kind_counts?: AnswerArtifactExportIssueKindCount[] | null;
+};
+
 function sanitizeBackendError(error: unknown) {
   const message = String(error);
   return message.replace(/[A-Za-z]:\\[^"]+/g, "[path hidden]").replace(/E:\\[^"]+/g, "[path hidden]");
@@ -172,6 +232,10 @@ export default function App() {
   const [artifactExportResult, setArtifactExportResult] = createSignal<AnswerArtifactExportResult | null>(null);
   const [artifactExportError, setArtifactExportError] = createSignal<string | null>(null);
   const [artifactExportLoading, setArtifactExportLoading] = createSignal(false);
+  const [exportBundleRoot, setExportBundleRoot] = createSignal("");
+  const [artifactBundleInspection, setArtifactBundleInspection] = createSignal<AnswerArtifactExportBundleInspection | null>(null);
+  const [artifactBundleInspectionError, setArtifactBundleInspectionError] = createSignal<string | null>(null);
+  const [artifactBundleInspectionLoading, setArtifactBundleInspectionLoading] = createSignal(false);
 
   async function loadStatus() {
     setStatusError(null);
@@ -320,6 +384,30 @@ export default function App() {
     }
   }
 
+  async function inspectExportBundle() {
+    const trimmedExportBundleRoot = exportBundleRoot().trim();
+    if (!trimmedExportBundleRoot) {
+      setArtifactBundleInspectionError("Export bundle root is required.");
+      return;
+    }
+    if (artifactBundleInspectionLoading()) {
+      return;
+    }
+    setArtifactBundleInspectionLoading(true);
+    setArtifactBundleInspectionError(null);
+    try {
+      const result = await invoke<AnswerArtifactExportBundleInspection>("inspect_answer_artifact_export_bundle", {
+        export_root: trimmedExportBundleRoot,
+      });
+      setArtifactBundleInspection(result);
+    } catch (err) {
+      setArtifactBundleInspection(null);
+      setArtifactBundleInspectionError(sanitizeBackendError(err));
+    } finally {
+      setArtifactBundleInspectionLoading(false);
+    }
+  }
+
   async function selectArtifactSource(item: AnswerArtifactSourceMetadata) {
     setSourceId(item.source_id);
     await loadArtifactOverviewBySourceId(item.source_id);
@@ -447,6 +535,7 @@ export default function App() {
         {artifactIssuesError() && <p class="error">{artifactIssuesError()}</p>}
         {artifactManifestError() && <p class="error">{artifactManifestError()}</p>}
         {artifactExportError() && <p class="error">{artifactExportError()}</p>}
+        {artifactBundleInspectionError() && <p class="error">{artifactBundleInspectionError()}</p>}
         <div class="artifact-overview">
           <h3>Sources with artifacts</h3>
           {artifactSources().length > 0 ? (
@@ -601,6 +690,145 @@ export default function App() {
             </>
           ) : (
             <p>No export result loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Export bundle inspector</h3>
+          <p class="muted">
+            Read-only validation for an existing manual export bundle.
+          </p>
+          <div class="form-row">
+            <label class="inline-field">
+              Export bundle root
+              <input
+                type="text"
+                value={exportBundleRoot()}
+                onInput={(event) => setExportBundleRoot(event.currentTarget.value)}
+                placeholder="E:\\path\\to\\export-bundle"
+              />
+            </label>
+          </div>
+          <div class="hero-actions">
+            <button onClick={inspectExportBundle} disabled={artifactBundleInspectionLoading()}>
+              {artifactBundleInspectionLoading() ? "Loading..." : "Inspect export bundle"}
+            </button>
+          </div>
+          {artifactBundleInspection() ? (
+            <>
+              <div class="contract-meta">
+                <div><span>Has manifest</span><strong>{artifactBundleInspection()!.has_manifest ? "yes" : "no"}</strong></div>
+                <div><span>Has issues</span><strong>{artifactBundleInspection()!.has_issues ? "yes" : "no"}</strong></div>
+                <div><span>Has summary</span><strong>{artifactBundleInspection()!.has_summary ? "yes" : "no"}</strong></div>
+                <div><span>Consistent</span><strong>{artifactBundleInspection()!.is_consistent ? "yes" : "no"}</strong></div>
+                <div><span>Issues</span><strong>{artifactBundleInspection()!.issue_count}</strong></div>
+                <div><span>Warnings</span><strong>{artifactBundleInspection()!.warning_count}</strong></div>
+              </div>
+              {artifactBundleInspection()!.manifest_counts ? (
+                <div class="artifact-overview">
+                  <h4>Manifest counts</h4>
+                  <div class="contract-meta">
+                    <div><span>Sources</span><strong>{artifactBundleInspection()!.manifest_counts!.source_count}</strong></div>
+                    <div><span>Drafts</span><strong>{artifactBundleInspection()!.manifest_counts!.draft_count}</strong></div>
+                    <div><span>Grounded answers</span><strong>{artifactBundleInspection()!.manifest_counts!.grounded_answer_count}</strong></div>
+                    <div><span>Final answers</span><strong>{artifactBundleInspection()!.manifest_counts!.final_answer_count}</strong></div>
+                    <div><span>Issues</span><strong>{artifactBundleInspection()!.manifest_counts!.issue_count}</strong></div>
+                  </div>
+                  {artifactBundleInspection()!.manifest_counts!.sources.length > 0 ? (
+                    <ul class="final-answer-list-items">
+                      {artifactBundleInspection()!.manifest_counts!.sources.map((item) => (
+                        <li>
+                          <div class="final-answer-list-item">
+                            <span>{item.source_id}</span>
+                            <small>
+                              drafts={item.draft_count} | grounded={item.grounded_answer_count} | final={item.final_answer_count} | issues={item.issue_count}
+                            </small>
+                            {item.final_answers.length > 0 && (
+                              <small>
+                                {item.final_answers.map((answer) => answer.final_answer_id).join(", ")}
+                              </small>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>No manifest sources listed yet.</p>
+                  )}
+                </div>
+              ) : null}
+              {artifactBundleInspection()!.summary_counts ? (
+                <div class="artifact-overview">
+                  <h4>Summary counts</h4>
+                  <div class="contract-meta">
+                    <div><span>Export ID</span><strong>{artifactBundleInspection()!.summary_counts!.export_id}</strong></div>
+                    <div><span>Generated from</span><strong>{artifactBundleInspection()!.summary_counts!.generated_from}</strong></div>
+                    <div><span>Scope</span><strong>{artifactBundleInspection()!.summary_counts!.export_scope}</strong></div>
+                    <div><span>Sources</span><strong>{artifactBundleInspection()!.summary_counts!.source_count}</strong></div>
+                    <div><span>Drafts</span><strong>{artifactBundleInspection()!.summary_counts!.draft_count}</strong></div>
+                    <div><span>Grounded answers</span><strong>{artifactBundleInspection()!.summary_counts!.grounded_answer_count}</strong></div>
+                    <div><span>Final answers</span><strong>{artifactBundleInspection()!.summary_counts!.final_answer_count}</strong></div>
+                    <div><span>Issues</span><strong>{artifactBundleInspection()!.summary_counts!.issue_count}</strong></div>
+                  </div>
+                  {artifactBundleInspection()!.summary_counts!.issue_kinds.length > 0 && (
+                    <ul class="final-answer-list-items">
+                      {artifactBundleInspection()!.summary_counts!.issue_kinds.map((item) => (
+                        <li>
+                          <div class="final-answer-list-item">
+                            <span>{item.issue_kind}</span>
+                            <small>count={item.count}</small>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : null}
+              {artifactBundleInspection()!.issue_kind_counts && artifactBundleInspection()!.issue_kind_counts!.length > 0 ? (
+                <div class="artifact-overview">
+                  <h4>Issue kind counts</h4>
+                  <ul class="final-answer-list-items">
+                    {artifactBundleInspection()!.issue_kind_counts!.map((item) => (
+                      <li>
+                        <div class="final-answer-list-item">
+                          <span>{item.issue_kind}</span>
+                          <small>count={item.count}</small>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {artifactBundleInspection()!.errors.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Inspection errors</h4>
+                  <ul>
+                    {artifactBundleInspection()!.errors.map((item) => (
+                      <li>
+                        <strong>{item.kind}</strong>
+                        <div>{item.message}</div>
+                        {item.relative_path && <small>{item.relative_path}</small>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {artifactBundleInspection()!.warnings.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Inspection warnings</h4>
+                  <ul>
+                    {artifactBundleInspection()!.warnings.map((item) => (
+                      <li>
+                        <strong>{item.kind}</strong>
+                        <div>{item.message}</div>
+                        {item.relative_path && <small>{item.relative_path}</small>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p>No export bundle inspection loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">
