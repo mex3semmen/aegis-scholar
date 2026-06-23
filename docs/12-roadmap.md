@@ -116,6 +116,9 @@ Phase 13.0 adds a read-only source artifact index that lists sources with persis
 It remains inspection-only, does not create directories or artifacts, and is still not a product answer experience.
 Phase 13.1 hardens that boundary with deterministic ordering, empty-storage behavior, unrelated-file safety, and conservative malformed-final-answer handling.
 
+Phase 14.0 adds a read-only answer artifact health summary for persisted diagnostics.
+It remains inspection-only, reports metadata counts only, and is still not a product answer experience.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.

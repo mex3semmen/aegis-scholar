@@ -66,6 +66,27 @@ type AnswerArtifactSourceMetadata = {
   final_answer_count: number;
 };
 
+type AnswerArtifactSourceHealth = {
+  source_id: string;
+  draft_count: number;
+  grounded_answer_count: number;
+  final_answer_count: number;
+  malformed_final_answer_count: number;
+  unsupported_statement_count: number;
+  needs_evidence_statement_count: number;
+};
+
+type AnswerArtifactHealth = {
+  source_count: number;
+  draft_count: number;
+  grounded_answer_count: number;
+  final_answer_count: number;
+  malformed_final_answer_count: number;
+  unsupported_statement_count: number;
+  needs_evidence_statement_count: number;
+  sources: AnswerArtifactSourceHealth[];
+};
+
 function sanitizeBackendError(error: unknown) {
   const message = String(error);
   return message.replace(/[A-Za-z]:\\[^"]+/g, "[path hidden]").replace(/E:\\[^"]+/g, "[path hidden]");
@@ -92,6 +113,9 @@ export default function App() {
   const [artifactSources, setArtifactSources] = createSignal<AnswerArtifactSourceMetadata[]>([]);
   const [artifactSourcesError, setArtifactSourcesError] = createSignal<string | null>(null);
   const [artifactSourcesLoading, setArtifactSourcesLoading] = createSignal(false);
+  const [artifactHealth, setArtifactHealth] = createSignal<AnswerArtifactHealth | null>(null);
+  const [artifactHealthError, setArtifactHealthError] = createSignal<string | null>(null);
+  const [artifactHealthLoading, setArtifactHealthLoading] = createSignal(false);
 
   async function loadStatus() {
     setStatusError(null);
@@ -155,6 +179,25 @@ export default function App() {
       setArtifactSourcesError(sanitizeBackendError(err));
     } finally {
       setArtifactSourcesLoading(false);
+    }
+  }
+
+  async function loadArtifactHealth() {
+    if (artifactHealthLoading()) {
+      return;
+    }
+    setArtifactHealthLoading(true);
+    setArtifactHealthError(null);
+    try {
+      const result = await invoke<AnswerArtifactHealth>("get_answer_artifact_health", {
+        root: ".",
+      });
+      setArtifactHealth(result);
+    } catch (err) {
+      setArtifactHealth(null);
+      setArtifactHealthError(sanitizeBackendError(err));
+    } finally {
+      setArtifactHealthLoading(false);
     }
   }
 
@@ -251,10 +294,14 @@ export default function App() {
           <button onClick={loadArtifactSources} disabled={artifactSourcesLoading()}>
             {artifactSourcesLoading() ? "Loading..." : "Load source index"}
           </button>
+          <button onClick={loadArtifactHealth} disabled={artifactHealthLoading()}>
+            {artifactHealthLoading() ? "Loading..." : "Load artifact health"}
+          </button>
         </div>
         {finalAnswerError() && <p class="error">{finalAnswerError()}</p>}
         {artifactOverviewError() && <p class="error">{artifactOverviewError()}</p>}
         {artifactSourcesError() && <p class="error">{artifactSourcesError()}</p>}
+        {artifactHealthError() && <p class="error">{artifactHealthError()}</p>}
         <div class="artifact-overview">
           <h3>Sources with artifacts</h3>
           {artifactSources().length > 0 ? (
@@ -272,6 +319,40 @@ export default function App() {
             </ul>
           ) : (
             <p>No sources with artifacts listed yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Artifact health</h3>
+          {artifactHealth() ? (
+            <>
+              <div class="contract-meta">
+                <div><span>Sources</span><strong>{artifactHealth()!.source_count}</strong></div>
+                <div><span>Drafts</span><strong>{artifactHealth()!.draft_count}</strong></div>
+                <div><span>Grounded answers</span><strong>{artifactHealth()!.grounded_answer_count}</strong></div>
+                <div><span>Final answers</span><strong>{artifactHealth()!.final_answer_count}</strong></div>
+                <div><span>Malformed finals</span><strong>{artifactHealth()!.malformed_final_answer_count}</strong></div>
+                <div><span>Unsupported statements</span><strong>{artifactHealth()!.unsupported_statement_count}</strong></div>
+                <div><span>Needs evidence</span><strong>{artifactHealth()!.needs_evidence_statement_count}</strong></div>
+              </div>
+              {artifactHealth()!.sources.length > 0 ? (
+                <ul class="final-answer-list-items">
+                  {artifactHealth()!.sources.map((item) => (
+                    <li>
+                      <button class="final-answer-list-item" onClick={() => selectArtifactSource(item)}>
+                        <span>{item.source_id}</span>
+                        <small>
+                          drafts={item.draft_count} | grounded={item.grounded_answer_count} | final={item.final_answer_count} | malformed={item.malformed_final_answer_count} | needs_evidence={item.needs_evidence_statement_count} | unsupported={item.unsupported_statement_count}
+                        </small>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No artifact health entries yet.</p>
+              )}
+            </>
+          ) : (
+            <p>No artifact health loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">
