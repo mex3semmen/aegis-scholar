@@ -92,6 +92,10 @@ It is read-only, exposes metadata only, does not surface filesystem paths, does 
 It does not build, generate, edit, synthesize, or rank answers.
 Phase 12.1 keeps the overview aligned with list_final_answers and hardens the boundary with deterministic ordering, multiple-artifact count coverage, and conservative typed malformed-final-answer handling.
 
+Phase 13.0 adds a read-only source artifact index.
+It lists only source_ids that already have persisted answer artifacts and shows draft, grounded-answer, and final-answer counts.
+It is discovery only, does not create directories or artifacts, does not build or generate answers, and does not expose filesystem paths.
+
 Manual verification checklist:
 
 - `npm run build`
