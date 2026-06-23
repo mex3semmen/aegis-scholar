@@ -86,6 +86,10 @@ Phase 11.1 hardens that discovery boundary.
 Listing remains read-only and returns metadata only, not filesystem paths.
 Ordering is deterministic, metadata counts are derived from the persisted FinalAnswer statements, malformed files are treated as typed read failures, traversal-like `source_id` inputs stay away from arbitrary path access, and listing does not create missing directories as a side effect.
 
+Phase 12.0 adds a read-only answer-artifact overview for a source.
+It reports persisted draft, grounded answer, and final answer counts, and reuses FinalAnswer metadata for inspection only.
+It does not build, generate, edit, or synthesize artifacts.
+
 Manual verification checklist:
 
 - `npm run build`

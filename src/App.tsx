@@ -51,6 +51,14 @@ type FinalAnswerMetadata = {
   needs_evidence_count: number;
 };
 
+type AnswerArtifactOverview = {
+  source_id: string;
+  draft_count: number;
+  grounded_answer_count: number;
+  final_answer_count: number;
+  final_answers: FinalAnswerMetadata[];
+};
+
 function sanitizeBackendError(error: unknown) {
   const message = String(error);
   return message.replace(/[A-Za-z]:\\[^"]+/g, "[path hidden]").replace(/E:\\[^"]+/g, "[path hidden]");
@@ -71,9 +79,9 @@ export default function App() {
   const [finalAnswer, setFinalAnswer] = createSignal<FinalAnswer | null>(null);
   const [finalAnswerError, setFinalAnswerError] = createSignal<string | null>(null);
   const [finalAnswerLoading, setFinalAnswerLoading] = createSignal(false);
-  const [finalAnswerList, setFinalAnswerList] = createSignal<FinalAnswerMetadata[]>([]);
-  const [finalAnswerListError, setFinalAnswerListError] = createSignal<string | null>(null);
-  const [finalAnswerListLoading, setFinalAnswerListLoading] = createSignal(false);
+  const [artifactOverview, setArtifactOverview] = createSignal<AnswerArtifactOverview | null>(null);
+  const [artifactOverviewError, setArtifactOverviewError] = createSignal<string | null>(null);
+  const [artifactOverviewLoading, setArtifactOverviewLoading] = createSignal(false);
 
   async function loadStatus() {
     setStatusError(null);
@@ -117,28 +125,28 @@ export default function App() {
     }
   }
 
-  async function loadFinalAnswerList() {
+  async function loadArtifactOverview() {
     const trimmedSourceId = sourceId().trim();
     if (!trimmedSourceId) {
-      setFinalAnswerListError("Source ID is required to list final answers.");
+      setArtifactOverviewError("Source ID is required to load the artifact overview.");
       return;
     }
-    if (finalAnswerListLoading()) {
+    if (artifactOverviewLoading()) {
       return;
     }
-    setFinalAnswerListLoading(true);
-    setFinalAnswerListError(null);
+    setArtifactOverviewLoading(true);
+    setArtifactOverviewError(null);
     try {
-      const result = await invoke<FinalAnswerMetadata[]>("list_final_answers", {
+      const result = await invoke<AnswerArtifactOverview>("get_answer_artifact_overview", {
         root: ".",
         source_id: trimmedSourceId,
       });
-      setFinalAnswerList(result);
+      setArtifactOverview(result);
     } catch (err) {
-      setFinalAnswerList([]);
-      setFinalAnswerListError(sanitizeBackendError(err));
+      setArtifactOverview(null);
+      setArtifactOverviewError(sanitizeBackendError(err));
     } finally {
-      setFinalAnswerListLoading(false);
+      setArtifactOverviewLoading(false);
     }
   }
 
@@ -200,17 +208,27 @@ export default function App() {
           <button onClick={loadFinalAnswer} disabled={finalAnswerLoading()}>
             {finalAnswerLoading() ? "Loading..." : "Load final answer"}
           </button>
-          <button onClick={loadFinalAnswerList} disabled={finalAnswerListLoading()}>
-            {finalAnswerListLoading() ? "Listing..." : "List final answers"}
+          <button onClick={loadArtifactOverview} disabled={artifactOverviewLoading()}>
+            {artifactOverviewLoading() ? "Loading..." : "Load artifact overview"}
           </button>
         </div>
         {finalAnswerError() && <p class="error">{finalAnswerError()}</p>}
-        {finalAnswerListError() && <p class="error">{finalAnswerListError()}</p>}
-        <div class="final-answer-list">
-          <h3>Existing final answers</h3>
-          {finalAnswerList().length > 0 ? (
+        {artifactOverviewError() && <p class="error">{artifactOverviewError()}</p>}
+        <div class="artifact-overview">
+          <h3>Artifact overview</h3>
+          {artifactOverview() ? (
+            <div class="contract-meta">
+              <div><span>Source ID</span><strong>{artifactOverview()!.source_id}</strong></div>
+              <div><span>Answer drafts</span><strong>{artifactOverview()!.draft_count}</strong></div>
+              <div><span>Grounded answers</span><strong>{artifactOverview()!.grounded_answer_count}</strong></div>
+              <div><span>Final answers</span><strong>{artifactOverview()!.final_answer_count}</strong></div>
+            </div>
+          ) : (
+            <p>No artifact overview loaded yet.</p>
+          )}
+          {artifactOverview() && artifactOverview()!.final_answers.length > 0 ? (
             <ul class="final-answer-list-items">
-              {finalAnswerList().map((item) => (
+              {artifactOverview()!.final_answers.map((item) => (
                 <li>
                   <button class="final-answer-list-item" onClick={() => selectFinalAnswer(item)}>
                     <span>{item.final_answer_id}</span>
@@ -221,9 +239,9 @@ export default function App() {
                 </li>
               ))}
             </ul>
-          ) : (
+          ) : artifactOverview() ? (
             <p>No final answers listed yet.</p>
-          )}
+          ) : null}
         </div>
         {finalAnswer() ? (
           <div class="contract-view">
