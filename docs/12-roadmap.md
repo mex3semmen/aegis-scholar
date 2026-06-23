@@ -194,6 +194,8 @@ Phase 25.1 is a no-op boundary review with verification only.
 Phase 26.0 adds a compact read-only `inspection_status` field to the existing export bundle inspector DTO and UI.
 It surfaces a deterministic code/label/severity/reason summary derived from the existing inspection summary, typed issues, file statuses, and schema/integrity state only.
 Phase 26.0 does not change validation semantics, read extra files beyond the inspector’s existing bundle reads, write report artifacts, mutate inspected bundles, or add import/migration/repair/share/download/generation/editing workflows.
+Phase 26.1 was a no-op boundary review with verification only.
+Phase 26.2 is this docs-sync/finalization pass.
 
 ## Phase 11 — Obsidian Export
 
