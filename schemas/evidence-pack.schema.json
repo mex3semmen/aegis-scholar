@@ -18,9 +18,9 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["evidence_item_id", "chunk_id", "source_id", "version_id", "locator", "text_hash", "score", "matched_terms", "preview"],
+        "required": ["evidence_id", "chunk_id", "source_id", "version_id", "locator", "text_hash", "score", "matched_terms", "preview"],
         "properties": {
-          "evidence_item_id": { "type": "string", "pattern": "^evi_[a-f0-9]+$" },
+          "evidence_id": { "type": "string", "pattern": "^evi_[a-f0-9]+$" },
           "chunk_id": { "type": "string" },
           "source_id": { "type": "string" },
           "version_id": { "type": "string" },
