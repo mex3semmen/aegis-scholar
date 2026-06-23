@@ -197,6 +197,10 @@ Phase 26.0 does not change validation semantics, read extra files beyond the ins
 Phase 26.1 was a no-op boundary review with verification only.
 Phase 26.2 is this docs-sync/finalization pass.
 
+Phase 27.0 consolidates the existing export bundle inspector UI into a clearer read-only diagnostic layout.
+It reorders the existing inspection_status, inspection_summary, file_statuses, issue_groups, report_preview, and typed issue sections without changing backend inspection semantics.
+It does not add import/migration/repair/share/download/export-writing behavior or any new controls.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
