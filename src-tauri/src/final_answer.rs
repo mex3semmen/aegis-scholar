@@ -1466,7 +1466,7 @@ fn validate_export_bundle_integrity(
         let path = Path::new(normalized);
         if normalized.is_empty()
             || path.is_absolute()
-            || path.components().any(|component| matches!(component, std::path::Component::ParentDir))
+            || path.components().any(|component| !matches!(component, std::path::Component::Normal(_)))
         {
             errors.push(inspection_issue(
                 AnswerArtifactExportBundleInspectionIssueKind::IntegrityPathInvalid,
@@ -2937,6 +2937,16 @@ mod tests {
         let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
         let export_root = temp.path().join("integrity-entry-bundle");
         service.export_answer_artifacts(&export_root).unwrap();
+
+        mutate_export_integrity(&export_root, |value| {
+            let files = value["files"].as_array_mut().unwrap();
+            if let Some(first) = files.first_mut() {
+                first["relative_path"] = serde_json::Value::String("./bad.json".to_string());
+            }
+        });
+
+        let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IntegrityPathInvalid));
 
         mutate_export_integrity(&export_root, |value| {
             let files = value["files"].as_array_mut().unwrap();

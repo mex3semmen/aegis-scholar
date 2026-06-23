@@ -146,6 +146,7 @@ Valid current-version bundles inspect as consistent, and the bundle remains path
 Phase 21.0 adds `export_integrity.json` to the manual export bundle as deterministic audit metadata.
 It is versioned with `answer_artifact_export.v1`, uses SHA-256 digests, and lists only relative bundle paths with byte counts and digests.
 The integrity file excludes itself from hashing, remains path-free, and is read-only audit metadata only.
+Phase 21.1 hardens that boundary by rejecting dot-segment and traversal-style integrity paths while keeping inspection read-only and path-free.
 The inspector validates integrity metadata for presence, schema version, algorithm, relative-path safety, missing files, byte-count mismatches, digest mismatches, and duplicate entries.
 It does not import, migrate, repair, rewrite, or share bundles, and it does not add any answer-generation behavior.
 
