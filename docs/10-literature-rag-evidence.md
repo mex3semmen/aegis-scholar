@@ -186,6 +186,21 @@ It remains path-free, does not change validation semantics, and does not read ex
 It does not repair, migrate, import, share, upload, download, write reports, generate answers, or mutate inspected bundles.
 Phase 26.1 was a no-op boundary review with verification only.
 
+## Answer/Evidence Contract Boundary Inventory
+
+Phase 32.0 is a documentation-only inventory of the existing answer/evidence contract stack.
+It records the current boundary guarantees without changing behavior:
+
+- Answer Drafts mechanically project evidence items into claim scaffolds.
+- Grounded Answers mechanically project drafts into statements while preserving supported, `needs_evidence`, and unsupported statuses.
+- Final Answers deterministically project grounded answers while preserving statement order and status.
+- The answer pipeline smoke checks cover persisted draft, grounded-answer, and final-answer read/write behavior only.
+- Typed errors remain the boundary for invalid inputs, missing artifacts, and read failures.
+- Metadata remains deterministic and path-free.
+
+This inventory does not add generation, claim inference, evidence rewriting, semantic ranking, editing, import, repair, migration, share, upload, download, report writing, or export writing.
+It is a boundary snapshot for the existing contract stack only.
+
 Manual verification checklist:
 
 - `npm run build`

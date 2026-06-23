@@ -236,6 +236,26 @@ Do not implement:
 - editing
 - evidence rewriting
 
+## Phase 32 — Post-Inspector Answer/Evidence Contract Boundary Inventory
+
+Planning boundary only.
+
+Phase 32.0 is this inventory/boundary pass.
+It documents the existing answer draft, grounded answer, final answer, evidence status, typed error, and pipeline smoke guarantees without adding new behavior.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
