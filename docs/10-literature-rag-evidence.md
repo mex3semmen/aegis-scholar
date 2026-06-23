@@ -44,6 +44,9 @@ This phase does not use embeddings, vector search, or answer synthesis.
 Phase 6.0 adds a mechanical Answer Draft scaffold over an Evidence Pack.
 It converts each evidence item into one conservative supported claim and does not synthesize final prose.
 
+Phase 7.0 adds a Grounded Answer contract over Answer Drafts.
+It stores mechanical statement projections under the managed corpus tree and preserves unsupported / needs-evidence status without final prose generation.
+
 ## Evidence unit
 
 Each evidence unit must carry:

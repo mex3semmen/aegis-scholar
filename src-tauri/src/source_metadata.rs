@@ -23,6 +23,7 @@ pub enum IngestionStatus {
     Chunked,
     Indexed,
     AnswerDrafted,
+    GroundedAnswerReady,
     EvidenceReady,
     Failed,
     Removed,

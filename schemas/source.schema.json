@@ -29,7 +29,7 @@
     "created_at": { "type": "string", "format": "date-time" },
     "ingestion_status": {
       "type": "string",
-      "enum": ["registered", "extraction_pending", "extracted", "chunked", "indexed", "answer_drafted", "evidence_ready", "failed", "removed"]
+      "enum": ["registered", "extraction_pending", "extracted", "chunked", "indexed", "answer_drafted", "grounded_answer_ready", "evidence_ready", "failed", "removed"]
     },
     "tags": { "type": "array", "items": { "type": "string" } },
     "reliability_notes": { "type": "string" }

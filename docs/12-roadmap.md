@@ -77,6 +77,8 @@ Phase 6.0 introduces a mechanical Answer Draft scaffold built only from local Ev
 
 Add APA output, statistics explanations, method checks and course study workflows.
 
+Phase 7.0 introduces a mechanical Grounded Answer contract built only from Answer Drafts; it does not generate final prose or new claims.
+
 ## Phase 8 — Local Model Runtime
 
 Implement llama.cpp process lifecycle, health, logs, port/PID ownership and model profiles.
