@@ -14,6 +14,10 @@ use std::path::{Path, PathBuf};
 
 pub const ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION: &str = "answer_artifact_export.v1";
 pub const ANSWER_ARTIFACT_EXPORT_INTEGRITY_ALGORITHM: &str = "sha256";
+const EXPORT_BUNDLE_MANIFEST_LABEL: &str = "export_manifest.json";
+const EXPORT_BUNDLE_ISSUES_LABEL: &str = "export_issues.json";
+const EXPORT_BUNDLE_SUMMARY_LABEL: &str = "summary.json";
+const EXPORT_BUNDLE_INTEGRITY_LABEL: &str = "export_integrity.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FinalAnswer {
@@ -208,6 +212,7 @@ pub struct AnswerArtifactExportBundleInspection {
     pub inspection_summary: AnswerArtifactExportBundleInspectionSummary,
     pub report_preview: AnswerArtifactExportBundleInspectionReportPreview,
     pub issue_groups: Vec<AnswerArtifactExportBundleInspectionIssueGroup>,
+    pub file_statuses: Vec<AnswerArtifactExportBundleFileStatus>,
     pub has_manifest: bool,
     pub has_issues: bool,
     pub has_summary: bool,
@@ -258,6 +263,19 @@ pub struct AnswerArtifactExportBundleInspectionIssueGroup {
     pub kind: AnswerArtifactExportBundleInspectionIssueKind,
     pub count: usize,
     pub lines: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnswerArtifactExportBundleFileStatus {
+    pub file_label: String,
+    pub present: bool,
+    pub parsed: bool,
+    pub malformed: bool,
+    pub schema_version: Option<String>,
+    pub schema_status: String,
+    pub integrity_status: String,
+    pub issue_count: usize,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1250,6 +1268,14 @@ fn inspect_answer_artifact_export_bundle_impl(export_root: PathBuf) -> AegisResu
     );
     let report_preview = build_export_bundle_inspection_report_preview(&inspection_summary, &errors, &warnings);
     let issue_groups = build_export_bundle_inspection_issue_groups(&errors, &warnings);
+    let file_statuses = build_export_bundle_file_statuses(
+        manifest.as_ref(),
+        issues.as_ref(),
+        summary.as_ref(),
+        integrity.as_ref(),
+        &errors,
+        &warnings,
+    );
 
     Ok(AnswerArtifactExportBundleInspection {
         schema_version,
@@ -1261,6 +1287,7 @@ fn inspect_answer_artifact_export_bundle_impl(export_root: PathBuf) -> AegisResu
         inspection_summary,
         report_preview,
         issue_groups,
+        file_statuses,
         has_manifest: manifest.is_some(),
         has_issues: issues.is_some(),
         has_summary: summary.is_some(),
@@ -1775,6 +1802,176 @@ fn build_export_bundle_inspection_issue_groups(
     groups
 }
 
+fn build_export_bundle_file_statuses(
+    manifest: Option<&AnswerArtifactExportManifest>,
+    issues: Option<&AnswerArtifactExportIssues>,
+    summary: Option<&AnswerArtifactExportSummary>,
+    integrity: Option<&AnswerArtifactExportIntegrity>,
+    errors: &[AnswerArtifactExportBundleInspectionIssue],
+    warnings: &[AnswerArtifactExportBundleInspectionIssue],
+) -> Vec<AnswerArtifactExportBundleFileStatus> {
+    [
+        (
+            EXPORT_BUNDLE_MANIFEST_LABEL,
+            manifest.is_some(),
+            manifest.map(|value| value.schema_version.as_str()),
+            AnswerArtifactExportBundleInspectionIssueKind::MissingManifest,
+            AnswerArtifactExportBundleInspectionIssueKind::ManifestReadFailed,
+        ),
+        (
+            EXPORT_BUNDLE_ISSUES_LABEL,
+            issues.is_some(),
+            issues.map(|value| value.schema_version.as_str()),
+            AnswerArtifactExportBundleInspectionIssueKind::MissingIssues,
+            AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed,
+        ),
+        (
+            EXPORT_BUNDLE_SUMMARY_LABEL,
+            summary.is_some(),
+            summary.map(|value| value.schema_version.as_str()),
+            AnswerArtifactExportBundleInspectionIssueKind::MissingSummary,
+            AnswerArtifactExportBundleInspectionIssueKind::SummaryReadFailed,
+        ),
+        (
+            EXPORT_BUNDLE_INTEGRITY_LABEL,
+            integrity.is_some(),
+            integrity.map(|value| value.schema_version.as_str()),
+            AnswerArtifactExportBundleInspectionIssueKind::MissingIntegrity,
+            AnswerArtifactExportBundleInspectionIssueKind::IntegrityReadFailed,
+        ),
+    ]
+    .into_iter()
+    .map(|(file_label, parsed, schema_version, missing_kind, read_failed_kind)| {
+        build_export_bundle_file_status(
+            file_label,
+            parsed,
+            schema_version,
+            integrity,
+            errors,
+            warnings,
+            missing_kind,
+            read_failed_kind,
+        )
+    })
+    .collect()
+}
+
+fn build_export_bundle_file_status(
+    file_label: &str,
+    parsed: bool,
+    schema_version: Option<&str>,
+    integrity: Option<&AnswerArtifactExportIntegrity>,
+    errors: &[AnswerArtifactExportBundleInspectionIssue],
+    warnings: &[AnswerArtifactExportBundleInspectionIssue],
+    missing_kind: AnswerArtifactExportBundleInspectionIssueKind,
+    read_failed_kind: AnswerArtifactExportBundleInspectionIssueKind,
+) -> AnswerArtifactExportBundleFileStatus {
+    let combined = errors.iter().chain(warnings.iter()).collect::<Vec<_>>();
+    let missing = combined.iter().any(|issue| {
+        issue.kind == missing_kind && issue.relative_path.as_deref() == Some(file_label)
+    });
+    let malformed = combined.iter().any(|issue| {
+        issue.kind == read_failed_kind && issue.relative_path.as_deref() == Some(file_label)
+    });
+    let present = !missing;
+    let schema_version = non_empty_schema_version(schema_version);
+    let schema_missing = combined.iter().any(|issue| {
+        matches!(
+            issue.kind,
+            AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMissing
+                | AnswerArtifactExportBundleInspectionIssueKind::IntegritySchemaVersionMissing
+        ) && issue.relative_path.as_deref() == Some(file_label)
+    });
+    let schema_unsupported = combined.iter().any(|issue| {
+        matches!(
+            issue.kind,
+            AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionUnsupported
+                | AnswerArtifactExportBundleInspectionIssueKind::IntegritySchemaVersionUnsupported
+        ) && issue.relative_path.as_deref() == Some(file_label)
+    });
+    let schema_mismatch = combined.iter().any(|issue| {
+        issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch
+    }) && schema_version.is_some();
+    let schema_status = if !parsed {
+        "not_checked"
+    } else if schema_missing || schema_version.is_none() {
+        "missing"
+    } else if schema_unsupported {
+        "unsupported"
+    } else if schema_mismatch {
+        "mismatched"
+    } else {
+        "supported"
+    }
+    .to_string();
+
+    let integrity_issue = combined.iter().any(|issue| integrity_issue_affects_file(issue, file_label));
+    let integrity_status = match integrity {
+        None if file_label == EXPORT_BUNDLE_INTEGRITY_LABEL && missing => "missing",
+        None => "not_checked",
+        Some(_) if integrity_issue => "failed",
+        Some(_) if file_label == EXPORT_BUNDLE_INTEGRITY_LABEL && parsed => "parsed",
+        Some(value) if value.files.iter().any(|item| item.relative_path == file_label) => "verified",
+        Some(_) => "not_listed",
+    }
+    .to_string();
+
+    let issue_count = combined
+        .iter()
+        .filter(|issue| issue_affects_file(issue, file_label))
+        .count();
+    let status = if missing {
+        "missing"
+    } else if malformed {
+        "malformed"
+    } else if matches!(schema_status.as_str(), "missing" | "unsupported" | "mismatched") {
+        "schema_issue"
+    } else if integrity_status == "failed" {
+        "integrity_issue"
+    } else if parsed {
+        "parsed"
+    } else {
+        "present"
+    }
+    .to_string();
+
+    AnswerArtifactExportBundleFileStatus {
+        file_label: file_label.to_string(),
+        present,
+        parsed,
+        malformed,
+        schema_version,
+        schema_status,
+        integrity_status,
+        issue_count,
+        status,
+    }
+}
+
+fn issue_affects_file(issue: &AnswerArtifactExportBundleInspectionIssue, file_label: &str) -> bool {
+    issue.relative_path.as_deref() == Some(file_label) || integrity_issue_affects_file(issue, file_label)
+}
+
+fn integrity_issue_affects_file(issue: &AnswerArtifactExportBundleInspectionIssue, file_label: &str) -> bool {
+    match issue.kind {
+        AnswerArtifactExportBundleInspectionIssueKind::IntegrityMissingFile
+        | AnswerArtifactExportBundleInspectionIssueKind::IntegrityReadFailed
+        | AnswerArtifactExportBundleInspectionIssueKind::IntegrityByteCountMismatch
+        | AnswerArtifactExportBundleInspectionIssueKind::IntegrityDigestMismatch => {
+            issue.message.starts_with(file_label) || issue.relative_path.as_deref() == Some(file_label)
+        }
+        AnswerArtifactExportBundleInspectionIssueKind::IntegritySchemaVersionMissing
+        | AnswerArtifactExportBundleInspectionIssueKind::IntegritySchemaVersionUnsupported
+        | AnswerArtifactExportBundleInspectionIssueKind::IntegrityAlgorithmMissing
+        | AnswerArtifactExportBundleInspectionIssueKind::IntegrityAlgorithmUnsupported
+        | AnswerArtifactExportBundleInspectionIssueKind::IntegrityDuplicatePath
+        | AnswerArtifactExportBundleInspectionIssueKind::IntegrityPathInvalid => {
+            file_label == EXPORT_BUNDLE_INTEGRITY_LABEL
+        }
+        _ => false,
+    }
+}
+
 fn inspection_issue_kind_counts_from_bundle_issues(
     issues: &[AnswerArtifactExportBundleInspectionIssue],
 ) -> Vec<AnswerArtifactExportBundleInspectionIssueKindCount> {
@@ -2150,6 +2347,41 @@ mod tests {
         let temp_path = temp.path().to_string_lossy();
         assert!(!format!("{inspection:?}").contains(temp_path.as_ref()));
         assert!(!format!("{:?}", inspection.issue_groups).contains(temp_path.as_ref()));
+    }
+
+    fn assert_file_statuses_path_free(inspection: &AnswerArtifactExportBundleInspection, temp: &tempfile::TempDir) {
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!format!("{inspection:?}").contains(temp_path.as_ref()));
+        assert!(!format!("{:?}", inspection.file_statuses).contains(temp_path.as_ref()));
+        assert!(inspection.file_statuses.iter().all(|item| {
+            !item.file_label.contains(".aegis")
+                && !item.file_label.contains('\\')
+                && !item.file_label.contains('/')
+                && !Path::new(&item.file_label).is_absolute()
+        }));
+    }
+
+    fn assert_file_status_labels(inspection: &AnswerArtifactExportBundleInspection) {
+        assert_eq!(
+            inspection.file_statuses.iter().map(|item| item.file_label.as_str()).collect::<Vec<_>>(),
+            vec![
+                "export_manifest.json",
+                "export_issues.json",
+                "summary.json",
+                "export_integrity.json",
+            ]
+        );
+    }
+
+    fn file_status<'a>(
+        inspection: &'a AnswerArtifactExportBundleInspection,
+        file_label: &str,
+    ) -> &'a AnswerArtifactExportBundleFileStatus {
+        inspection
+            .file_statuses
+            .iter()
+            .find(|item| item.file_label == file_label)
+            .unwrap()
     }
 
     fn assert_report_preview_section_headings(inspection: &AnswerArtifactExportBundleInspection, headings: &[&str]) {
@@ -3133,11 +3365,26 @@ mod tests {
         assert!(inspection.summary_counts.as_ref().unwrap().issue_kinds.is_empty());
         assert!(inspection.issue_kind_counts.as_ref().unwrap().is_empty());
         assert!(inspection.issue_groups.is_empty());
+        assert_file_status_labels(&inspection);
+        assert!(inspection.file_statuses.iter().all(|item| item.present));
+        assert!(inspection.file_statuses.iter().all(|item| item.parsed));
+        assert!(inspection.file_statuses.iter().all(|item| !item.malformed));
+        assert!(inspection.file_statuses.iter().all(|item| item.schema_status == "supported"));
+        assert!(inspection.file_statuses.iter().all(|item| item.issue_count == 0));
+        assert!(inspection.file_statuses.iter().all(|item| item.status == "parsed"));
+        assert!(inspection.file_statuses.iter().all(|item| {
+            item.schema_version.as_deref() == Some(ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION)
+        }));
+        assert_eq!(file_status(&inspection, "export_manifest.json").integrity_status, "verified");
+        assert_eq!(file_status(&inspection, "export_issues.json").integrity_status, "verified");
+        assert_eq!(file_status(&inspection, "summary.json").integrity_status, "verified");
+        assert_eq!(file_status(&inspection, "export_integrity.json").integrity_status, "parsed");
         assert_issue_groups_well_formed(&inspection);
         assert!(inspection.summary_counts.as_ref().unwrap().sources.windows(2).all(|pair| pair[0].source_id <= pair[1].source_id));
         assert!(format!("{inspection:?}").find(temp.path().to_string_lossy().as_ref()).is_none());
         assert_report_preview_path_free(&inspection, &temp);
         assert_issue_groups_path_free(&inspection, &temp);
+        assert_file_statuses_path_free(&inspection, &temp);
         assert!(!final_answer.final_answer_id.is_empty());
     }
 
@@ -3220,8 +3467,16 @@ mod tests {
         assert_issue_group_kinds(&inspection, &[AnswerArtifactExportBundleInspectionIssueKind::MissingIntegrity]);
         assert_eq!(inspection.issue_groups[0].count, 1);
         assert_issue_groups_well_formed(&inspection);
+        assert_file_status_labels(&inspection);
+        assert_eq!(file_status(&inspection, "export_integrity.json").present, false);
+        assert_eq!(file_status(&inspection, "export_integrity.json").parsed, false);
+        assert_eq!(file_status(&inspection, "export_integrity.json").status, "missing");
+        assert_eq!(file_status(&inspection, "export_integrity.json").integrity_status, "missing");
+        assert_eq!(file_status(&inspection, "export_integrity.json").issue_count, 1);
+        assert!(inspection.file_statuses.iter().filter(|item| item.file_label != "export_integrity.json").all(|item| item.present));
         assert_report_preview_path_free(&inspection, &temp);
         assert_issue_groups_path_free(&inspection, &temp);
+        assert_file_statuses_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3256,8 +3511,15 @@ mod tests {
         assert_issue_group_kinds(&inspection, &[AnswerArtifactExportBundleInspectionIssueKind::IntegrityReadFailed]);
         assert_eq!(inspection.issue_groups[0].count, 1);
         assert_issue_groups_well_formed(&inspection);
+        assert_file_status_labels(&inspection);
+        assert_eq!(file_status(&inspection, "export_integrity.json").present, true);
+        assert_eq!(file_status(&inspection, "export_integrity.json").parsed, false);
+        assert_eq!(file_status(&inspection, "export_integrity.json").malformed, true);
+        assert_eq!(file_status(&inspection, "export_integrity.json").status, "malformed");
+        assert_eq!(file_status(&inspection, "export_integrity.json").issue_count, 1);
         assert_report_preview_path_free(&inspection, &temp);
         assert_issue_groups_path_free(&inspection, &temp);
+        assert_file_statuses_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3387,7 +3649,14 @@ mod tests {
         assert!(inspection.report_preview.sections[2].lines[1].contains("integrity_path_invalid"));
         assert!(inspection.report_preview.sections[2].lines[2].contains("integrity_byte_count_mismatch"));
         assert!(inspection.report_preview.sections[2].lines[3].contains("integrity_digest_mismatch"));
+        assert_file_status_labels(&inspection);
+        assert_eq!(file_status(&inspection, "summary.json").integrity_status, "failed");
+        assert_eq!(file_status(&inspection, "summary.json").status, "integrity_issue");
+        assert_eq!(file_status(&inspection, "summary.json").issue_count, 2);
+        assert_eq!(file_status(&inspection, "export_integrity.json").integrity_status, "failed");
+        assert!(file_status(&inspection, "export_integrity.json").issue_count >= 2);
         assert_report_preview_path_free(&inspection, &temp);
+        assert_file_statuses_path_free(&inspection, &temp);
     }
 
     #[test]
@@ -3475,6 +3744,13 @@ mod tests {
         assert!(first.report_preview.sections[2].lines.iter().any(|line| line.contains("schema_version_missing")));
         assert_report_preview_path_free(&first, &temp);
         assert_issue_groups_path_free(&first, &temp);
+        assert_file_status_labels(&first);
+        assert_eq!(file_status(&first, "export_manifest.json").schema_status, "missing");
+        assert_eq!(file_status(&first, "export_issues.json").schema_status, "missing");
+        assert_eq!(file_status(&first, "summary.json").schema_status, "missing");
+        assert_eq!(file_status(&first, "export_manifest.json").status, "schema_issue");
+        assert_eq!(first.file_statuses, second.file_statuses);
+        assert_file_statuses_path_free(&first, &temp);
         assert!(!format!("{first:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3546,6 +3822,14 @@ mod tests {
         assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("schema_version_mismatch")));
         assert_report_preview_path_free(&inspection, &temp);
         assert_issue_groups_path_free(&inspection, &temp);
+        assert_file_status_labels(&inspection);
+        assert_eq!(inspection.file_statuses, inspection_again.file_statuses);
+        assert_eq!(file_status(&inspection, "export_manifest.json").schema_status, "unsupported");
+        assert_eq!(file_status(&inspection, "export_issues.json").schema_status, "unsupported");
+        assert_eq!(file_status(&inspection, "summary.json").schema_status, "unsupported");
+        assert_eq!(file_status(&inspection, "export_manifest.json").status, "schema_issue");
+        assert!(file_status(&inspection, "export_manifest.json").issue_count >= 1);
+        assert_file_statuses_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3576,6 +3860,12 @@ mod tests {
         assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("issues_read_failed")));
         assert_report_preview_path_free(&inspection, &temp);
         assert_issue_groups_path_free(&inspection, &temp);
+        assert_file_status_labels(&inspection);
+        assert_eq!(file_status(&inspection, "export_issues.json").present, true);
+        assert_eq!(file_status(&inspection, "export_issues.json").parsed, false);
+        assert_eq!(file_status(&inspection, "export_issues.json").malformed, true);
+        assert_eq!(file_status(&inspection, "export_issues.json").status, "malformed");
+        assert_file_statuses_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3621,6 +3911,11 @@ mod tests {
         assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("schema_version_mismatch")));
         assert_report_preview_path_free(&inspection, &temp);
         assert_issue_groups_path_free(&inspection, &temp);
+        assert_file_status_labels(&inspection);
+        assert_eq!(file_status(&inspection, "summary.json").schema_status, "unsupported");
+        assert_eq!(file_status(&inspection, "summary.json").status, "schema_issue");
+        assert_eq!(file_status(&inspection, "summary.json").schema_version.as_deref(), Some("answer_artifact_export.v2"));
+        assert_file_statuses_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3651,6 +3946,12 @@ mod tests {
         assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
         assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("schema_version_missing")));
         assert_report_preview_path_free(&inspection, &temp);
+        assert_file_status_labels(&inspection);
+        assert_eq!(file_status(&inspection, "export_issues.json").parsed, true);
+        assert_eq!(file_status(&inspection, "export_issues.json").schema_status, "missing");
+        assert_eq!(file_status(&inspection, "export_issues.json").status, "schema_issue");
+        assert_eq!(file_status(&inspection, "export_issues.json").issue_count, 3);
+        assert_file_statuses_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3680,8 +3981,12 @@ mod tests {
         assert_report_preview_section_headings(&first, &["Status", "Issue counts by kind"]);
         assert_eq!(first.report_preview.sections[0].lines.len(), 7);
         assert!(first.report_preview.sections[1].lines.iter().any(|line| line == "No issue kinds reported."));
+        assert_eq!(first.file_statuses, second.file_statuses);
+        assert_file_status_labels(&first);
         assert_report_preview_path_free(&first, &temp);
         assert_report_preview_path_free(&second, &temp);
+        assert_file_statuses_path_free(&first, &temp);
+        assert_file_statuses_path_free(&second, &temp);
     }
 
     #[test]
@@ -3736,6 +4041,10 @@ mod tests {
         assert_issue_groups_path_free(&first, &temp);
         assert_report_preview_path_free(&second, &temp);
         assert_issue_groups_path_free(&second, &temp);
+        assert_eq!(first.file_statuses, second.file_statuses);
+        assert_file_status_labels(&first);
+        assert_file_statuses_path_free(&first, &temp);
+        assert_file_statuses_path_free(&second, &temp);
     }
 
     #[test]
@@ -3811,8 +4120,16 @@ mod tests {
         assert_issue_groups_well_formed(&inspection);
         assert_eq!(inspection.report_preview.sections[2].lines.len(), 4);
         assert!(inspection.report_preview.sections[2].lines.iter().all(|line| line.contains("missing_")));
+        assert_file_status_labels(&inspection);
+        assert!(inspection.file_statuses.iter().all(|item| !item.present));
+        assert!(inspection.file_statuses.iter().all(|item| !item.parsed));
+        assert!(inspection.file_statuses.iter().all(|item| !item.malformed));
+        assert!(inspection.file_statuses.iter().all(|item| item.status == "missing"));
+        assert!(inspection.file_statuses.iter().all(|item| item.issue_count == 1));
+        assert_eq!(fs::read_dir(&export_root).unwrap().count(), 0);
         assert_report_preview_path_free(&inspection, &temp);
         assert_issue_groups_path_free(&inspection, &temp);
+        assert_file_statuses_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3864,6 +4181,10 @@ mod tests {
         assert!(!manifest_inspection.is_consistent);
         assert_report_preview_section_headings(&manifest_inspection, &["Status", "Issue counts by kind", "Issues"]);
         assert!(manifest_inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("manifest_read_failed")));
+        assert_file_status_labels(&manifest_inspection);
+        assert_eq!(file_status(&manifest_inspection, "export_manifest.json").present, true);
+        assert_eq!(file_status(&manifest_inspection, "export_manifest.json").malformed, true);
+        assert_eq!(file_status(&manifest_inspection, "export_manifest.json").status, "malformed");
 
         let issues_root = temp.path().join("issues-bundle");
         service.export_answer_artifacts(&issues_root).unwrap();
@@ -3874,6 +4195,10 @@ mod tests {
         assert!(!issues_inspection.is_consistent);
         assert_report_preview_section_headings(&issues_inspection, &["Status", "Issue counts by kind", "Issues"]);
         assert!(issues_inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("issues_read_failed")));
+        assert_file_status_labels(&issues_inspection);
+        assert_eq!(file_status(&issues_inspection, "export_issues.json").present, true);
+        assert_eq!(file_status(&issues_inspection, "export_issues.json").malformed, true);
+        assert_eq!(file_status(&issues_inspection, "export_issues.json").status, "malformed");
 
         let summary_root = temp.path().join("summary-bundle");
         service.export_answer_artifacts(&summary_root).unwrap();
@@ -3884,6 +4209,13 @@ mod tests {
         assert!(!summary_inspection.is_consistent);
         assert_report_preview_section_headings(&summary_inspection, &["Status", "Issue counts by kind", "Issues"]);
         assert!(summary_inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("summary_read_failed")));
+        assert_file_status_labels(&summary_inspection);
+        assert_eq!(file_status(&summary_inspection, "summary.json").present, true);
+        assert_eq!(file_status(&summary_inspection, "summary.json").malformed, true);
+        assert_eq!(file_status(&summary_inspection, "summary.json").status, "malformed");
+        assert_file_statuses_path_free(&manifest_inspection, &temp);
+        assert_file_statuses_path_free(&issues_inspection, &temp);
+        assert_file_statuses_path_free(&summary_inspection, &temp);
     }
 
     #[test]
@@ -3941,6 +4273,12 @@ mod tests {
         assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("summary_metadata_mismatch")));
         assert_report_preview_path_free(&inspection, &temp);
         assert_issue_groups_path_free(&inspection, &temp);
+        assert_file_status_labels(&inspection);
+        assert_eq!(file_status(&inspection, "summary.json").status, "integrity_issue");
+        assert!(file_status(&inspection, "summary.json").issue_count >= 5);
+        assert_eq!(file_status(&inspection, "summary.json").schema_status, "supported");
+        assert_eq!(file_status(&inspection, "summary.json").integrity_status, "failed");
+        assert_file_statuses_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
