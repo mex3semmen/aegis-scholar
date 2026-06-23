@@ -362,6 +362,27 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 38 — Retrieval / Evidence Pack Contract Baseline
+
+Planning boundary only.
+
+Phase 38.0 is a contract baseline for retrieval and evidence packs.
+It records the current mechanical, deterministic, path-free retrieval/evidence-pack boundaries without adding new behavior.
+No generation, LLM calls, claim inference, evidence rewriting, ranking, editing, import/repair/share/download/report-writing/export-writing behavior was added.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
