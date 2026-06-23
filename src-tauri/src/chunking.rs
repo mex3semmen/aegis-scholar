@@ -187,7 +187,8 @@ fn split_unit(unit: &ExtractedUnit) -> Vec<String> {
     while start < unit.text.len() {
         let mut end = (start + TARGET_CHUNK_CHARS).min(unit.text.len());
         if end < unit.text.len() {
-            if let Some(split) = unit.text[start..end].rfind(char::is_whitespace) {
+            let window = &unit.text[start..end];
+            if let Some(split) = window.rfind(char::is_whitespace) {
                 let candidate = start + split;
                 if candidate > start {
                     end = candidate;
@@ -197,13 +198,20 @@ fn split_unit(unit: &ExtractedUnit) -> Vec<String> {
         if end <= start {
             end = next_char_boundary(&unit.text, start + 1);
         }
+        while end < unit.text.len() && !unit.text.is_char_boundary(end) {
+            end += 1;
+        }
         let slice = unit.text[start..end].trim().to_string();
         if !slice.is_empty() {
             pieces.push(slice);
         }
         start = end;
-        while start < unit.text.len() && unit.text[start..].chars().next().map(|c| c.is_whitespace()).unwrap_or(false) {
-            start += unit.text[start..].chars().next().unwrap().len_utf8();
+        while start < unit.text.len() {
+            let ch = unit.text[start..].chars().next().unwrap();
+            if !ch.is_whitespace() {
+                break;
+            }
+            start += ch.len_utf8();
         }
     }
     pieces
@@ -320,6 +328,78 @@ mod tests {
     }
 
     #[test]
+    fn chunk_id_prefix_and_hash_prefix_are_stable() {
+        let report = ExtractionReport {
+            source_id: "src_1".into(),
+            version_id: "srcv_1".into(),
+            source_type: SourceType::MarkdownNote,
+            extracted_at: Utc::now(),
+            unit_count: 1,
+            warnings: vec![],
+            units: vec![ExtractedUnit {
+                source_id: "src_1".into(),
+                version_id: "srcv_1".into(),
+                locator: CitationLocator::paragraph("paragraph:1", None, 0, 5),
+                text: "hello".into(),
+                text_hash: sha256_text("hello"),
+                char_start: 0,
+                char_end: 5,
+            }],
+        };
+        let chunks = chunk_from_report(&report).unwrap();
+        assert!(chunks[0].chunk_id.starts_with("chk_"));
+        assert!(chunks[0].content_hash.starts_with("sha256:"));
+    }
+
+    #[test]
+    fn changing_chunk_inputs_changes_chunk_id() {
+        let base = ExtractionReport {
+            source_id: "src_1".into(),
+            version_id: "srcv_1".into(),
+            source_type: SourceType::MarkdownNote,
+            extracted_at: Utc::now(),
+            unit_count: 1,
+            warnings: vec![],
+            units: vec![ExtractedUnit {
+                source_id: "src_1".into(),
+                version_id: "srcv_1".into(),
+                locator: CitationLocator::paragraph("paragraph:1", None, 0, 5),
+                text: "hello".into(),
+                text_hash: sha256_text("hello"),
+                char_start: 0,
+                char_end: 5,
+            }],
+        };
+        let mut different_text = base.clone();
+        different_text.units[0].text = "world".into();
+        different_text.units[0].text_hash = sha256_text("world");
+        let mut different_source = base.clone();
+        different_source.source_id = "src_2".into();
+        let mut different_version = base.clone();
+        different_version.version_id = "srcv_2".into();
+        let mut different_unit_hash = base.clone();
+        different_unit_hash.units[0].text_hash = sha256_text("different");
+        let mut different_index = base.clone();
+        different_index.units.push(ExtractedUnit {
+            source_id: "src_1".into(),
+            version_id: "srcv_1".into(),
+            locator: CitationLocator::paragraph("paragraph:2", None, 6, 11),
+            text: "bravo".into(),
+            text_hash: sha256_text("bravo"),
+            char_start: 6,
+            char_end: 11,
+        });
+
+        let base_chunk = chunk_from_report(&base).unwrap()[0].clone();
+        assert_ne!(base_chunk.content_hash, chunk_from_report(&different_text).unwrap()[0].content_hash);
+        assert_ne!(base_chunk.chunk_id, chunk_from_report(&different_source).unwrap()[0].chunk_id);
+        assert_ne!(base_chunk.chunk_id, chunk_from_report(&different_version).unwrap()[0].chunk_id);
+        assert_ne!(base_chunk.chunk_id, chunk_from_report(&different_unit_hash).unwrap()[0].chunk_id);
+        let indexed = chunk_from_report(&different_index).unwrap();
+        assert_ne!(indexed[0].chunk_id, indexed[1].chunk_id);
+    }
+
+    #[test]
     fn chunk_report_is_serializable_json() {
         let report = ChunkingReport {
             source_id: "src_1".into(),
@@ -349,6 +429,44 @@ mod tests {
         assert_eq!(updated.ingestion_status, IngestionStatus::Chunked);
         let audit = fs::read_to_string(temp.path().join(".aegis").join("audit").join("events.jsonl")).unwrap();
         assert!(audit.contains("source_chunked"));
+    }
+
+    #[test]
+    fn short_extraction_units_preserve_locator_and_chunk_one_each() {
+        let report = ExtractionReport {
+            source_id: "src_1".into(),
+            version_id: "srcv_1".into(),
+            source_type: SourceType::MarkdownNote,
+            extracted_at: Utc::now(),
+            unit_count: 2,
+            warnings: vec![],
+            units: vec![
+                ExtractedUnit {
+                    source_id: "src_1".into(),
+                    version_id: "srcv_1".into(),
+                    locator: CitationLocator::paragraph("paragraph:1", Some(vec!["A".into()]), 0, 5),
+                    text: "alpha".into(),
+                    text_hash: sha256_text("alpha"),
+                    char_start: 0,
+                    char_end: 5,
+                },
+                ExtractedUnit {
+                    source_id: "src_1".into(),
+                    version_id: "srcv_1".into(),
+                    locator: CitationLocator::paragraph("paragraph:2", Some(vec!["B".into()]), 6, 11),
+                    text: "bravo".into(),
+                    text_hash: sha256_text("bravo"),
+                    char_start: 6,
+                    char_end: 11,
+                },
+            ],
+        };
+        let chunks = chunk_from_report(&report).unwrap();
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].locator, report.units[0].locator);
+        assert_eq!(chunks[1].locator, report.units[1].locator);
+        assert_eq!(chunks[0].source_id, "src_1");
+        assert_eq!(chunks[0].version_id, "srcv_1");
     }
 
     #[test]
@@ -409,6 +527,107 @@ mod tests {
         assert!(chunks.len() >= 2);
         assert!(chunks.iter().all(|c| !c.text.is_empty()));
         assert_eq!(chunks[0].locator.locator_type, LocatorType::Paragraph);
+        assert!(chunks.iter().all(|c| c.text.len() <= MAX_CHUNK_CHARS));
+    }
+
+    #[test]
+    fn whitespace_is_preferred_when_splitting_long_text() {
+        let text = format!("{} {}", "a".repeat(1199), "b".repeat(1000));
+        let report = ExtractionReport {
+            source_id: "src_1".into(),
+            version_id: "srcv_1".into(),
+            source_type: SourceType::MarkdownNote,
+            extracted_at: Utc::now(),
+            unit_count: 1,
+            warnings: vec![],
+            units: vec![ExtractedUnit {
+                source_id: "src_1".into(),
+                version_id: "srcv_1".into(),
+                locator: CitationLocator::paragraph("paragraph:1", None, 0, text.len()),
+                text: text.clone(),
+                text_hash: sha256_text(&text),
+                char_start: 0,
+                char_end: text.len(),
+            }],
+        };
+        let chunks = chunk_from_report(&report).unwrap();
+        assert!(chunks.len() >= 2);
+        assert!(chunks[0].text.ends_with('a'));
+    }
+
+    #[test]
+    fn unicode_split_is_valid_utf8() {
+        let text = "🙂".repeat(700);
+        let report = ExtractionReport {
+            source_id: "src_1".into(),
+            version_id: "srcv_1".into(),
+            source_type: SourceType::MarkdownNote,
+            extracted_at: Utc::now(),
+            unit_count: 1,
+            warnings: vec![],
+            units: vec![ExtractedUnit {
+                source_id: "src_1".into(),
+                version_id: "srcv_1".into(),
+                locator: CitationLocator::paragraph("paragraph:1", None, 0, text.len()),
+                text: text.clone(),
+                text_hash: sha256_text(&text),
+                char_start: 0,
+                char_end: text.len(),
+            }],
+        };
+        let chunks = chunk_from_report(&report).unwrap();
+        assert!(chunks.iter().all(|chunk| chunk.text.is_char_boundary(chunk.text.len())));
+        assert!(chunks.iter().all(|chunk| !chunk.text.is_empty()));
+    }
+
+    #[test]
+    fn crlf_text_splits_deterministically() {
+        let text = "alpha\r\nbeta\r\ngamma\r\n".to_string();
+        let report = ExtractionReport {
+            source_id: "src_1".into(),
+            version_id: "srcv_1".into(),
+            source_type: SourceType::MarkdownNote,
+            extracted_at: Utc::now(),
+            unit_count: 1,
+            warnings: vec![],
+            units: vec![ExtractedUnit {
+                source_id: "src_1".into(),
+                version_id: "srcv_1".into(),
+                locator: CitationLocator::paragraph("paragraph:1", None, 0, text.len()),
+                text: text.clone(),
+                text_hash: sha256_text(&text),
+                char_start: 0,
+                char_end: text.len(),
+            }],
+        };
+        let a = chunk_from_report(&report).unwrap();
+        let b = chunk_from_report(&report).unwrap();
+        assert_eq!(a.iter().map(|c| &c.text).collect::<Vec<_>>(), b.iter().map(|c| &c.text).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn chunks_from_split_unit_preserve_locator() {
+        let text = "a".repeat(2001);
+        let report = ExtractionReport {
+            source_id: "src_1".into(),
+            version_id: "srcv_1".into(),
+            source_type: SourceType::MarkdownNote,
+            extracted_at: Utc::now(),
+            unit_count: 1,
+            warnings: vec![],
+            units: vec![ExtractedUnit {
+                source_id: "src_1".into(),
+                version_id: "srcv_1".into(),
+                locator: CitationLocator::paragraph("paragraph:1", Some(vec!["Section".into()]), 10, 20),
+                text: text.clone(),
+                text_hash: sha256_text(&text),
+                char_start: 10,
+                char_end: 20,
+            }],
+        };
+        let chunks = chunk_from_report(&report).unwrap();
+        assert!(chunks.len() >= 2);
+        assert!(chunks.iter().all(|chunk| chunk.locator == report.units[0].locator));
     }
 
     #[test]
@@ -495,6 +714,69 @@ mod tests {
         assert_ne!(updated.ingestion_status, IngestionStatus::Chunked);
         let audit = fs::read_to_string(temp.path().join(".aegis").join("audit").join("events.jsonl")).unwrap();
         assert!(audit.contains("source_chunking_failed"));
+    }
+
+    #[test]
+    fn malformed_extraction_report_does_not_mark_chunked() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("note.md");
+        fs::write(&source_path, "hello").unwrap();
+        let authority = CorpusAuthority::new(temp.path());
+        let source = authority.register_source(&source_path, valid_metadata()).unwrap();
+        let extraction_path = temp
+            .path()
+            .join(".aegis")
+            .join("corpus")
+            .join("sources")
+            .join(&source.source_id)
+            .join("versions")
+            .join(&source.version_id)
+            .join("extraction")
+            .join("report.json");
+        fs::create_dir_all(extraction_path.parent().unwrap()).unwrap();
+        fs::write(&extraction_path, "{not json").unwrap();
+        let result = ChunkingService::new(temp.path()).chunk_source(&source.source_id);
+        assert!(matches!(result, Err(AegisError::ChunkingReportReadFailed)));
+        let updated = CorpusAuthority::new(temp.path()).get_source(&source.source_id).unwrap();
+        assert_ne!(updated.ingestion_status, IngestionStatus::Chunked);
+        let chunks_path = ChunkingService::new(temp.path()).report_path(&source.source_id, &source.version_id);
+        assert!(!chunks_path.exists());
+    }
+
+    #[test]
+    fn empty_extraction_report_does_not_mark_chunked() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("note.md");
+        fs::write(&source_path, "hello").unwrap();
+        let authority = CorpusAuthority::new(temp.path());
+        let source = authority.register_source(&source_path, valid_metadata()).unwrap();
+        let extraction_path = temp
+            .path()
+            .join(".aegis")
+            .join("corpus")
+            .join("sources")
+            .join(&source.source_id)
+            .join("versions")
+            .join(&source.version_id)
+            .join("extraction")
+            .join("report.json");
+        fs::create_dir_all(extraction_path.parent().unwrap()).unwrap();
+        let extraction = ExtractionReport {
+            source_id: source.source_id.clone(),
+            version_id: source.version_id.clone(),
+            source_type: SourceType::MarkdownNote,
+            extracted_at: Utc::now(),
+            unit_count: 0,
+            warnings: vec![],
+            units: vec![],
+        };
+        fs::write(&extraction_path, serde_json::to_string_pretty(&extraction).unwrap()).unwrap();
+        let result = ChunkingService::new(temp.path()).chunk_source(&source.source_id);
+        assert!(matches!(result, Err(AegisError::ChunkingInputEmpty)));
+        let updated = CorpusAuthority::new(temp.path()).get_source(&source.source_id).unwrap();
+        assert_ne!(updated.ingestion_status, IngestionStatus::Chunked);
+        let chunks_path = ChunkingService::new(temp.path()).report_path(&source.source_id, &source.version_id);
+        assert!(!chunks_path.exists());
     }
 
     #[test]
