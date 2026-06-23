@@ -95,6 +95,26 @@ pub struct AnswerArtifactIssue {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnswerArtifactExportManifest {
+    pub source_count: usize,
+    pub draft_count: usize,
+    pub grounded_answer_count: usize,
+    pub final_answer_count: usize,
+    pub issue_count: usize,
+    pub sources: Vec<AnswerArtifactExportSource>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnswerArtifactExportSource {
+    pub source_id: String,
+    pub draft_count: usize,
+    pub grounded_answer_count: usize,
+    pub final_answer_count: usize,
+    pub final_answers: Vec<FinalAnswerMetadata>,
+    pub issue_count: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AnswerArtifactIssueKind {
@@ -159,6 +179,10 @@ pub fn get_answer_artifact_health(root: impl Into<PathBuf>) -> AegisResult<Answe
 
 pub fn list_answer_artifact_issues(root: impl Into<PathBuf>) -> AegisResult<Vec<AnswerArtifactIssue>> {
     FinalAnswerService::new(root).list_answer_artifact_issues()
+}
+
+pub fn get_answer_artifact_export_manifest(root: impl Into<PathBuf>) -> AegisResult<AnswerArtifactExportManifest> {
+    FinalAnswerService::new(root).get_answer_artifact_export_manifest()
 }
 
 pub fn build_final_answer_from_grounded_answer(grounded_answer: &GroundedAnswer) -> AegisResult<FinalAnswer> {
@@ -425,6 +449,57 @@ impl FinalAnswerService {
         Ok(issues)
     }
 
+    pub fn get_answer_artifact_export_manifest(&self) -> AegisResult<AnswerArtifactExportManifest> {
+        let registry = SourceRegistry::load(&self.paths.registry_path())?;
+        let issues = self.list_answer_artifact_issues()?;
+        let mut sources = Vec::new();
+        let mut source_count = 0;
+        let mut draft_count = 0;
+        let mut grounded_answer_count = 0;
+        let mut final_answer_count = 0;
+        let mut issue_count = 0;
+
+        for record in registry.list_sources() {
+            let version_dir = self.paths.source_version_dir(&record.source_id, &record.version_id);
+            let per_source_draft_count = count_json_files(version_dir.join("answer_drafts"))?;
+            let per_source_grounded_answer_count = count_json_files(version_dir.join("grounded_answers"))?;
+            let final_answers = collect_manifest_final_answers(version_dir.join("final_answers"))?;
+            let per_source_issue_count = issues.iter().filter(|issue| issue.source_id == record.source_id).count();
+            if per_source_draft_count == 0
+                && per_source_grounded_answer_count == 0
+                && final_answers.is_empty()
+                && per_source_issue_count == 0
+            {
+                continue;
+            }
+
+            source_count += 1;
+            draft_count += per_source_draft_count;
+            grounded_answer_count += per_source_grounded_answer_count;
+            final_answer_count += final_answers.len();
+            issue_count += per_source_issue_count;
+
+            sources.push(AnswerArtifactExportSource {
+                source_id: record.source_id,
+                draft_count: per_source_draft_count,
+                grounded_answer_count: per_source_grounded_answer_count,
+                final_answer_count: final_answers.len(),
+                final_answers,
+                issue_count: per_source_issue_count,
+            });
+        }
+
+        sources.sort_by(|left, right| left.source_id.cmp(&right.source_id));
+        Ok(AnswerArtifactExportManifest {
+            source_count,
+            draft_count,
+            grounded_answer_count,
+            final_answer_count,
+            issue_count,
+            sources,
+        })
+    }
+
     fn write_final_answer(&self, final_answer: &FinalAnswer) -> AegisResult<()> {
         let path = self.answer_path(&final_answer.source_id, &final_answer.version_id, &final_answer.final_answer_id);
         if let Some(parent) = path.parent() {
@@ -612,6 +687,41 @@ fn issue_kind_rank(issue_kind: &AnswerArtifactIssueKind) -> usize {
         AnswerArtifactIssueKind::NeedsEvidenceStatement => 1,
         AnswerArtifactIssueKind::UnsupportedStatement => 2,
     }
+}
+
+fn collect_manifest_final_answers(final_answer_dir: PathBuf) -> AegisResult<Vec<FinalAnswerMetadata>> {
+    if !final_answer_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut items = Vec::new();
+    for entry in fs::read_dir(&final_answer_dir).map_err(|_| AegisError::FinalAnswerReadFailed)? {
+        let entry = entry.map_err(|_| AegisError::FinalAnswerReadFailed)?;
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let content = match fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(_) => continue,
+        };
+        match serde_json::from_str::<FinalAnswer>(&content) {
+            Ok(answer) => items.push(FinalAnswerMetadata {
+                final_answer_id: answer.final_answer_id,
+                grounded_answer_id: answer.grounded_answer_id,
+                statement_count: answer.statement_count,
+                unsupported_count: answer.unsupported_count,
+                needs_evidence_count: answer
+                    .statements
+                    .iter()
+                    .filter(|statement| statement.status == FinalAnswerStatementStatus::NeedsEvidence)
+                    .count(),
+            }),
+            Err(_) => continue,
+        }
+    }
+    items.sort_by(|left, right| left.final_answer_id.cmp(&right.final_answer_id));
+    Ok(items)
 }
 
 #[cfg(test)]
@@ -1311,6 +1421,106 @@ mod tests {
 
         let issues = service.list_answer_artifact_issues().unwrap();
         assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn answer_artifact_export_manifest_is_empty_for_empty_storage() {
+        let temp = tempfile::tempdir().unwrap();
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let manifest = service.get_answer_artifact_export_manifest().unwrap();
+        assert_eq!(manifest.source_count, 0);
+        assert_eq!(manifest.draft_count, 0);
+        assert_eq!(manifest.grounded_answer_count, 0);
+        assert_eq!(manifest.final_answer_count, 0);
+        assert_eq!(manifest.issue_count, 0);
+        assert!(manifest.sources.is_empty());
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn answer_artifact_export_manifest_counts_artifacts_and_issues() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_a, version_a, draft_a, grounded_a) = prepare_grounded(&temp.path().to_path_buf());
+        let source_path_b = temp.path().join("notes_b.md");
+        fs::write(&source_path_b, "delta epsilon zeta").unwrap();
+        let authority = CorpusAuthority::new(temp.path().to_path_buf());
+        authority.register_source(source_path_b.to_string_lossy().to_string(), valid_metadata()).unwrap();
+        let registry = SourceRegistry::load(&CorpusPaths::new(temp.path().to_path_buf()).registry_path()).unwrap();
+        let source_b = registry.sources.iter().find(|record| record.source_id != source_a).cloned().unwrap();
+
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let draft = crate::answer_draft::AnswerDraftService::new(temp.path().to_path_buf())
+            .read_answer_draft(&source_a, &draft_a)
+            .unwrap();
+        let grounded = crate::grounded_answer::read_grounded_answer(temp.path().to_path_buf(), &source_a, &grounded_a).unwrap();
+        let final_answer = service.build_final_answer(&source_a, &grounded.grounded_answer_id).unwrap();
+
+        let source_a_dir = CorpusPaths::new(temp.path().to_path_buf()).source_version_dir(&source_a, &version_a);
+        let draft_dir_a = source_a_dir.join("answer_drafts");
+        fs::write(draft_dir_a.join("adr_extra.json"), serde_json::to_string_pretty(&draft).unwrap()).unwrap();
+        let grounded_dir_a = source_a_dir.join("grounded_answers");
+        fs::write(grounded_dir_a.join("gan_extra.json"), serde_json::to_string_pretty(&grounded).unwrap()).unwrap();
+        let final_dir_a = source_a_dir.join("final_answers");
+        let mut unsupported = final_answer.clone();
+        unsupported.final_answer_id = "fan_unsupported".to_string();
+        unsupported.statements[0].status = FinalAnswerStatementStatus::Unsupported;
+        unsupported.statement_count = 1;
+        unsupported.unsupported_count = 1;
+        fs::write(final_dir_a.join("fan_unsupported.json"), serde_json::to_string_pretty(&unsupported).unwrap()).unwrap();
+        fs::write(final_dir_a.join("fan_bad.json"), "{not-json").unwrap();
+
+        let source_b_dir = CorpusPaths::new(temp.path().to_path_buf()).source_version_dir(&source_b.source_id, &source_b.version_id);
+        fs::create_dir_all(source_b_dir.join("answer_drafts")).unwrap();
+        fs::create_dir_all(source_b_dir.join("grounded_answers")).unwrap();
+        fs::create_dir_all(source_b_dir.join("final_answers")).unwrap();
+        fs::write(source_b_dir.join("answer_drafts").join("adr_b.json"), serde_json::to_string_pretty(&draft).unwrap()).unwrap();
+        fs::write(source_b_dir.join("grounded_answers").join("gan_b.json"), serde_json::to_string_pretty(&grounded).unwrap()).unwrap();
+        let mut needs = final_answer.clone();
+        needs.final_answer_id = "fan_b_needs".to_string();
+        needs.statements[0].status = FinalAnswerStatementStatus::NeedsEvidence;
+        needs.statement_count = 1;
+        needs.unsupported_count = 1;
+        fs::write(source_b_dir.join("final_answers").join("fan_b_needs.json"), serde_json::to_string_pretty(&needs).unwrap()).unwrap();
+
+        let manifest = service.get_answer_artifact_export_manifest().unwrap();
+        let issues = service.list_answer_artifact_issues().unwrap();
+
+        assert_eq!(manifest.source_count, 2);
+        assert_eq!(manifest.draft_count, 3);
+        assert_eq!(manifest.grounded_answer_count, 3);
+        assert_eq!(manifest.final_answer_count, 3);
+        assert_eq!(manifest.issue_count, issues.len());
+        assert!(manifest.sources.windows(2).all(|pair| pair[0].source_id <= pair[1].source_id));
+        assert!(manifest.sources.iter().all(|item| !format!("{item:?}").contains(".aegis")));
+        let source_a_manifest = manifest.sources.iter().find(|item| item.source_id == source_a).unwrap();
+        let source_b_manifest = manifest.sources.iter().find(|item| item.source_id == source_b.source_id).unwrap();
+        assert_eq!(source_a_manifest.final_answers.len(), 2);
+        assert_eq!(source_b_manifest.final_answers.len(), 1);
+        assert_eq!(source_a_manifest.issue_count + source_b_manifest.issue_count, manifest.issue_count);
+        assert!(source_a_manifest.final_answers.iter().all(|item| item.final_answer_id != "fan_bad"));
+        assert!(source_a_manifest.final_answers.iter().any(|item| item.final_answer_id == final_answer.final_answer_id));
+        assert!(source_a_manifest.final_answers.iter().any(|item| item.final_answer_id == "fan_unsupported"));
+        assert_eq!(source_b_manifest.final_answers[0].final_answer_id, "fan_b_needs");
+        assert!(!format!("{manifest:?}").contains(".aegis"));
+    }
+
+    #[test]
+    fn answer_artifact_export_manifest_does_not_create_directories_or_artifacts() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("notes.md");
+        fs::write(&source_path, "alpha beta gamma").unwrap();
+        let authority = CorpusAuthority::new(temp.path().to_path_buf());
+        authority.register_source(source_path.to_string_lossy().to_string(), valid_metadata()).unwrap();
+        let registry = SourceRegistry::load(&CorpusPaths::new(temp.path().to_path_buf()).registry_path()).unwrap();
+        let source_id = registry.sources.first().unwrap().source_id.clone();
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let manifest = service.get_answer_artifact_export_manifest().unwrap();
+        assert_eq!(manifest.source_count, 0);
+        let version_dir = CorpusPaths::new(temp.path().to_path_buf()).source_version_dir(&source_id, &registry.sources.first().unwrap().version_id);
+        assert!(!version_dir.join("answer_drafts").exists());
+        assert!(!version_dir.join("grounded_answers").exists());
+        assert!(!version_dir.join("final_answers").exists());
+        assert!(!version_dir.join("export").exists());
     }
 
     #[test]

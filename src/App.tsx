@@ -97,6 +97,24 @@ type AnswerArtifactIssue = {
   message: string;
 };
 
+type AnswerArtifactExportSource = {
+  source_id: string;
+  draft_count: number;
+  grounded_answer_count: number;
+  final_answer_count: number;
+  final_answers: FinalAnswerMetadata[];
+  issue_count: number;
+};
+
+type AnswerArtifactExportManifest = {
+  source_count: number;
+  draft_count: number;
+  grounded_answer_count: number;
+  final_answer_count: number;
+  issue_count: number;
+  sources: AnswerArtifactExportSource[];
+};
+
 function sanitizeBackendError(error: unknown) {
   const message = String(error);
   return message.replace(/[A-Za-z]:\\[^"]+/g, "[path hidden]").replace(/E:\\[^"]+/g, "[path hidden]");
@@ -129,6 +147,9 @@ export default function App() {
   const [artifactIssues, setArtifactIssues] = createSignal<AnswerArtifactIssue[]>([]);
   const [artifactIssuesError, setArtifactIssuesError] = createSignal<string | null>(null);
   const [artifactIssuesLoading, setArtifactIssuesLoading] = createSignal(false);
+  const [artifactManifest, setArtifactManifest] = createSignal<AnswerArtifactExportManifest | null>(null);
+  const [artifactManifestError, setArtifactManifestError] = createSignal<string | null>(null);
+  const [artifactManifestLoading, setArtifactManifestLoading] = createSignal(false);
 
   async function loadStatus() {
     setStatusError(null);
@@ -230,6 +251,25 @@ export default function App() {
       setArtifactIssuesError(sanitizeBackendError(err));
     } finally {
       setArtifactIssuesLoading(false);
+    }
+  }
+
+  async function loadArtifactManifest() {
+    if (artifactManifestLoading()) {
+      return;
+    }
+    setArtifactManifestLoading(true);
+    setArtifactManifestError(null);
+    try {
+      const result = await invoke<AnswerArtifactExportManifest>("get_answer_artifact_export_manifest", {
+        root: ".",
+      });
+      setArtifactManifest(result);
+    } catch (err) {
+      setArtifactManifest(null);
+      setArtifactManifestError(sanitizeBackendError(err));
+    } finally {
+      setArtifactManifestLoading(false);
     }
   }
 
@@ -337,12 +377,16 @@ export default function App() {
           <button onClick={loadArtifactIssues} disabled={artifactIssuesLoading()}>
             {artifactIssuesLoading() ? "Loading..." : "Load artifact issues"}
           </button>
+          <button onClick={loadArtifactManifest} disabled={artifactManifestLoading()}>
+            {artifactManifestLoading() ? "Loading..." : "Load export manifest"}
+          </button>
         </div>
         {finalAnswerError() && <p class="error">{finalAnswerError()}</p>}
         {artifactOverviewError() && <p class="error">{artifactOverviewError()}</p>}
         {artifactSourcesError() && <p class="error">{artifactSourcesError()}</p>}
         {artifactHealthError() && <p class="error">{artifactHealthError()}</p>}
         {artifactIssuesError() && <p class="error">{artifactIssuesError()}</p>}
+        {artifactManifestError() && <p class="error">{artifactManifestError()}</p>}
         <div class="artifact-overview">
           <h3>Sources with artifacts</h3>
           {artifactSources().length > 0 ? (
@@ -425,6 +469,43 @@ export default function App() {
             </>
           ) : (
             <p>No artifact issues loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Export manifest</h3>
+          {artifactManifest() ? (
+            <>
+              <div class="contract-meta">
+                <div><span>Sources</span><strong>{artifactManifest()!.source_count}</strong></div>
+                <div><span>Drafts</span><strong>{artifactManifest()!.draft_count}</strong></div>
+                <div><span>Grounded answers</span><strong>{artifactManifest()!.grounded_answer_count}</strong></div>
+                <div><span>Final answers</span><strong>{artifactManifest()!.final_answer_count}</strong></div>
+                <div><span>Issues</span><strong>{artifactManifest()!.issue_count}</strong></div>
+              </div>
+              {artifactManifest()!.sources.length > 0 ? (
+                <ul class="final-answer-list-items">
+                  {artifactManifest()!.sources.map((item) => (
+                    <li>
+                      <button class="final-answer-list-item" onClick={() => selectArtifactSourceId(item.source_id)}>
+                        <span>{item.source_id}</span>
+                        <small>
+                          drafts={item.draft_count} | grounded={item.grounded_answer_count} | final={item.final_answer_count} | issues={item.issue_count}
+                        </small>
+                        {item.final_answers.length > 0 && (
+                          <small>
+                            {item.final_answers.map((answer) => answer.final_answer_id).join(", ")}
+                          </small>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No export manifest entries yet.</p>
+              )}
+            </>
+          ) : (
+            <p>No export manifest loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">
