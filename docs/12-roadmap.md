@@ -210,6 +210,31 @@ Phase 29.0 is a no-op copy/accessibility review.
 It confirmed the inspector remained read-only and path-free, with no backend, export, validation, or DTO semantics changes.
 Phase 30.0 is this milestone-closure review for the export bundle inspector stack.
 It closes out the read-only inspector phases as implemented and keeps future import/repair/share/download/export-writing work out of scope.
+The export bundle inspector milestone from Phase 19 through Phase 30 is closed.
+No further inspector workflow expansion is planned in the current milestone.
+
+## Phase 31 — Post-Inspector Answer/Evidence Contract Hardening
+
+Planning boundary only.
+
+Focus areas:
+
+- existing answer artifacts
+- grounded answers
+- evidence status handling
+- pipeline contract preservation
+
+Do not implement:
+
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+- generation
+- ranking
+- editing
+- evidence rewriting
 
 ## Phase 11 — Obsidian Export
 
