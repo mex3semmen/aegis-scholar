@@ -1,6 +1,7 @@
 mod audit;
 mod corpus_authority;
 mod corpus_paths;
+mod chunking;
 mod extraction;
 mod errors;
 mod locators;
@@ -8,6 +9,7 @@ mod source_metadata;
 mod source_registry;
 
 use corpus_authority::CorpusAuthority;
+use chunking::{ChunkingReport, ChunkingService};
 use extraction::{ExtractionReport, ExtractionService};
 use errors::to_user_error;
 use source_metadata::{CorpusStatus, SourceMetadataInput, SourceMetadataPatch, SourceRecord};
@@ -76,6 +78,20 @@ fn get_extraction_report(root: String, source_id: String) -> Result<ExtractionRe
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn chunk_source(root: String, source_id: String) -> Result<ChunkingReport, String> {
+    ChunkingService::new(root)
+        .chunk_source(&source_id)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
+fn get_chunking_report(root: String, source_id: String) -> Result<ChunkingReport, String> {
+    ChunkingService::new(root)
+        .read_chunking_report(&source_id)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -86,7 +102,9 @@ pub fn run() {
             remove_source,
             get_corpus_status,
             extract_source,
-            get_extraction_report
+            get_extraction_report,
+            chunk_source,
+            get_chunking_report
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");

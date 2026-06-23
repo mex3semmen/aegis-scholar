@@ -78,3 +78,13 @@ Unsupported Phase 2.0 behavior:
 - `pdf`, `lecture_slides`, `paper`, and `textbook` return a typed unsupported extraction error for now
 - paragraph locators are emitted for text units
 - section locators are derived from Markdown headings and section paths
+
+## Phase 3 note
+
+Chunking consumes extraction reports and writes chunk reports under:
+
+```text
+.aegis/corpus/sources/{source_id}/versions/{version_id}/chunks/chunks.json
+```
+
+Phase 3 preserves source identity, version identity and locator identity without adding embeddings or retrieval indexes.

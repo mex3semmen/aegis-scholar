@@ -8,7 +8,9 @@
     "version_id",
     "locator",
     "text",
-    "content_hash"
+    "content_hash",
+    "extraction_unit_hash",
+    "chunk_index"
   ],
   "properties": {
     "chunk_id": { "type": "string", "pattern": "^chk_[a-zA-Z0-9_-]+$" },
@@ -17,6 +19,8 @@
     "locator": { "$ref": "./citation-locator.schema.json" },
     "text": { "type": "string", "minLength": 1 },
     "content_hash": { "type": "string", "pattern": "^sha256:.+" },
+    "extraction_unit_hash": { "type": "string", "pattern": "^sha256:.+" },
+    "chunk_index": { "type": "integer", "minimum": 0 },
     "discipline": { "type": "string" },
     "subdiscipline": { "type": "string" },
     "method_tags": { "type": "array", "items": { "type": "string" } },

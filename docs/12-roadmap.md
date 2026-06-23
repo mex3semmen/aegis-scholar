@@ -50,7 +50,9 @@ Phase 2.0 stores extraction reports under the managed corpus tree, supports `mar
 
 ## Phase 3 — Chunking + Metadata Index
 
-Implement chunk generation, discipline tags, method tags, locator indexes and ingestion reports.
+Implement deterministic chunk generation from extraction reports, preserving source/version/locator continuity.
+
+Phase 3 chunk reports live under the managed corpus tree and do not add embeddings or retrieval indexes.
 
 ## Phase 4 — Hybrid Retrieval MVP
 
