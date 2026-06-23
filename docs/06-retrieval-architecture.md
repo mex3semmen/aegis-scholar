@@ -66,3 +66,9 @@ Phase 4.0 adds a deterministic local lexical index over chunk reports under:
 ```
 
 This phase uses normalized term matching only. It does not add embeddings, answer synthesis or Evidence Packs.
+
+## Phase 4.1 note
+
+Retrieval queries are source-scoped, normalized deterministically, and rejected when they normalize to empty terms or request `max_results = 0`.
+
+On-demand index build is allowed when the managed index is missing, but malformed existing indexes fail explicitly rather than being rebuilt silently.

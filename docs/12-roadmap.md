@@ -59,6 +59,7 @@ Phase 3 chunk reports live under the managed corpus tree and do not add embeddin
 Implement a deterministic local retrieval index and lexical search over chunk reports.
 
 Phase 4.0 stores retrieval indexes under the managed corpus tree and does not add embeddings, answer synthesis or Evidence Packs.
+Phase 4.1 hardens read-back, query normalization, on-demand index build, and deterministic score/tie-break behavior without adding semantic retrieval.
 
 ## Phase 5 — Evidence Pack Builder
 

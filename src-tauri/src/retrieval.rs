@@ -81,8 +81,11 @@ impl RetrievalService {
         let record = registry.get_source(source_id)?;
         let result = (|| -> AegisResult<RetrievalIndex> {
             let chunking_report = ChunkingService::new(self.paths.root.clone()).read_chunking_report(source_id)?;
-            if chunking_report.chunks.is_empty() {
+            if chunking_report.chunks.is_empty() || count_chunking_report_units(&chunking_report) == 0 {
                 return Err(AegisError::RetrievalInputMissing);
+            }
+            if chunking_report.chunk_count != chunking_report.chunks.len() {
+                return Err(AegisError::RetrievalIndexFailed);
             }
 
             let entries = chunking_report
@@ -139,6 +142,13 @@ impl RetrievalService {
 
     pub fn search_source(&self, source_id: &str, query: &str, max_results: usize) -> AegisResult<RetrievalResponse> {
         self.paths.ensure_layout()?;
+        if max_results == 0 {
+            return Err(AegisError::RetrievalInvalidLimit);
+        }
+        let query_terms = normalize_terms(query);
+        if query.trim().is_empty() || query_terms.is_empty() {
+            return Err(AegisError::RetrievalQueryEmpty);
+        }
         let registry = SourceRegistry::load(&self.paths.registry_path())?;
         let record = registry.get_source(source_id)?;
         let index = match self.read_index(source_id) {
@@ -146,13 +156,6 @@ impl RetrievalService {
             Err(AegisError::RetrievalIndexMissing) => self.build_index(source_id)?,
             Err(error) => return Err(error),
         };
-        if query.trim().is_empty() {
-            return Err(AegisError::RetrievalQueryEmpty);
-        }
-        let query_terms = normalize_terms(query);
-        if query_terms.is_empty() {
-            return Err(AegisError::RetrievalQueryEmpty);
-        }
         let chunk_report = ChunkingService::new(self.paths.root.clone()).read_chunking_report(source_id)?;
         let chunk_map = chunk_report
             .chunks
@@ -197,11 +200,7 @@ impl RetrievalService {
                 other => other,
             }
         });
-        if max_results > 0 {
-            results.truncate(max_results);
-        } else {
-            results.clear();
-        }
+        results.truncate(max_results);
 
         let _ = record;
         Ok(RetrievalResponse {
@@ -267,6 +266,16 @@ fn preview_text(text: &str, limit: usize) -> String {
         end -= 1;
     }
     text[..end].to_string()
+}
+
+fn count_chunking_report_units(report: &crate::chunking::ChunkingReport) -> usize {
+    report
+        .chunks
+        .iter()
+        .map(|chunk| chunk.chunk_index)
+        .max()
+        .map(|max| max + 1)
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -356,6 +365,37 @@ mod tests {
     }
 
     #[test]
+    fn read_index_uses_current_source_version_from_registry() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source(&temp, "alpha beta\n");
+        let service = RetrievalService::new(temp.path());
+        let index = service.build_index(&source_id).unwrap();
+        let record = CorpusAuthority::new(temp.path()).get_source(&source_id).unwrap();
+        assert_eq!(index.version_id, record.version_id);
+    }
+
+    #[test]
+    fn read_index_uses_managed_corpus_path_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source(&temp, "alpha beta\n");
+        let service = RetrievalService::new(temp.path());
+        let index = service.build_index(&source_id).unwrap();
+        let path = temp
+            .path()
+            .join(".aegis")
+            .join("corpus")
+            .join("sources")
+            .join(&source_id)
+            .join("versions")
+            .join(&index.version_id)
+            .join("retrieval")
+            .join("index.json");
+        assert!(path.exists());
+        let reread = service.read_index(&source_id).unwrap();
+        assert_eq!(reread.source_id, source_id);
+    }
+
+    #[test]
     fn search_returns_matches_and_respects_max_results() {
         let temp = tempfile::tempdir().unwrap();
         let source_id = build_source(&temp, "alpha beta\n\nbeta gamma\n");
@@ -365,6 +405,7 @@ mod tests {
         assert_eq!(response.results.len(), 1);
         assert_eq!(response.results[0].source_id, source_id);
         assert!(!response.results[0].preview.is_empty());
+        assert_eq!(response.results[0].matched_terms, vec!["beta".to_string()]);
     }
 
     #[test]
@@ -385,6 +426,64 @@ mod tests {
         let first = service.search_source(&source_id, "alpha beta", 10).unwrap();
         let second = service.search_source(&source_id, "alpha beta", 10).unwrap();
         assert_eq!(first.results.iter().map(|r| &r.chunk_id).collect::<Vec<_>>(), second.results.iter().map(|r| &r.chunk_id).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn score_ordering_is_deterministic() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source(&temp, "alpha beta\n\nalpha gamma\n");
+        let service = RetrievalService::new(temp.path());
+        let response = service.search_source(&source_id, "alpha", 10).unwrap();
+        assert!(response.results.iter().all(|r| (0.0..=1.0).contains(&r.score)));
+        assert!(response.results.windows(2).all(|pair| pair[0].score >= pair[1].score));
+    }
+
+    #[test]
+    fn score_ties_are_sorted_by_chunk_id() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source(&temp, "alpha\n\nalpha\n");
+        let service = RetrievalService::new(temp.path());
+        let response = service.search_source(&source_id, "alpha", 10).unwrap();
+        assert!(response.results.len() >= 2);
+        assert!(response.results[0].score == response.results[1].score);
+        assert!(response.results[0].chunk_id < response.results[1].chunk_id);
+    }
+
+    #[test]
+    fn duplicate_query_terms_do_not_inflate_score() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source(&temp, "alpha beta\n");
+        let service = RetrievalService::new(temp.path());
+        let deduped = service.search_source(&source_id, "alpha beta", 10).unwrap();
+        let repeated = service.search_source(&source_id, "alpha alpha beta beta", 10).unwrap();
+        assert_eq!(deduped.results[0].score, repeated.results[0].score);
+    }
+
+    #[test]
+    fn max_results_zero_returns_typed_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source(&temp, "alpha beta\n");
+        let service = RetrievalService::new(temp.path());
+        let result = service.search_source(&source_id, "alpha", 0);
+        assert!(matches!(result, Err(AegisError::RetrievalInvalidLimit)));
+    }
+
+    #[test]
+    fn empty_query_returns_typed_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source(&temp, "alpha beta\n");
+        let service = RetrievalService::new(temp.path());
+        let result = service.search_source(&source_id, "", 10);
+        assert!(matches!(result, Err(AegisError::RetrievalQueryEmpty)));
+    }
+
+    #[test]
+    fn one_character_query_returns_typed_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source(&temp, "alpha beta\n");
+        let service = RetrievalService::new(temp.path());
+        let result = service.search_source(&source_id, "a b c", 10);
+        assert!(matches!(result, Err(AegisError::RetrievalQueryEmpty)));
     }
 
     #[test]
@@ -519,5 +618,65 @@ mod tests {
         let source_id = build_source(&temp, "alpha beta\n");
         let response = RetrievalService::new(temp.path()).search_source(&source_id, "alpha", 10).unwrap();
         assert_eq!(response.results[0].preview, "alpha beta");
+    }
+
+    #[test]
+    fn search_does_not_search_across_sources() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_a = build_source(&temp, "alpha beta\n");
+        let source_b_path = temp.path().join("other.md");
+        fs::write(&source_b_path, "alpha beta gamma\n").unwrap();
+        let authority = CorpusAuthority::new(temp.path());
+        let source_b = authority.register_source(&source_b_path, valid_metadata()).unwrap();
+        ExtractionService::new(temp.path()).extract_source(&source_b.source_id).unwrap();
+        ChunkingService::new(temp.path()).chunk_source(&source_b.source_id).unwrap();
+        let service = RetrievalService::new(temp.path());
+        let response = service.search_source(&source_a, "alpha", 10).unwrap();
+        assert!(response.results.iter().all(|r| r.source_id == source_a));
+    }
+
+    #[test]
+    fn chunk_count_mismatch_is_detected() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source(&temp, "alpha beta\n");
+        let source = CorpusAuthority::new(temp.path()).get_source(&source_id).unwrap();
+        let path = temp
+            .path()
+            .join(".aegis")
+            .join("corpus")
+            .join("sources")
+            .join(&source.source_id)
+            .join("versions")
+            .join(&source.version_id)
+            .join("chunks")
+            .join("chunks.json");
+        let mut report = ChunkingService::new(temp.path()).read_chunking_report(&source.source_id).unwrap();
+        report.chunk_count = report.chunk_count + 1;
+        fs::write(&path, serde_json::to_string_pretty(&report).unwrap()).unwrap();
+        let result = RetrievalService::new(temp.path()).build_index(&source.source_id);
+        assert!(matches!(result, Err(AegisError::RetrievalIndexFailed)));
+        let updated = CorpusAuthority::new(temp.path()).get_source(&source.source_id).unwrap();
+        assert_ne!(updated.ingestion_status, IngestionStatus::Indexed);
+    }
+
+    #[test]
+    fn failed_index_build_does_not_write_success_index() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("note.md");
+        fs::write(&source_path, "alpha").unwrap();
+        let source = CorpusAuthority::new(temp.path()).register_source(&source_path, valid_metadata()).unwrap();
+        let result = RetrievalService::new(temp.path()).build_index(&source.source_id);
+        assert!(matches!(result, Err(AegisError::ChunkingReportMissing)));
+        let path = temp
+            .path()
+            .join(".aegis")
+            .join("corpus")
+            .join("sources")
+            .join(&source.source_id)
+            .join("versions")
+            .join(&source.version_id)
+            .join("retrieval")
+            .join("index.json");
+        assert!(!path.exists());
     }
 }
