@@ -2325,8 +2325,40 @@ mod tests {
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::MissingManifest));
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::MissingIssues));
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::MissingSummary));
+        assert_eq!(
+            inspection.errors.iter().map(|issue| &issue.kind).collect::<Vec<_>>(),
+            vec![
+                &AnswerArtifactExportBundleInspectionIssueKind::MissingManifest,
+                &AnswerArtifactExportBundleInspectionIssueKind::MissingIssues,
+                &AnswerArtifactExportBundleInspectionIssueKind::MissingSummary,
+            ]
+        );
         assert!(inspection.errors.iter().all(|issue| matches!(issue.relative_path.as_deref(), Some("export_manifest.json" | "export_issues.json" | "summary.json"))));
         assert!(fs::read_dir(&export_root).unwrap().next().is_none());
+        assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_ignores_unrelated_files_safely() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("bundle-with-noise");
+        service.export_answer_artifacts(&export_root).unwrap();
+
+        fs::write(export_root.join("notes.txt"), "ignore me").unwrap();
+        fs::create_dir_all(export_root.join("nested").join("subdir")).unwrap();
+        fs::write(export_root.join("nested").join("subdir").join("ignore.json"), "{still-ignore}").unwrap();
+
+        let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+
+        assert!(inspection.is_consistent);
+        assert!(inspection.errors.is_empty());
+        assert!(inspection.warnings.is_empty());
+        assert!(inspection.has_manifest);
+        assert!(inspection.has_issues);
+        assert!(inspection.has_summary);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
