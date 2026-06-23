@@ -19,7 +19,7 @@ use extraction::{ExtractionReport, ExtractionService};
 use errors::to_user_error;
 use answer_draft::{AnswerDraft, AnswerDraftService};
 use evidence::{EvidencePack, EvidenceService};
-use final_answer::{build_final_answer as build_final_answer_impl, get_answer_artifact_overview as get_answer_artifact_overview_impl, list_final_answers as list_final_answers_impl, read_final_answer as read_final_answer_impl, AnswerArtifactOverview, FinalAnswer, FinalAnswerMetadata};
+use final_answer::{build_final_answer as build_final_answer_impl, get_answer_artifact_overview as get_answer_artifact_overview_impl, list_answer_artifact_sources as list_answer_artifact_sources_impl, list_final_answers as list_final_answers_impl, read_final_answer as read_final_answer_impl, AnswerArtifactOverview, AnswerArtifactSourceMetadata, FinalAnswer, FinalAnswerMetadata};
 use grounded_answer::{build_grounded_answer as build_grounded_answer_impl, read_grounded_answer as read_grounded_answer_impl, GroundedAnswer};
 use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
 use source_metadata::{CorpusStatus, SourceMetadataInput, SourceMetadataPatch, SourceRecord};
@@ -187,6 +187,12 @@ fn get_answer_artifact_overview(root: String, source_id: String) -> Result<Answe
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn list_answer_artifact_sources(root: String) -> Result<Vec<AnswerArtifactSourceMetadata>, String> {
+    list_answer_artifact_sources_impl(root)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -212,7 +218,8 @@ pub fn run() {
             build_final_answer,
             get_final_answer,
             list_final_answers,
-            get_answer_artifact_overview
+            get_answer_artifact_overview,
+            list_answer_artifact_sources
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");

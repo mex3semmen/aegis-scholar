@@ -64,6 +64,14 @@ pub struct AnswerArtifactOverview {
     pub final_answers: Vec<FinalAnswerMetadata>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnswerArtifactSourceMetadata {
+    pub source_id: String,
+    pub draft_count: usize,
+    pub grounded_answer_count: usize,
+    pub final_answer_count: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum FinalAnswerStatementStatus {
@@ -97,6 +105,10 @@ pub fn list_final_answers(root: impl Into<PathBuf>, source_id: &str) -> AegisRes
 
 pub fn get_answer_artifact_overview(root: impl Into<PathBuf>, source_id: &str) -> AegisResult<AnswerArtifactOverview> {
     FinalAnswerService::new(root).get_answer_artifact_overview(source_id)
+}
+
+pub fn list_answer_artifact_sources(root: impl Into<PathBuf>) -> AegisResult<Vec<AnswerArtifactSourceMetadata>> {
+    FinalAnswerService::new(root).list_answer_artifact_sources()
 }
 
 pub fn build_final_answer_from_grounded_answer(grounded_answer: &GroundedAnswer) -> AegisResult<FinalAnswer> {
@@ -218,6 +230,29 @@ impl FinalAnswerService {
             final_answer_count: final_answers.len(),
             final_answers,
         })
+    }
+
+    pub fn list_answer_artifact_sources(&self) -> AegisResult<Vec<AnswerArtifactSourceMetadata>> {
+        let registry = SourceRegistry::load(&self.paths.registry_path())?;
+        let mut sources = Vec::new();
+        for record in registry.list_sources() {
+            let version_dir = self.paths.source_version_dir(&record.source_id, &record.version_id);
+            let draft_count = count_json_files(version_dir.join("answer_drafts"))?;
+            let grounded_answer_count = count_json_files(version_dir.join("grounded_answers"))?;
+            let final_answers = self.list_final_answers(&record.source_id)?;
+            let final_answer_count = final_answers.len();
+            if draft_count == 0 && grounded_answer_count == 0 && final_answer_count == 0 {
+                continue;
+            }
+            sources.push(AnswerArtifactSourceMetadata {
+                source_id: record.source_id,
+                draft_count,
+                grounded_answer_count,
+                final_answer_count,
+            });
+        }
+        sources.sort_by(|left, right| left.source_id.cmp(&right.source_id));
+        Ok(sources)
     }
 
     fn write_final_answer(&self, final_answer: &FinalAnswer) -> AegisResult<()> {
@@ -722,6 +757,75 @@ mod tests {
         assert!(!version_dir.join("answer_drafts").exists());
         assert!(!version_dir.join("grounded_answers").exists());
         assert!(!version_dir.join("final_answers").exists());
+    }
+
+    #[test]
+    fn answer_artifact_source_index_returns_deterministic_counts_without_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_a, _version_a, draft_a, grounded_a) = prepare_grounded(&temp.path().to_path_buf());
+        let source_path_b = temp.path().join("notes_b.md");
+        fs::write(&source_path_b, "delta epsilon zeta").unwrap();
+        let authority = CorpusAuthority::new(temp.path().to_path_buf());
+        authority.register_source(source_path_b.to_string_lossy().to_string(), valid_metadata()).unwrap();
+        let registry = SourceRegistry::load(&CorpusPaths::new(temp.path().to_path_buf()).registry_path()).unwrap();
+        let source_b = registry.sources.iter().find(|record| record.source_id != source_a).cloned().unwrap();
+
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let draft = crate::answer_draft::AnswerDraftService::new(temp.path().to_path_buf())
+            .read_answer_draft(&source_a, &draft_a)
+            .unwrap();
+        let draft_path_b = CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_b.source_id, &source_b.version_id)
+            .join("answer_drafts")
+            .join(format!("{}.json", draft.answer_draft_id));
+        fs::create_dir_all(draft_path_b.parent().unwrap()).unwrap();
+        fs::write(&draft_path_b, serde_json::to_string_pretty(&draft).unwrap()).unwrap();
+
+        let grounded = service.build_final_answer(&source_a, &grounded_a).unwrap();
+        let grounded_path_b = CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_b.source_id, &source_b.version_id)
+            .join("grounded_answers")
+            .join("gan_copy.json");
+        fs::create_dir_all(grounded_path_b.parent().unwrap()).unwrap();
+        let mut grounded_copy = crate::grounded_answer::read_grounded_answer(temp.path().to_path_buf(), &source_a, &grounded.grounded_answer_id).unwrap();
+        grounded_copy.grounded_answer_id = "gan_copy".to_string();
+        fs::write(&grounded_path_b, serde_json::to_string_pretty(&grounded_copy).unwrap()).unwrap();
+
+        let final_path_b = CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_b.source_id, &source_b.version_id)
+            .join("final_answers")
+            .join("fan_copy.json");
+        fs::create_dir_all(final_path_b.parent().unwrap()).unwrap();
+        let mut final_copy = service.build_final_answer(&source_a, &grounded.grounded_answer_id).unwrap();
+        final_copy.final_answer_id = "fan_copy".to_string();
+        fs::write(&final_path_b, serde_json::to_string_pretty(&final_copy).unwrap()).unwrap();
+
+        let index = service.list_answer_artifact_sources().unwrap();
+        assert_eq!(index.len(), 2);
+        assert!(index.windows(2).all(|pair| pair[0].source_id <= pair[1].source_id));
+        assert!(index.iter().all(|item| !format!("{item:?}").contains(".aegis")));
+        let by_id = |source_id: &str| index.iter().find(|item| item.source_id == source_id).unwrap();
+        assert_eq!(by_id(&source_a).draft_count, 1);
+        assert_eq!(by_id(&source_a).grounded_answer_count, 1);
+        assert_eq!(by_id(&source_a).final_answer_count, 1);
+        assert_eq!(by_id(&source_b.source_id).draft_count, 1);
+        assert_eq!(by_id(&source_b.source_id).grounded_answer_count, 1);
+        assert_eq!(by_id(&source_b.source_id).final_answer_count, 1);
+    }
+
+    #[test]
+    fn answer_artifact_source_index_ignores_unrelated_files_and_reports_typed_malformed_final_answer() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let final_dir = CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_id, &version_id)
+            .join("final_answers");
+        fs::write(final_dir.join("notes.txt"), "ignore me").unwrap();
+        let bad_path = final_dir.join("fan_bad.json");
+        fs::write(&bad_path, "{not-json").unwrap();
+        assert!(matches!(service.list_answer_artifact_sources(), Err(AegisError::FinalAnswerReadFailed)));
     }
 
     #[test]

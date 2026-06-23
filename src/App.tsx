@@ -59,6 +59,13 @@ type AnswerArtifactOverview = {
   final_answers: FinalAnswerMetadata[];
 };
 
+type AnswerArtifactSourceMetadata = {
+  source_id: string;
+  draft_count: number;
+  grounded_answer_count: number;
+  final_answer_count: number;
+};
+
 function sanitizeBackendError(error: unknown) {
   const message = String(error);
   return message.replace(/[A-Za-z]:\\[^"]+/g, "[path hidden]").replace(/E:\\[^"]+/g, "[path hidden]");
@@ -82,6 +89,9 @@ export default function App() {
   const [artifactOverview, setArtifactOverview] = createSignal<AnswerArtifactOverview | null>(null);
   const [artifactOverviewError, setArtifactOverviewError] = createSignal<string | null>(null);
   const [artifactOverviewLoading, setArtifactOverviewLoading] = createSignal(false);
+  const [artifactSources, setArtifactSources] = createSignal<AnswerArtifactSourceMetadata[]>([]);
+  const [artifactSourcesError, setArtifactSourcesError] = createSignal<string | null>(null);
+  const [artifactSourcesLoading, setArtifactSourcesLoading] = createSignal(false);
 
   async function loadStatus() {
     setStatusError(null);
@@ -126,7 +136,34 @@ export default function App() {
   }
 
   async function loadArtifactOverview() {
-    const trimmedSourceId = sourceId().trim();
+    await loadArtifactOverviewBySourceId(sourceId().trim());
+  }
+
+  async function loadArtifactSources() {
+    if (artifactSourcesLoading()) {
+      return;
+    }
+    setArtifactSourcesLoading(true);
+    setArtifactSourcesError(null);
+    try {
+      const result = await invoke<AnswerArtifactSourceMetadata[]>("list_answer_artifact_sources", {
+        root: ".",
+      });
+      setArtifactSources(result);
+    } catch (err) {
+      setArtifactSources([]);
+      setArtifactSourcesError(sanitizeBackendError(err));
+    } finally {
+      setArtifactSourcesLoading(false);
+    }
+  }
+
+  async function selectArtifactSource(item: AnswerArtifactSourceMetadata) {
+    setSourceId(item.source_id);
+    await loadArtifactOverviewBySourceId(item.source_id);
+  }
+
+  async function loadArtifactOverviewBySourceId(trimmedSourceId: string) {
     if (!trimmedSourceId) {
       setArtifactOverviewError("Source ID is required to load the artifact overview.");
       return;
@@ -211,9 +248,32 @@ export default function App() {
           <button onClick={loadArtifactOverview} disabled={artifactOverviewLoading()}>
             {artifactOverviewLoading() ? "Loading..." : "Load artifact overview"}
           </button>
+          <button onClick={loadArtifactSources} disabled={artifactSourcesLoading()}>
+            {artifactSourcesLoading() ? "Loading..." : "Load source index"}
+          </button>
         </div>
         {finalAnswerError() && <p class="error">{finalAnswerError()}</p>}
         {artifactOverviewError() && <p class="error">{artifactOverviewError()}</p>}
+        {artifactSourcesError() && <p class="error">{artifactSourcesError()}</p>}
+        <div class="artifact-overview">
+          <h3>Sources with artifacts</h3>
+          {artifactSources().length > 0 ? (
+            <ul class="final-answer-list-items">
+              {artifactSources().map((item) => (
+                <li>
+                  <button class="final-answer-list-item" onClick={() => selectArtifactSource(item)}>
+                    <span>{item.source_id}</span>
+                    <small>
+                      drafts={item.draft_count} | grounded={item.grounded_answer_count} | final={item.final_answer_count}
+                    </small>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No sources with artifacts listed yet.</p>
+          )}
+        </div>
         <div class="artifact-overview">
           <h3>Artifact overview</h3>
           {artifactOverview() ? (
