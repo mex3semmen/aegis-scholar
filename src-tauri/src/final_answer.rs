@@ -136,10 +136,41 @@ pub struct ExportedArtifactFile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnswerArtifactExportSummary {
+    pub export_id: String,
+    pub generated_from: String,
+    pub export_scope: String,
+    pub non_goals: Vec<String>,
+    pub source_count: usize,
+    pub draft_count: usize,
+    pub grounded_answer_count: usize,
+    pub final_answer_count: usize,
+    pub issue_count: usize,
+    pub issue_kinds: Vec<AnswerArtifactExportIssueKindCount>,
+    pub sources: Vec<AnswerArtifactExportSummarySource>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnswerArtifactExportSummarySource {
+    pub source_id: String,
+    pub draft_count: usize,
+    pub grounded_answer_count: usize,
+    pub final_answer_count: usize,
+    pub issue_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnswerArtifactExportIssueKindCount {
+    pub issue_kind: AnswerArtifactIssueKind,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ExportedArtifactKind {
     Manifest,
     Issues,
+    Summary,
     AnswerDraft,
     GroundedAnswer,
     FinalAnswer,
@@ -611,6 +642,16 @@ impl FinalAnswerService {
             artifact_id: None,
         });
 
+        let summary = build_export_summary(&manifest, &issues)?;
+        let summary_path = export_root.join("summary.json");
+        fs::write(&summary_path, serde_json::to_string_pretty(&summary)?).map_err(|_| AegisError::FinalAnswerWriteFailed)?;
+        written_files.push(ExportedArtifactFile {
+            relative_path: "summary.json".to_string(),
+            artifact_kind: ExportedArtifactKind::Summary,
+            source_id: None,
+            artifact_id: None,
+        });
+
         written_files.sort_by(|left, right| {
             (
                 &left.relative_path,
@@ -825,6 +866,62 @@ fn issue_kind_rank(issue_kind: &AnswerArtifactIssueKind) -> usize {
     }
 }
 
+fn build_export_summary(
+    manifest: &AnswerArtifactExportManifest,
+    issues: &[AnswerArtifactIssue],
+)
+-> AegisResult<AnswerArtifactExportSummary> {
+    let issue_kinds = [
+        AnswerArtifactIssueKind::MalformedFinalAnswer,
+        AnswerArtifactIssueKind::NeedsEvidenceStatement,
+        AnswerArtifactIssueKind::UnsupportedStatement,
+    ]
+    .iter()
+    .map(|issue_kind| AnswerArtifactExportIssueKindCount {
+        issue_kind: issue_kind.clone(),
+        count: issues.iter().filter(|issue| issue.issue_kind == *issue_kind).count(),
+    })
+    .filter(|item| item.count > 0)
+    .collect::<Vec<_>>();
+
+    let sources = manifest
+        .sources
+        .iter()
+        .map(|source| AnswerArtifactExportSummarySource {
+            source_id: source.source_id.clone(),
+            draft_count: source.draft_count,
+            grounded_answer_count: source.grounded_answer_count,
+            final_answer_count: source.final_answer_count,
+            issue_count: source.issue_count,
+        })
+        .collect::<Vec<_>>();
+
+    let mut hasher = Sha256::new();
+    hasher.update(serde_json::to_string(manifest)?);
+    hasher.update(serde_json::to_string(issues)?);
+    let export_id = format!("sha256:{:x}", hasher.finalize());
+
+    Ok(AnswerArtifactExportSummary {
+        export_id,
+        generated_from: "persisted_artifacts".to_string(),
+        export_scope: "manual_artifact_export".to_string(),
+        non_goals: vec![
+            "no_generation".to_string(),
+            "no_repair".to_string(),
+            "no_editing".to_string(),
+            "no_import".to_string(),
+            "no_share".to_string(),
+        ],
+        source_count: manifest.source_count,
+        draft_count: manifest.draft_count,
+        grounded_answer_count: manifest.grounded_answer_count,
+        final_answer_count: manifest.final_answer_count,
+        issue_count: issues.len(),
+        issue_kinds,
+        sources,
+    })
+}
+
 fn copy_artifact_files(
     source_dir: &PathBuf,
     export_dir: &PathBuf,
@@ -866,7 +963,7 @@ fn copy_artifact_files(
                     ExportedArtifactKind::AnswerDraft => "answer_drafts",
                     ExportedArtifactKind::GroundedAnswer => "grounded_answers",
                     ExportedArtifactKind::FinalAnswer => "final_answers",
-                    ExportedArtifactKind::Manifest | ExportedArtifactKind::Issues => unreachable!(),
+                    ExportedArtifactKind::Manifest | ExportedArtifactKind::Issues | ExportedArtifactKind::Summary => unreachable!(),
                 })
                 .join(format!("{artifact_id}.json"))
                 .to_string_lossy()
@@ -1025,6 +1122,10 @@ mod tests {
         let draft = crate::answer_draft::AnswerDraftService::new(root.clone()).build_answer_draft(&record.source_id, &evidence.evidence_pack_id).unwrap();
         let grounded = GroundedAnswerService::new(root.clone()).build_grounded_answer(&record.source_id, &draft.answer_draft_id).unwrap();
         (record.source_id, record.version_id, draft.answer_draft_id, grounded.grounded_answer_id)
+    }
+
+    fn read_export_summary(export_root: &PathBuf) -> AnswerArtifactExportSummary {
+        serde_json::from_str(&fs::read_to_string(export_root.join("summary.json")).unwrap()).unwrap()
     }
 
     #[test]
@@ -1772,9 +1873,11 @@ mod tests {
         assert!(!format!("{result:?}").contains(".aegis"));
         assert!(export_root.join("export_manifest.json").exists());
         assert!(export_root.join("export_issues.json").exists());
+        assert!(export_root.join("summary.json").exists());
         assert!(export_root.join(&source_id).join("answer_drafts").join(format!("{draft_id}.json")).exists());
         assert!(export_root.join(&source_id).join("grounded_answers").join(format!("{grounded_id}.json")).exists());
         assert!(export_root.join(&source_id).join("final_answers").join(format!("{}.json", final_answer.final_answer_id)).exists());
+        assert!(result.written_files.iter().any(|item| item.artifact_kind == ExportedArtifactKind::Summary));
         assert_eq!(before_snapshot, after_snapshot);
         assert!(matches!(service.export_answer_artifacts(&export_root), Err(AegisError::ExportDestinationExists)));
     }
@@ -1786,6 +1889,99 @@ mod tests {
         assert!(matches!(service.export_answer_artifacts(""), Err(AegisError::ExportDestinationMissing)));
         assert!(!temp.path().join("export_manifest.json").exists());
         assert!(!temp.path().join("export_issues.json").exists());
+        assert!(!temp.path().join("summary.json").exists());
+    }
+
+    #[test]
+    fn answer_artifact_export_summary_is_empty_for_empty_storage() {
+        let temp = tempfile::tempdir().unwrap();
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let export_root = temp.path().join("empty-export");
+
+        let result = service.export_answer_artifacts(&export_root).unwrap();
+        let summary = read_export_summary(&export_root);
+
+        assert!(!summary.export_id.is_empty());
+        assert_eq!(summary.generated_from, "persisted_artifacts");
+        assert_eq!(summary.export_scope, "manual_artifact_export");
+        assert_eq!(summary.source_count, 0);
+        assert_eq!(summary.draft_count, 0);
+        assert_eq!(summary.grounded_answer_count, 0);
+        assert_eq!(summary.final_answer_count, 0);
+        assert_eq!(summary.issue_count, 0);
+        assert!(summary.issue_kinds.is_empty());
+        assert!(summary.sources.is_empty());
+        assert!(summary.non_goals.iter().any(|item| item == "no_generation"));
+        assert!(summary.non_goals.iter().any(|item| item == "no_repair"));
+        assert!(summary.non_goals.iter().any(|item| item == "no_editing"));
+        assert!(summary.non_goals.iter().any(|item| item == "no_import"));
+        assert!(summary.non_goals.iter().any(|item| item == "no_share"));
+        assert!(result.written_files.iter().any(|item| item.relative_path == "summary.json"));
+        assert!(result.written_files.iter().any(|item| item.artifact_kind == ExportedArtifactKind::Summary));
+        assert!(!format!("{summary:?}").contains(temp.path().to_string_lossy().as_ref()));
+        assert!(!format!("{summary:?}").contains(".aegis"));
+    }
+
+    #[test]
+    fn answer_artifact_export_summary_matches_manifest_issues_and_is_deterministic() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let valid_final = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let final_dir = CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_id, &version_id)
+            .join("final_answers");
+        fs::write(final_dir.join("fan_bad.json"), "{not-json").unwrap();
+        let mut unsupported = valid_final.clone();
+        unsupported.final_answer_id = "fan_unsupported".to_string();
+        unsupported.statements[0].status = FinalAnswerStatementStatus::Unsupported;
+        unsupported.statement_count = 1;
+        unsupported.unsupported_count = 1;
+        fs::write(final_dir.join("fan_unsupported.json"), serde_json::to_string_pretty(&unsupported).unwrap()).unwrap();
+        let mut needs = valid_final.clone();
+        needs.final_answer_id = "fan_needs".to_string();
+        needs.statements[0].status = FinalAnswerStatementStatus::NeedsEvidence;
+        needs.statement_count = 1;
+        needs.unsupported_count = 1;
+        fs::write(final_dir.join("fan_needs.json"), serde_json::to_string_pretty(&needs).unwrap()).unwrap();
+
+        let export_root_a = temp.path().join("export-a");
+        let export_root_b = temp.path().join("export-b");
+        let first = service.export_answer_artifacts(&export_root_a).unwrap();
+        let _second = service.export_answer_artifacts(&export_root_b).unwrap();
+        let summary_a = read_export_summary(&export_root_a);
+        let summary_b = read_export_summary(&export_root_b);
+        let issues = service.list_answer_artifact_issues().unwrap();
+
+        assert!(!summary_a.export_id.is_empty());
+        assert!(!summary_b.export_id.is_empty());
+        assert_eq!(summary_a.export_id, summary_b.export_id);
+        assert_eq!(summary_a.source_count, first.manifest.source_count);
+        assert_eq!(summary_a.draft_count, first.manifest.draft_count);
+        assert_eq!(summary_a.grounded_answer_count, first.manifest.grounded_answer_count);
+        assert_eq!(summary_a.final_answer_count, first.manifest.final_answer_count);
+        assert_eq!(summary_a.issue_count, first.manifest.issue_count);
+        assert_eq!(summary_a.issue_count, issues.len());
+        assert_eq!(summary_a.sources.len(), first.manifest.sources.len());
+        assert_eq!(summary_a.sources[0].source_id, first.manifest.sources[0].source_id);
+        assert_eq!(summary_a.sources[0].draft_count, first.manifest.sources[0].draft_count);
+        assert_eq!(summary_a.sources[0].grounded_answer_count, first.manifest.sources[0].grounded_answer_count);
+        assert_eq!(summary_a.sources[0].final_answer_count, first.manifest.sources[0].final_answer_count);
+        assert_eq!(summary_a.sources[0].issue_count, first.manifest.sources[0].issue_count);
+        assert_eq!(summary_a.issue_kinds.iter().map(|item| item.count).sum::<usize>(), summary_a.issue_count);
+        assert_eq!(summary_a, summary_b);
+        assert!(!format!("{summary_a:?}").contains(temp.path().to_string_lossy().as_ref()));
+        assert!(!format!("{summary_a:?}").contains(".aegis"));
+        assert!(summary_a.issue_kinds.iter().all(|item| item.count > 0));
+        assert!(summary_a.issue_kinds.iter().any(|item| item.issue_kind == AnswerArtifactIssueKind::MalformedFinalAnswer));
+        assert!(summary_a.issue_kinds.iter().any(|item| item.issue_kind == AnswerArtifactIssueKind::NeedsEvidenceStatement));
+        assert!(summary_a.issue_kinds.iter().any(|item| item.issue_kind == AnswerArtifactIssueKind::UnsupportedStatement));
+        assert!(summary_a.sources.iter().all(|item| item.issue_count == issues.iter().filter(|issue| issue.source_id == item.source_id).count()));
+        assert!(first.written_files.iter().any(|item| item.relative_path == "summary.json" && item.artifact_kind == ExportedArtifactKind::Summary));
+        assert_eq!(first.manifest.sources[0].final_answers.len(), 3);
+        assert!(first.manifest.sources[0].final_answers.iter().all(|item| item.final_answer_id != "fan_bad"));
+        assert!(first.manifest.issue_count > 0);
+        assert!(first.manifest.sources[0].issue_count > 0);
     }
 
     #[test]

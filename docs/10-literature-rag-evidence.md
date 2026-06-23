@@ -123,12 +123,14 @@ It exports valid persisted draft, grounded-answer, and final-answer artifacts, w
 It does not build missing artifacts and does not generate, build, infer, rank, rewrite, repair, or edit answers.
 The export destination must be explicit and non-empty, and repeated export to the same non-empty destination fails safely.
 Phase 17.1 hardens that boundary with deterministic export order, empty-destination rejection before filesystem access, and path-safe export output.
+Phase 18.0 adds a read-only `summary.json` audit file inside the manual export bundle.
+The summary is derived only from the persisted manifest and issues data, stays deterministic and path-free, includes compact per-source and issue-kind counts, and is for audit/review only rather than import, share, or product answer flow.
 
 Manual verification checklist:
 
 - `npm run build`
-- `cargo test --manifest-path .\src-tauri\Cargo.toml answer -- --nocapture`
 - `cargo test --manifest-path .\src-tauri\Cargo.toml final_answer -- --nocapture`
+- `cargo test --manifest-path .\src-tauri\Cargo.toml answer -- --nocapture`
 - `cargo test --manifest-path .\src-tauri\Cargo.toml pipeline -- --nocapture`
 - `cargo check --manifest-path .\src-tauri\Cargo.toml`
 - `git diff --check`
