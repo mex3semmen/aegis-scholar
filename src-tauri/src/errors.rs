@@ -45,6 +45,22 @@ pub enum AegisError {
 
     #[error("Extraction report read failed")]
     ExtractionReportReadFailed,
+
+    #[error("Chunking report missing")]
+    ChunkingReportMissing,
+
+    #[error("Chunking report read failed")]
+    ChunkingReportReadFailed,
+
+    #[error("Chunking report write failed")]
+    ChunkingReportWriteFailed,
+
+    #[error("Chunking input missing")]
+    ChunkingInputMissing,
+
+    #[error("Chunking input empty")]
+    ChunkingInputEmpty,
+
 }
 
 pub type AegisResult<T> = Result<T, AegisError>;

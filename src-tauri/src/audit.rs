@@ -14,6 +14,8 @@ pub enum AuditEventType {
     SourceRemoved,
     SourceExtracted,
     SourceExtractionFailed,
+    SourceChunked,
+    SourceChunkingFailed,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
