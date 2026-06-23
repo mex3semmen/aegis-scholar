@@ -19,6 +19,7 @@ use extraction::{ExtractionReport, ExtractionService};
 use errors::to_user_error;
 use answer_draft::{AnswerDraft, AnswerDraftService};
 use evidence::{EvidencePack, EvidenceService};
+use final_answer::{build_final_answer as build_final_answer_impl, read_final_answer as read_final_answer_impl, FinalAnswer};
 use grounded_answer::{build_grounded_answer as build_grounded_answer_impl, read_grounded_answer as read_grounded_answer_impl, GroundedAnswer};
 use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
 use source_metadata::{CorpusStatus, SourceMetadataInput, SourceMetadataPatch, SourceRecord};
@@ -162,6 +163,18 @@ fn get_grounded_answer(root: String, source_id: String, grounded_answer_id: Stri
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn build_final_answer(root: String, source_id: String, grounded_answer_id: String) -> Result<FinalAnswer, String> {
+    build_final_answer_impl(root, &source_id, &grounded_answer_id)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
+fn get_final_answer(root: String, source_id: String, final_answer_id: String) -> Result<FinalAnswer, String> {
+    read_final_answer_impl(root, &source_id, &final_answer_id)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -183,7 +196,9 @@ pub fn run() {
             build_answer_draft,
             get_answer_draft,
             build_grounded_answer,
-            get_grounded_answer
+            get_grounded_answer,
+            build_final_answer,
+            get_final_answer
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");

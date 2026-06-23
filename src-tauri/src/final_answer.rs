@@ -65,6 +65,14 @@ pub struct FinalAnswerService {
     paths: CorpusPaths,
 }
 
+pub fn build_final_answer(root: impl Into<PathBuf>, source_id: &str, grounded_answer_id: &str) -> AegisResult<FinalAnswer> {
+    FinalAnswerService::new(root).build_final_answer(source_id, grounded_answer_id)
+}
+
+pub fn read_final_answer(root: impl Into<PathBuf>, source_id: &str, final_answer_id: &str) -> AegisResult<FinalAnswer> {
+    FinalAnswerService::new(root).read_final_answer(source_id, final_answer_id)
+}
+
 pub fn build_final_answer_from_grounded_answer(grounded_answer: &GroundedAnswer) -> AegisResult<FinalAnswer> {
     if grounded_answer.source_id.trim().is_empty() {
         return Err(AegisError::FinalAnswerInputMissing);
@@ -224,13 +232,13 @@ fn validate_final_answer_id(final_answer_id: &str) -> AegisResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::grounded_answer::{read_grounded_answer, GroundedAnswerMode, GroundedStatementStatus, GroundedSupportLevel, GroundedAnswerService};
+    use crate::grounded_answer::{build_grounded_answer, read_grounded_answer, GroundedAnswerMode, GroundedStatementStatus, GroundedSupportLevel, GroundedAnswerService};
     use crate::chunking::{ChunkRecord, ChunkingReport};
     use crate::corpus_authority::CorpusAuthority;
     use crate::evidence::EvidenceService;
     use crate::locators::CitationLocator;
     use crate::retrieval::{RetrievalIndex, RetrievalIndexEntry};
-    use crate::source_metadata::{SourceMetadataInput, SourceType};
+    use crate::source_metadata::{IngestionStatus, SourceMetadataInput, SourceType};
     use std::fs;
 
     fn valid_metadata() -> SourceMetadataInput {
@@ -368,5 +376,85 @@ mod tests {
             warnings: Vec::new(),
         };
         assert!(matches!(build_final_answer_from_grounded_answer(&grounded), Err(AegisError::FinalAnswerEmptyGroundedAnswer)));
+    }
+
+    #[test]
+    fn final_answer_adapter_builds_and_reads_round_trip() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let final_answer = build_final_answer(temp.path().to_path_buf(), &source_id, &grounded_id).unwrap();
+        assert!(final_answer.final_answer_id.starts_with("fan_"));
+        assert_eq!(final_answer.source_id, source_id);
+        assert_eq!(final_answer.version_id, version_id);
+        assert_eq!(final_answer.statements.len(), 1);
+        let read_back = read_final_answer(temp.path().to_path_buf(), &source_id, &final_answer.final_answer_id).unwrap();
+        assert_eq!(read_back.final_answer_id, final_answer.final_answer_id);
+        assert_eq!(read_back.statements[0].status, FinalAnswerStatementStatus::Supported);
+        let registry = SourceRegistry::load(&CorpusPaths::new(temp.path().to_path_buf()).registry_path()).unwrap();
+        assert_eq!(registry.get_source(&source_id).unwrap().ingestion_status, IngestionStatus::GroundedAnswerReady);
+    }
+
+    #[test]
+    fn final_answer_adapter_rejects_invalid_ids_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        assert!(matches!(read_final_answer(temp.path().to_path_buf(), "src_demo", ""), Err(AegisError::FinalAnswerInvalidId)));
+        assert!(matches!(read_final_answer(temp.path().to_path_buf(), "src_demo", "../x"), Err(AegisError::FinalAnswerInvalidId)));
+        assert!(matches!(read_final_answer(temp.path().to_path_buf(), "src_demo", "..\\x"), Err(AegisError::FinalAnswerInvalidId)));
+        assert!(matches!(read_final_answer(temp.path().to_path_buf(), "src_demo", "x/y"), Err(AegisError::FinalAnswerInvalidId)));
+        assert!(matches!(read_final_answer(temp.path().to_path_buf(), "src_demo", "x\\y"), Err(AegisError::FinalAnswerInvalidId)));
+    }
+
+    #[test]
+    fn final_answer_adapter_maps_missing_and_malformed_read_back() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let final_answer = build_final_answer(temp.path().to_path_buf(), &source_id, &grounded_id).unwrap();
+        assert!(matches!(read_final_answer(temp.path().to_path_buf(), &source_id, "fan_missing"), Err(AegisError::FinalAnswerMissing)));
+        let corpus = CorpusPaths::new(temp.path().to_path_buf());
+        let bad_path = corpus.source_version_dir(&source_id, &version_id).join("final_answers").join("fan_bad.json");
+        fs::create_dir_all(bad_path.parent().unwrap()).unwrap();
+        fs::write(&bad_path, "{not-json").unwrap();
+        assert!(matches!(read_final_answer(temp.path().to_path_buf(), &source_id, "fan_bad"), Err(AegisError::FinalAnswerReadFailed)));
+        assert!(final_answer.final_answer_id.starts_with("fan_"));
+    }
+
+    #[test]
+    fn final_answer_adapter_failure_does_not_write_answer() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let corpus = CorpusPaths::new(temp.path().to_path_buf());
+        let result = build_final_answer(temp.path().to_path_buf(), &source_id, "fan_missing");
+        assert!(matches!(result, Err(AegisError::GroundedAnswerMissing)));
+        let final_answer_dir = corpus.source_version_dir(&source_id, &version_id).join("final_answers");
+        assert!(!final_answer_dir.exists() || fs::read_dir(final_answer_dir).unwrap().next().is_none());
+        let registry = SourceRegistry::load(&corpus.registry_path()).unwrap();
+        assert_eq!(registry.get_source(&source_id).unwrap().ingestion_status, IngestionStatus::GroundedAnswerReady);
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), &source_id, &grounded_id), Ok(_)));
+    }
+
+    #[test]
+    fn final_answer_adapter_preserves_supported_needs_evidence_and_unsupported_statuses() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, draft_id, _grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let mut draft = crate::answer_draft::AnswerDraftService::new(temp.path().to_path_buf())
+            .read_answer_draft(&source_id, &draft_id)
+            .unwrap();
+        draft.claims[0].status = crate::answer_draft::DraftClaimStatus::NeedsEvidence;
+        draft.claims[0].confidence = crate::answer_draft::DraftClaimConfidence::MissingEvidence;
+        let corpus = CorpusPaths::new(temp.path().to_path_buf());
+        let draft_path = corpus.source_version_dir(&source_id, &version_id).join("answer_drafts").join(format!("{}.json", draft.answer_draft_id));
+        fs::write(draft_path, serde_json::to_string_pretty(&draft).unwrap()).unwrap();
+        let needs_evidence = build_grounded_answer(temp.path().to_path_buf(), &source_id, &draft_id).unwrap();
+        let final_answer = build_final_answer_from_grounded_answer(&needs_evidence).unwrap();
+        assert_eq!(final_answer.statements[0].status, FinalAnswerStatementStatus::NeedsEvidence);
+
+        let mut unsupported = needs_evidence.clone();
+        unsupported.statements[0].status = GroundedStatementStatus::Unsupported;
+        unsupported.statements[0].support_level = GroundedSupportLevel::MissingEvidence;
+        let final_answer = build_final_answer_from_grounded_answer(&unsupported).unwrap();
+        assert_eq!(final_answer.statements[0].status, FinalAnswerStatementStatus::Unsupported);
+        assert_eq!(final_answer.statements[0].claim_ids.len(), 1);
+        assert_eq!(final_answer.statements[0].evidence_ids, unsupported.statements[0].evidence_ids);
+        assert_eq!(final_answer.statements[0].locators, unsupported.statements[0].locators);
     }
 }
