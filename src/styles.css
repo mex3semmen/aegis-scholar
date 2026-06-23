@@ -47,6 +47,11 @@ button:hover {
   background: #334155;
 }
 
+button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
 .app-shell {
   max-width: 960px;
   margin: 0 auto;
@@ -186,4 +191,9 @@ pre {
   border-radius: 12px;
   padding: 1rem;
   background: rgba(120, 53, 15, 0.22);
+}
+
+.locator-list {
+  display: grid;
+  gap: 0.35rem;
 }
