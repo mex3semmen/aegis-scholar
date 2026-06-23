@@ -163,6 +163,9 @@ pub enum AegisError {
     #[error("Export destination already exists")]
     ExportDestinationExists,
 
+    #[error("Export destination missing")]
+    ExportDestinationMissing,
+
     #[error("Export destination cannot be inside the corpus workspace")]
     ExportDestinationInsideCorpus,
 
