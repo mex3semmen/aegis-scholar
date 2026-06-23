@@ -146,6 +146,7 @@ Phase 19.0 adds a read-only export bundle inspector for existing manual export b
 It validates persisted `export_manifest.json`, `export_issues.json`, and `summary.json` metadata only, compares the parsed summary against the derived manifest/issues summary, and reports typed inspection issues without mutating the bundle.
 It remains artifact-only and is still not a product answer or share workflow.
 There is no import workflow, no automatic export, and no repair/fix action yet.
+Phase 19.1 hardens that boundary with deterministic missing-file ordering, safe ignoring of unrelated files, and explicit empty-input rejection before filesystem access.
 
 ## Phase 11 — Obsidian Export
 
