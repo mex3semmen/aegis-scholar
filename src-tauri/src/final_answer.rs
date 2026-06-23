@@ -205,6 +205,7 @@ pub struct AnswerArtifactExportBundleInspection {
     pub summary_schema_version: Option<String>,
     pub integrity_schema_version: Option<String>,
     pub integrity_algorithm: Option<String>,
+    pub inspection_summary: AnswerArtifactExportBundleInspectionSummary,
     pub has_manifest: bool,
     pub has_issues: bool,
     pub has_summary: bool,
@@ -218,6 +219,24 @@ pub struct AnswerArtifactExportBundleInspection {
     pub summary_counts: Option<AnswerArtifactExportSummary>,
     pub issue_kind_counts: Option<Vec<AnswerArtifactExportIssueKindCount>>,
     pub integrity_counts: Option<AnswerArtifactExportIntegrity>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnswerArtifactExportBundleInspectionSummary {
+    pub is_consistent: bool,
+    pub schema_supported: bool,
+    pub integrity_verified: bool,
+    pub issue_count: usize,
+    pub warning_count: usize,
+    pub issue_counts_by_kind: Vec<AnswerArtifactExportBundleInspectionIssueKindCount>,
+    pub checked_file_count: usize,
+    pub integrity_file_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnswerArtifactExportBundleInspectionIssueKindCount {
+    pub kind: AnswerArtifactExportBundleInspectionIssueKind,
+    pub count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1098,6 +1117,12 @@ fn inspect_answer_artifact_export_bundle_impl(export_root: PathBuf) -> AegisResu
     let issue_kind_counts = issues
         .as_ref()
         .map(|items| issue_kind_counts_from_export_issues(&items.issues));
+    let schema_version = common_export_bundle_schema_version(
+        manifest.as_ref(),
+        issues.as_ref(),
+        summary.as_ref(),
+        integrity.as_ref(),
+    );
 
     validate_export_bundle_schema_versions(
         manifest.as_ref(),
@@ -1187,13 +1212,24 @@ fn inspect_answer_artifact_export_bundle_impl(export_root: PathBuf) -> AegisResu
             ))
     });
 
+    let inspection_summary = build_export_bundle_inspection_summary(
+        schema_version.as_deref().is_some(),
+        manifest.as_ref(),
+        issues.as_ref(),
+        summary.as_ref(),
+        integrity.as_ref(),
+        &errors,
+        &warnings,
+    );
+
     Ok(AnswerArtifactExportBundleInspection {
-        schema_version: common_export_bundle_schema_version(manifest.as_ref(), issues.as_ref(), summary.as_ref(), integrity.as_ref()),
+        schema_version,
         manifest_schema_version: non_empty_schema_version(manifest.as_ref().map(|value| value.schema_version.as_str())),
         issues_schema_version: non_empty_schema_version(issues.as_ref().map(|value| value.schema_version.as_str())),
         summary_schema_version: non_empty_schema_version(summary.as_ref().map(|value| value.schema_version.as_str())),
         integrity_schema_version: non_empty_schema_version(integrity.as_ref().map(|value| value.schema_version.as_str())),
         integrity_algorithm: integrity.as_ref().map(|value| value.algorithm.clone()).filter(|value| !value.trim().is_empty()),
+        inspection_summary,
         has_manifest: manifest.is_some(),
         has_issues: issues.is_some(),
         has_summary: summary.is_some(),
@@ -1521,6 +1557,85 @@ fn validate_export_bundle_integrity(
             ));
         }
     }
+}
+
+fn build_export_bundle_inspection_summary(
+    schema_supported: bool,
+    manifest: Option<&AnswerArtifactExportManifest>,
+    issues: Option<&AnswerArtifactExportIssues>,
+    summary: Option<&AnswerArtifactExportSummary>,
+    integrity: Option<&AnswerArtifactExportIntegrity>,
+    errors: &[AnswerArtifactExportBundleInspectionIssue],
+    warnings: &[AnswerArtifactExportBundleInspectionIssue],
+) -> AnswerArtifactExportBundleInspectionSummary {
+    let combined_issues = errors
+        .iter()
+        .chain(warnings.iter())
+        .cloned()
+        .collect::<Vec<_>>();
+    let issue_counts = inspection_issue_kind_counts_from_bundle_issues(&combined_issues);
+
+    let integrity_issue = |kind: &AnswerArtifactExportBundleInspectionIssueKind| {
+        matches!(
+            kind,
+            AnswerArtifactExportBundleInspectionIssueKind::MissingIntegrity
+                | AnswerArtifactExportBundleInspectionIssueKind::IntegrityReadFailed
+                | AnswerArtifactExportBundleInspectionIssueKind::IntegritySchemaVersionMissing
+                | AnswerArtifactExportBundleInspectionIssueKind::IntegritySchemaVersionUnsupported
+                | AnswerArtifactExportBundleInspectionIssueKind::IntegrityAlgorithmMissing
+                | AnswerArtifactExportBundleInspectionIssueKind::IntegrityAlgorithmUnsupported
+                | AnswerArtifactExportBundleInspectionIssueKind::IntegrityDuplicatePath
+                | AnswerArtifactExportBundleInspectionIssueKind::IntegrityPathInvalid
+                | AnswerArtifactExportBundleInspectionIssueKind::IntegrityMissingFile
+                | AnswerArtifactExportBundleInspectionIssueKind::IntegrityByteCountMismatch
+                | AnswerArtifactExportBundleInspectionIssueKind::IntegrityDigestMismatch
+        )
+    };
+
+    let checked_file_count = usize::from(manifest.is_some())
+        + usize::from(issues.is_some())
+        + usize::from(summary.is_some())
+        + usize::from(integrity.is_some());
+
+    AnswerArtifactExportBundleInspectionSummary {
+        is_consistent: errors.is_empty(),
+        schema_supported,
+        integrity_verified: errors.is_empty()
+            && integrity.is_some()
+            && !errors.iter().any(|issue| integrity_issue(&issue.kind))
+            && !warnings.iter().any(|issue| integrity_issue(&issue.kind)),
+        issue_count: errors.len() + warnings.len(),
+        warning_count: warnings.len(),
+        issue_counts_by_kind: issue_counts,
+        checked_file_count,
+        integrity_file_count: integrity.map(|value| value.files.len()).unwrap_or(0),
+    }
+}
+
+fn inspection_issue_kind_counts_from_bundle_issues(
+    issues: &[AnswerArtifactExportBundleInspectionIssue],
+) -> Vec<AnswerArtifactExportBundleInspectionIssueKindCount> {
+    let mut counts: Vec<AnswerArtifactExportBundleInspectionIssueKindCount> = Vec::new();
+    for issue in issues {
+        if let Some(existing) = counts.iter_mut().find(|item| item.kind == issue.kind) {
+            existing.count += 1;
+        } else {
+            counts.push(AnswerArtifactExportBundleInspectionIssueKindCount { kind: issue.kind.clone(), count: 1 });
+        }
+    }
+
+    counts.sort_by(|left, right| {
+        (
+            export_bundle_issue_kind_rank(&left.kind),
+            left.count,
+        )
+            .cmp(&(
+                export_bundle_issue_kind_rank(&right.kind),
+                right.count,
+            ))
+    });
+
+    counts
 }
 
 fn non_empty_schema_version(version: Option<&str>) -> Option<String> {
@@ -2803,6 +2918,14 @@ mod tests {
         assert_eq!(inspection.integrity_counts.as_ref().unwrap().schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
         assert_eq!(inspection.integrity_counts.as_ref().unwrap().algorithm, ANSWER_ARTIFACT_EXPORT_INTEGRITY_ALGORITHM);
         assert_eq!(inspection.integrity_counts.as_ref().unwrap().files.len(), result.written_files.len() - 1);
+        assert!(inspection.inspection_summary.is_consistent);
+        assert!(inspection.inspection_summary.schema_supported);
+        assert!(inspection.inspection_summary.integrity_verified);
+        assert_eq!(inspection.inspection_summary.issue_count, 0);
+        assert_eq!(inspection.inspection_summary.warning_count, 0);
+        assert_eq!(inspection.inspection_summary.checked_file_count, 4);
+        assert_eq!(inspection.inspection_summary.integrity_file_count, result.written_files.len() - 1);
+        assert!(inspection.inspection_summary.issue_counts_by_kind.is_empty());
         assert!(inspection.summary_counts.as_ref().unwrap().issue_kinds.is_empty());
         assert!(inspection.issue_kind_counts.as_ref().unwrap().is_empty());
         assert!(inspection.summary_counts.as_ref().unwrap().sources.windows(2).all(|pair| pair[0].source_id <= pair[1].source_id));
@@ -2872,6 +2995,16 @@ mod tests {
         assert!(!inspection.has_integrity);
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::MissingIntegrity));
         assert!(!inspection.is_consistent);
+        assert!(!inspection.inspection_summary.is_consistent);
+        assert!(!inspection.inspection_summary.schema_supported);
+        assert!(!inspection.inspection_summary.integrity_verified);
+        assert_eq!(inspection.inspection_summary.issue_count, 1);
+        assert_eq!(inspection.inspection_summary.checked_file_count, 3);
+        assert_eq!(inspection.inspection_summary.integrity_file_count, 0);
+        assert_eq!(
+            inspection.inspection_summary.issue_counts_by_kind.iter().map(|item| (&item.kind, item.count)).collect::<Vec<_>>(),
+            vec![(&AnswerArtifactExportBundleInspectionIssueKind::MissingIntegrity, 1)]
+        );
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -2889,6 +3022,16 @@ mod tests {
 
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IntegrityReadFailed));
         assert!(!inspection.is_consistent);
+        assert!(!inspection.inspection_summary.is_consistent);
+        assert!(!inspection.inspection_summary.schema_supported);
+        assert!(!inspection.inspection_summary.integrity_verified);
+        assert_eq!(inspection.inspection_summary.issue_count, 1);
+        assert_eq!(inspection.inspection_summary.checked_file_count, 3);
+        assert_eq!(inspection.inspection_summary.integrity_file_count, 0);
+        assert_eq!(
+            inspection.inspection_summary.issue_counts_by_kind.iter().map(|item| (&item.kind, item.count)).collect::<Vec<_>>(),
+            vec![(&AnswerArtifactExportBundleInspectionIssueKind::IntegrityReadFailed, 1)]
+        );
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -2974,6 +3117,22 @@ mod tests {
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IntegrityByteCountMismatch));
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IntegrityDigestMismatch));
         assert!(!inspection.is_consistent);
+        assert!(!inspection.inspection_summary.is_consistent);
+        assert!(inspection.inspection_summary.schema_supported);
+        assert!(!inspection.inspection_summary.integrity_verified);
+        assert_eq!(inspection.inspection_summary.issue_count, inspection.issue_count);
+        assert_eq!(inspection.inspection_summary.warning_count, inspection.warning_count);
+        assert_eq!(inspection.inspection_summary.checked_file_count, 4);
+        assert_eq!(inspection.inspection_summary.integrity_file_count, inspection.integrity_counts.as_ref().unwrap().files.len());
+        assert_eq!(
+            inspection.inspection_summary.issue_counts_by_kind.iter().map(|item| (&item.kind, item.count)).collect::<Vec<_>>(),
+            vec![
+                (&AnswerArtifactExportBundleInspectionIssueKind::IntegrityDuplicatePath, 1),
+                (&AnswerArtifactExportBundleInspectionIssueKind::IntegrityPathInvalid, 1),
+                (&AnswerArtifactExportBundleInspectionIssueKind::IntegrityByteCountMismatch, 1),
+                (&AnswerArtifactExportBundleInspectionIssueKind::IntegrityDigestMismatch, 1),
+            ]
+        );
     }
 
     #[test]
@@ -3012,6 +3171,15 @@ mod tests {
         assert_eq!(first.manifest_schema_version, None);
         assert_eq!(first.issues_schema_version, None);
         assert_eq!(first.summary_schema_version, None);
+        assert_eq!(first.inspection_summary.issue_count, first.errors.len());
+        assert_eq!(first.inspection_summary.warning_count, 0);
+        assert!(!first.inspection_summary.schema_supported);
+        assert!(!first.inspection_summary.integrity_verified);
+        assert_eq!(first.inspection_summary.checked_file_count, 4);
+        assert!(first.inspection_summary.integrity_file_count > 0);
+        assert_eq!(first.inspection_summary.issue_counts_by_kind, second.inspection_summary.issue_counts_by_kind);
+        assert!(first.inspection_summary.issue_counts_by_kind.iter().any(|item| item.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMissing && item.count == 3));
+        assert_eq!(first.inspection_summary.issue_counts_by_kind.iter().map(|item| item.count).sum::<usize>(), first.inspection_summary.issue_count);
         assert_eq!(schema_errors.len(), 3);
         assert_eq!(
             schema_errors,
@@ -3048,6 +3216,7 @@ mod tests {
         set_bundle_schema_version(&export_root, "summary.json", "answer_artifact_export.v999");
 
         let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+        let inspection_again = inspect_answer_artifact_export_bundle(&export_root).unwrap();
         let unsupported = inspection
             .errors
             .iter()
@@ -3062,6 +3231,17 @@ mod tests {
             Some("export_manifest.json" | "export_issues.json" | "summary.json")
         )));
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch));
+        assert_eq!(inspection.inspection_summary.issue_count, inspection.issue_count);
+        assert_eq!(inspection.inspection_summary.warning_count, inspection.warning_count);
+        assert!(!inspection.inspection_summary.schema_supported);
+        assert!(!inspection.inspection_summary.integrity_verified);
+        assert_eq!(inspection.inspection_summary.checked_file_count, 4);
+        assert!(inspection.inspection_summary.integrity_file_count > 0);
+        assert_eq!(inspection.inspection_summary, inspection_again.inspection_summary);
+        assert_eq!(inspection.inspection_summary.issue_counts_by_kind, inspection_again.inspection_summary.issue_counts_by_kind);
+        assert!(inspection.inspection_summary.issue_counts_by_kind.iter().any(|item| item.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionUnsupported && item.count == 3));
+        assert!(inspection.inspection_summary.issue_counts_by_kind.iter().any(|item| item.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch && item.count == 1));
+        assert_eq!(inspection.inspection_summary.issue_counts_by_kind.iter().map(|item| item.count).sum::<usize>(), inspection.inspection_summary.issue_count);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -3152,6 +3332,22 @@ mod tests {
         assert!(!inspection.is_consistent);
         assert_eq!(inspection.issue_count, 4);
         assert_eq!(inspection.warning_count, 0);
+        assert!(!inspection.inspection_summary.is_consistent);
+        assert!(!inspection.inspection_summary.schema_supported);
+        assert!(!inspection.inspection_summary.integrity_verified);
+        assert_eq!(inspection.inspection_summary.issue_count, 4);
+        assert_eq!(inspection.inspection_summary.warning_count, 0);
+        assert_eq!(inspection.inspection_summary.checked_file_count, 0);
+        assert_eq!(inspection.inspection_summary.integrity_file_count, 0);
+        assert_eq!(
+            inspection.inspection_summary.issue_counts_by_kind.iter().map(|item| (&item.kind, item.count)).collect::<Vec<_>>(),
+            vec![
+                (&AnswerArtifactExportBundleInspectionIssueKind::MissingManifest, 1),
+                (&AnswerArtifactExportBundleInspectionIssueKind::MissingIssues, 1),
+                (&AnswerArtifactExportBundleInspectionIssueKind::MissingSummary, 1),
+                (&AnswerArtifactExportBundleInspectionIssueKind::MissingIntegrity, 1),
+            ]
+        );
         assert!(inspection.manifest_counts.is_none());
         assert!(inspection.summary_counts.is_none());
         assert!(inspection.integrity_counts.is_none());

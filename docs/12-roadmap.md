@@ -167,6 +167,11 @@ Phase 21.1 hardens integrity path validation by rejecting dot-segment and traver
 Phase 21.2 is this docs-sync pass.
 This is still not a product answer workflow.
 
+Phase 22.0 adds a read-only inspection summary rollup for export bundle inspection results.
+It is derived from parsed bundle metadata and typed inspection issues only, and it keeps the bundle inspector path-free and read-only.
+The rollup reports deterministic consistency, schema support, integrity verification, and issue counts by kind.
+Phase 22.0 is an audit/diagnostic pass, not a repair/import/share/download workflow.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
