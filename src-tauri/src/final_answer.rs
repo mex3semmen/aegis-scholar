@@ -882,6 +882,9 @@ fn copy_artifact_files(
 
 impl FinalAnswerService {
     fn validate_export_root(&self, export_root: &PathBuf) -> AegisResult<()> {
+        if export_root.as_os_str().is_empty() {
+            return Err(AegisError::ExportDestinationMissing);
+        }
         if export_root
             .components()
             .any(|component| component.as_os_str().to_string_lossy() == ".aegis")
@@ -1774,6 +1777,15 @@ mod tests {
         assert!(export_root.join(&source_id).join("final_answers").join(format!("{}.json", final_answer.final_answer_id)).exists());
         assert_eq!(before_snapshot, after_snapshot);
         assert!(matches!(service.export_answer_artifacts(&export_root), Err(AegisError::ExportDestinationExists)));
+    }
+
+    #[test]
+    fn answer_artifact_export_rejects_empty_destination_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        assert!(matches!(service.export_answer_artifacts(""), Err(AegisError::ExportDestinationMissing)));
+        assert!(!temp.path().join("export_manifest.json").exists());
+        assert!(!temp.path().join("export_issues.json").exists());
     }
 
     #[test]
