@@ -2166,6 +2166,11 @@ mod tests {
         );
     }
 
+    fn assert_issue_groups_well_formed(inspection: &AnswerArtifactExportBundleInspection) {
+        assert!(inspection.issue_groups.iter().all(|group| group.count == group.lines.len()));
+        assert_eq!(inspection.issue_groups.iter().map(|group| group.lines.len()).sum::<usize>(), inspection.issue_count);
+    }
+
     #[test]
     fn final_answer_serializes_with_required_fields_and_enum_values() {
         let temp = tempfile::tempdir().unwrap();
@@ -3128,6 +3133,7 @@ mod tests {
         assert!(inspection.summary_counts.as_ref().unwrap().issue_kinds.is_empty());
         assert!(inspection.issue_kind_counts.as_ref().unwrap().is_empty());
         assert!(inspection.issue_groups.is_empty());
+        assert_issue_groups_well_formed(&inspection);
         assert!(inspection.summary_counts.as_ref().unwrap().sources.windows(2).all(|pair| pair[0].source_id <= pair[1].source_id));
         assert!(format!("{inspection:?}").find(temp.path().to_string_lossy().as_ref()).is_none());
         assert_report_preview_path_free(&inspection, &temp);
@@ -3213,6 +3219,7 @@ mod tests {
         assert_eq!(inspection.issue_groups.len(), 1);
         assert_issue_group_kinds(&inspection, &[AnswerArtifactExportBundleInspectionIssueKind::MissingIntegrity]);
         assert_eq!(inspection.issue_groups[0].count, 1);
+        assert_issue_groups_well_formed(&inspection);
         assert_report_preview_path_free(&inspection, &temp);
         assert_issue_groups_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
@@ -3248,6 +3255,7 @@ mod tests {
         assert_eq!(inspection.issue_groups.len(), 1);
         assert_issue_group_kinds(&inspection, &[AnswerArtifactExportBundleInspectionIssueKind::IntegrityReadFailed]);
         assert_eq!(inspection.issue_groups[0].count, 1);
+        assert_issue_groups_well_formed(&inspection);
         assert_report_preview_path_free(&inspection, &temp);
         assert_issue_groups_path_free(&inspection, &temp);
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
@@ -3275,6 +3283,7 @@ mod tests {
         assert_eq!(inspection.issue_groups.len(), 1);
         assert_issue_group_kinds(&inspection, &[AnswerArtifactExportBundleInspectionIssueKind::IntegrityAlgorithmUnsupported]);
         assert_eq!(inspection.issue_groups[0].count, 1);
+        assert_issue_groups_well_formed(&inspection);
         assert_report_preview_path_free(&inspection, &temp);
         assert_issue_groups_path_free(&inspection, &temp);
     }
@@ -3437,7 +3446,7 @@ mod tests {
                 AnswerArtifactExportBundleInspectionIssueKind::SummaryExportIdMismatch,
             ],
         );
-        assert_eq!(first.issue_groups.iter().map(|group| group.count).sum::<usize>(), first.issue_count);
+        assert_issue_groups_well_formed(&first);
         assert_eq!(schema_errors.len(), 3);
         assert_eq!(
             schema_errors,
@@ -3519,7 +3528,7 @@ mod tests {
                 AnswerArtifactExportBundleInspectionIssueKind::SummaryExportIdMismatch,
             ],
         );
-        assert_eq!(inspection.issue_groups.iter().map(|group| group.count).sum::<usize>(), inspection.issue_count);
+        assert_issue_groups_well_formed(&inspection);
         assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
         assert_eq!(
             inspection.report_preview.sections[1].lines,
@@ -3562,7 +3571,7 @@ mod tests {
         assert!(!inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionUnsupported));
         assert_eq!(inspection.issue_groups.len(), 3);
         assert!(inspection.issue_groups.iter().any(|group| group.kind == AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed));
-        assert_eq!(inspection.issue_groups.iter().map(|group| group.count).sum::<usize>(), inspection.issue_count);
+        assert_issue_groups_well_formed(&inspection);
         assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
         assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("issues_read_failed")));
         assert_report_preview_path_free(&inspection, &temp);
@@ -3598,6 +3607,7 @@ mod tests {
                 AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch,
             ],
         );
+        assert_issue_groups_well_formed(&inspection);
         assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
         assert_eq!(
             inspection.report_preview.sections[1].lines,
@@ -3708,7 +3718,7 @@ mod tests {
                 AnswerArtifactExportBundleInspectionIssueKind::SummaryExportIdMismatch,
             ],
         );
-        assert_eq!(first.issue_groups.iter().map(|group| group.count).sum::<usize>(), first.issue_count);
+        assert_issue_groups_well_formed(&first);
         assert_report_preview_section_headings(&first, &["Status", "Issue counts by kind", "Issues"]);
         assert_eq!(
             first.report_preview.sections[1].lines,
@@ -3798,7 +3808,7 @@ mod tests {
                 AnswerArtifactExportBundleInspectionIssueKind::MissingIntegrity,
             ],
         );
-        assert_eq!(inspection.issue_groups.iter().map(|group| group.count).sum::<usize>(), inspection.issue_count);
+        assert_issue_groups_well_formed(&inspection);
         assert_eq!(inspection.report_preview.sections[2].lines.len(), 4);
         assert!(inspection.report_preview.sections[2].lines.iter().all(|line| line.contains("missing_")));
         assert_report_preview_path_free(&inspection, &temp);
@@ -3922,7 +3932,7 @@ mod tests {
                 AnswerArtifactExportBundleInspectionIssueKind::SummaryMetadataMismatch,
             ],
         );
-        assert_eq!(inspection.issue_groups.iter().map(|group| group.count).sum::<usize>(), inspection.issue_count);
+        assert_issue_groups_well_formed(&inspection);
         assert_report_preview_section_headings(&inspection, &["Status", "Issue counts by kind", "Issues"]);
         assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("summary_counts_mismatch")));
         assert!(inspection.report_preview.sections[2].lines.iter().any(|line| line.contains("summary_issue_count_mismatch")));
