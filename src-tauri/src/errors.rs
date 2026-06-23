@@ -82,6 +82,27 @@ pub enum AegisError {
     #[error("Retrieval failed")]
     RetrievalIndexFailed,
 
+    #[error("Evidence pack missing")]
+    EvidencePackMissing,
+
+    #[error("Evidence pack read failed")]
+    EvidencePackReadFailed,
+
+    #[error("Evidence pack write failed")]
+    EvidencePackWriteFailed,
+
+    #[error("Evidence pack query empty")]
+    EvidencePackQueryEmpty,
+
+    #[error("Evidence pack input missing")]
+    EvidencePackInputMissing,
+
+    #[error("Evidence pack empty")]
+    EvidencePackEmpty,
+
+    #[error("Evidence pack invalid limit")]
+    EvidencePackInvalidLimit,
+
 }
 
 pub type AegisResult<T> = Result<T, AegisError>;

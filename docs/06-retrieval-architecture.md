@@ -72,3 +72,15 @@ This phase uses normalized term matching only. It does not add embeddings, answe
 Retrieval queries are source-scoped, normalized deterministically, and rejected when they normalize to empty terms or request `max_results = 0`.
 
 On-demand index build is allowed when the managed index is missing, but malformed existing indexes fail explicitly rather than being rebuilt silently.
+
+## Phase 5.0 note
+
+Phase 5.0 adds a deterministic local Evidence Pack layer under:
+
+```text
+.aegis/corpus/sources/{source_id}/versions/{version_id}/evidence/{evidence_pack_id}.json
+```
+
+The pack is built from retrieval results only.
+It preserves source identity, version identity, chunk identity, locator identity, text hash, score, matched terms, and a short preview.
+This phase does not add embeddings, vector search, reranking, or answer synthesis.

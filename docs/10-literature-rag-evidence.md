@@ -33,6 +33,14 @@ Minimum fields:
 - warnings
 - insufficiency notes
 
+Phase 5.0 stores a local Evidence Pack JSON file at:
+
+`./.aegis/corpus/sources/{source_id}/versions/{version_id}/evidence/{evidence_pack_id}.json`
+
+The pack is built from deterministic lexical retrieval only.
+It preserves source, version, chunk, locator, score, text hash, matched terms, and a short preview.
+This phase does not use embeddings, vector search, or answer synthesis.
+
 ## Evidence unit
 
 Each evidence unit must carry:
