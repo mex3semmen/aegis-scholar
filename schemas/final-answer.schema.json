@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegis.local/schemas/final-answer.schema.json",
+  "title": "FinalAnswer",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "final_answer_id",
+    "grounded_answer_id",
+    "source_id",
+    "version_id",
+    "query",
+    "created_at",
+    "answer_mode",
+    "statement_count",
+    "unsupported_count",
+    "statements",
+    "warnings"
+  ],
+  "properties": {
+    "final_answer_id": {
+      "type": "string",
+      "pattern": "^fan_[0-9a-f]+$"
+    },
+    "grounded_answer_id": {
+      "type": "string"
+    },
+    "source_id": {
+      "type": "string"
+    },
+    "version_id": {
+      "type": "string"
+    },
+    "query": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "answer_mode": {
+      "type": "string",
+      "enum": ["contract_only"]
+    },
+    "statement_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "unsupported_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "statements": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finalAnswerStatement"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "finalAnswerStatement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "statement_id",
+        "grounded_statement_id",
+        "status",
+        "text",
+        "claim_ids",
+        "evidence_ids",
+        "chunk_ids",
+        "locators",
+        "support_level"
+      ],
+      "properties": {
+        "statement_id": {
+          "type": "string",
+          "pattern": "^fst_[0-9a-f]+$"
+        },
+        "grounded_statement_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["supported", "needs_evidence", "unsupported"]
+        },
+        "text": {
+          "type": "string"
+        },
+        "claim_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "chunk_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "locators": {
+          "type": "array",
+          "items": {
+            "$ref": "https://aegis.local/schemas/citation-locator.schema.json"
+          }
+        },
+        "support_level": {
+          "type": "string",
+          "enum": ["direct_grounded_statement", "missing_evidence"]
+        }
+      }
+    }
+  }
+}
