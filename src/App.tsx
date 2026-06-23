@@ -194,6 +194,22 @@ type AnswerArtifactExportBundleInspectionSummary = {
   integrity_file_count: number;
 };
 
+type AnswerArtifactExportBundleInspectionReportSection = {
+  heading: string;
+  lines: string[];
+};
+
+type AnswerArtifactExportBundleInspectionReportPreview = {
+  title: string;
+  schema_version: string;
+  is_consistent: boolean;
+  integrity_verified: boolean;
+  issue_count: number;
+  warning_count: number;
+  issue_counts_by_kind: AnswerArtifactExportBundleInspectionIssueKindCount[];
+  sections: AnswerArtifactExportBundleInspectionReportSection[];
+};
+
 type AnswerArtifactExportSummarySource = {
   source_id: string;
   draft_count: number;
@@ -247,6 +263,7 @@ type AnswerArtifactExportBundleInspection = {
   integrity_schema_version?: string | null;
   integrity_algorithm?: string | null;
   inspection_summary: AnswerArtifactExportBundleInspectionSummary;
+  report_preview: AnswerArtifactExportBundleInspectionReportPreview;
   has_manifest: boolean;
   has_issues: boolean;
   has_summary: boolean;
@@ -809,7 +826,39 @@ export default function App() {
                       </li>
                     ))}
                   </ul>
-                ) : null}
+                  ) : null}
+              </div>
+              <div class="artifact-overview">
+                <h4>{artifactBundleInspection()!.report_preview.title}</h4>
+                <div class="contract-meta">
+                  <div><span>Schema</span><strong>{artifactBundleInspection()!.report_preview.schema_version}</strong></div>
+                  <div><span>Consistent</span><strong>{artifactBundleInspection()!.report_preview.is_consistent ? "yes" : "no"}</strong></div>
+                  <div><span>Integrity verified</span><strong>{artifactBundleInspection()!.report_preview.integrity_verified ? "yes" : "no"}</strong></div>
+                  <div><span>Issues</span><strong>{artifactBundleInspection()!.report_preview.issue_count}</strong></div>
+                  <div><span>Warnings</span><strong>{artifactBundleInspection()!.report_preview.warning_count}</strong></div>
+                </div>
+                {artifactBundleInspection()!.report_preview.sections.length > 0 ? (
+                  artifactBundleInspection()!.report_preview.sections.map((section) => (
+                    <div class="artifact-overview">
+                      <h5>{section.heading}</h5>
+                      {section.lines.length > 0 ? (
+                        <ul class="final-answer-list-items">
+                          {section.lines.map((line) => (
+                            <li>
+                              <div class="final-answer-list-item">
+                                <span>{line}</span>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>No lines available.</p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p>No preview sections available.</p>
+                )}
               </div>
               <div class="contract-meta">
                 <div><span>Schema</span><strong>{artifactBundleInspection()!.schema_version || "mixed / missing"}</strong></div>

@@ -157,6 +157,10 @@ The rollup is path-free and does not repair, migrate, import, share, upload, dow
 Phase 22.1 was reviewed and required no code, UI, or docs changes.
 Phase 22.2 is this docs-sync/finalization pass.
 
+Phase 23.0 adds a read-only inspection report preview derived from the existing inspection summary and typed inspection issues.
+The preview is non-persistent and path-free, does not expose raw internal filesystem paths, does not write report files, and does not add import, share, download, repair, generate, or editing workflows.
+It surfaces a title, schema version, high-level status, issue and warning counts, issue counts by kind, and compact status/issue sections for inspection results.
+
 Manual verification checklist:
 
 - `npm run build`
@@ -176,6 +180,7 @@ Manual verification checklist:
   - export manifest shows preview-only metadata and issue counts only
   - export bundle inspector validates manifest, issues, and summary consistency without mutation
   - export bundle inspector reports missing, unsupported, or mismatched schema versions without mutation
+  - export bundle inspection report preview renders below the inspection summary and stays read-only
   - `export_issues.json` shows the versioned `{ schema_version, issues }` shape
   - legacy raw `export_issues.json` arrays still inspect as missing schema version
   - empty export bundles report missing-file inspection issues

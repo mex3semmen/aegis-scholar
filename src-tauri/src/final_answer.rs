@@ -206,6 +206,7 @@ pub struct AnswerArtifactExportBundleInspection {
     pub integrity_schema_version: Option<String>,
     pub integrity_algorithm: Option<String>,
     pub inspection_summary: AnswerArtifactExportBundleInspectionSummary,
+    pub report_preview: AnswerArtifactExportBundleInspectionReportPreview,
     pub has_manifest: bool,
     pub has_issues: bool,
     pub has_summary: bool,
@@ -231,6 +232,24 @@ pub struct AnswerArtifactExportBundleInspectionSummary {
     pub issue_counts_by_kind: Vec<AnswerArtifactExportBundleInspectionIssueKindCount>,
     pub checked_file_count: usize,
     pub integrity_file_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnswerArtifactExportBundleInspectionReportPreview {
+    pub title: String,
+    pub schema_version: String,
+    pub is_consistent: bool,
+    pub integrity_verified: bool,
+    pub issue_count: usize,
+    pub warning_count: usize,
+    pub issue_counts_by_kind: Vec<AnswerArtifactExportBundleInspectionIssueKindCount>,
+    pub sections: Vec<AnswerArtifactExportBundleInspectionReportSection>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnswerArtifactExportBundleInspectionReportSection {
+    pub heading: String,
+    pub lines: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1221,6 +1240,7 @@ fn inspect_answer_artifact_export_bundle_impl(export_root: PathBuf) -> AegisResu
         &errors,
         &warnings,
     );
+    let report_preview = build_export_bundle_inspection_report_preview(&inspection_summary, &errors, &warnings);
 
     Ok(AnswerArtifactExportBundleInspection {
         schema_version,
@@ -1230,6 +1250,7 @@ fn inspect_answer_artifact_export_bundle_impl(export_root: PathBuf) -> AegisResu
         integrity_schema_version: non_empty_schema_version(integrity.as_ref().map(|value| value.schema_version.as_str())),
         integrity_algorithm: integrity.as_ref().map(|value| value.algorithm.clone()).filter(|value| !value.trim().is_empty()),
         inspection_summary,
+        report_preview,
         has_manifest: manifest.is_some(),
         has_issues: issues.is_some(),
         has_summary: summary.is_some(),
@@ -1612,6 +1633,62 @@ fn build_export_bundle_inspection_summary(
     }
 }
 
+fn build_export_bundle_inspection_report_preview(
+    inspection_summary: &AnswerArtifactExportBundleInspectionSummary,
+    errors: &[AnswerArtifactExportBundleInspectionIssue],
+    warnings: &[AnswerArtifactExportBundleInspectionIssue],
+) -> AnswerArtifactExportBundleInspectionReportPreview {
+    let mut sections = vec![
+        AnswerArtifactExportBundleInspectionReportSection {
+            heading: "Status".to_string(),
+            lines: vec![
+                format!("Consistent: {}", yes_no(inspection_summary.is_consistent)),
+                format!("Schema supported: {}", yes_no(inspection_summary.schema_supported)),
+                format!("Integrity verified: {}", yes_no(inspection_summary.integrity_verified)),
+                format!("Issue count: {}", inspection_summary.issue_count),
+                format!("Warning count: {}", inspection_summary.warning_count),
+                format!("Checked files: {}", inspection_summary.checked_file_count),
+                format!("Integrity files: {}", inspection_summary.integrity_file_count),
+            ],
+        },
+        AnswerArtifactExportBundleInspectionReportSection {
+            heading: "Issue counts by kind".to_string(),
+            lines: if inspection_summary.issue_counts_by_kind.is_empty() {
+                vec!["No issue kinds reported.".to_string()]
+            } else {
+                inspection_summary
+                    .issue_counts_by_kind
+                    .iter()
+                    .map(|item| format!("{} = {}", inspection_issue_kind_name(&item.kind), item.count))
+                    .collect::<Vec<_>>()
+            },
+        },
+    ];
+
+    let diagnostic_lines = errors
+        .iter()
+        .map(|issue| format!("error | {} | {}", inspection_issue_kind_name(&issue.kind), issue.message))
+        .chain(warnings.iter().map(|issue| format!("warning | {} | {}", inspection_issue_kind_name(&issue.kind), issue.message)))
+        .collect::<Vec<_>>();
+    if !diagnostic_lines.is_empty() {
+        sections.push(AnswerArtifactExportBundleInspectionReportSection {
+            heading: "Issues".to_string(),
+            lines: diagnostic_lines,
+        });
+    }
+
+    AnswerArtifactExportBundleInspectionReportPreview {
+        title: "Export bundle inspection report preview".to_string(),
+        schema_version: ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION.to_string(),
+        is_consistent: inspection_summary.is_consistent,
+        integrity_verified: inspection_summary.integrity_verified,
+        issue_count: inspection_summary.issue_count,
+        warning_count: inspection_summary.warning_count,
+        issue_counts_by_kind: inspection_summary.issue_counts_by_kind.clone(),
+        sections,
+    }
+}
+
 fn inspection_issue_kind_counts_from_bundle_issues(
     issues: &[AnswerArtifactExportBundleInspectionIssue],
 ) -> Vec<AnswerArtifactExportBundleInspectionIssueKindCount> {
@@ -1636,6 +1713,16 @@ fn inspection_issue_kind_counts_from_bundle_issues(
     });
 
     counts
+}
+
+fn yes_no(value: bool) -> &'static str {
+    if value { "yes" } else { "no" }
+}
+
+fn inspection_issue_kind_name(kind: &AnswerArtifactExportBundleInspectionIssueKind) -> String {
+    serde_json::to_string(kind)
+        .map(|value| value.trim_matches('"').to_string())
+        .unwrap_or_else(|_| format!("{kind:?}"))
 }
 
 fn non_empty_schema_version(version: Option<&str>) -> Option<String> {
@@ -3315,6 +3402,71 @@ mod tests {
         }));
         assert!(!inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed));
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_report_preview_is_deterministic_and_path_free() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("preview-bundle");
+        service.export_answer_artifacts(&export_root).unwrap();
+
+        let before = fs::read_dir(&export_root).unwrap().count();
+        let first = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+        let second = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+        let after = fs::read_dir(&export_root).unwrap().count();
+
+        assert_eq!(before, after);
+        assert_eq!(first.report_preview, second.report_preview);
+        assert_eq!(first.report_preview.title, "Export bundle inspection report preview");
+        assert_eq!(first.report_preview.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert!(first.report_preview.is_consistent);
+        assert!(first.report_preview.integrity_verified);
+        assert_eq!(first.report_preview.issue_count, 0);
+        assert_eq!(first.report_preview.warning_count, 0);
+        assert!(first.report_preview.issue_counts_by_kind.is_empty());
+        assert_eq!(
+            first.report_preview.sections.iter().map(|section| section.heading.as_str()).collect::<Vec<_>>(),
+            vec!["Status", "Issue counts by kind"]
+        );
+        assert!(first.report_preview.sections[1].lines.iter().any(|line| line == "No issue kinds reported."));
+        assert!(!format!("{first:?}").contains(temp.path().to_string_lossy().as_ref()));
+        assert!(!format!("{:?}", &first.report_preview).contains(temp.path().to_string_lossy().as_ref()));
+        assert!(!format!("{:?}", &second.report_preview).contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_report_preview_summarizes_invalid_bundle_deterministically() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("invalid-preview-bundle");
+        service.export_answer_artifacts(&export_root).unwrap();
+        set_bundle_schema_version(&export_root, "export_manifest.json", "answer_artifact_export.v999");
+        set_bundle_schema_version(&export_root, "export_issues.json", "answer_artifact_export.v999");
+        set_bundle_schema_version(&export_root, "summary.json", "answer_artifact_export.v999");
+
+        let first = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+        let second = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+
+        assert_eq!(first.report_preview, second.report_preview);
+        assert!(!first.report_preview.is_consistent);
+        assert!(!first.report_preview.integrity_verified);
+        assert!(first.report_preview.issue_count > 0);
+        assert_eq!(first.report_preview.warning_count, second.report_preview.warning_count);
+        assert!(first.report_preview.issue_counts_by_kind.iter().any(|item| item.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionUnsupported && item.count == 3));
+        assert!(first.report_preview.issue_counts_by_kind.iter().any(|item| item.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch && item.count == 1));
+        assert_eq!(
+            first.report_preview.sections.iter().map(|section| section.heading.as_str()).collect::<Vec<_>>(),
+            vec!["Status", "Issue counts by kind", "Issues"]
+        );
+        assert!(first.report_preview.sections[2].lines.iter().any(|line| line.contains("schema_version_unsupported")));
+        assert!(first.report_preview.sections[2].lines.iter().any(|line| line.contains("schema_version_mismatch")));
+        assert!(!format!("{first:?}").contains(temp.path().to_string_lossy().as_ref()));
+        assert!(!format!("{:?}", &first.report_preview).contains(temp.path().to_string_lossy().as_ref()));
     }
 
     #[test]
