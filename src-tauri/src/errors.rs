@@ -118,6 +118,9 @@ pub enum AegisError {
     #[error("Answer draft invalid id")]
     AnswerDraftInvalidId,
 
+    #[error("Answer draft input missing")]
+    AnswerDraftInputMissing,
+
     #[error("Answer draft empty evidence")]
     AnswerDraftEmptyEvidence,
 
