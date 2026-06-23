@@ -76,6 +76,12 @@ pub enum AegisError {
     #[error("Retrieval query empty")]
     RetrievalQueryEmpty,
 
+    #[error("Retrieval invalid limit")]
+    RetrievalInvalidLimit,
+
+    #[error("Retrieval failed")]
+    RetrievalIndexFailed,
+
 }
 
 pub type AegisResult<T> = Result<T, AegisError>;
