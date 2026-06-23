@@ -164,6 +164,7 @@ Phase 21.0 adds deterministic export integrity metadata to the manual export bun
 It remains artifact-audit metadata only, is read-only, and validates exported bundle files without enabling import, migration, repair, share, or upload workflows.
 The integrity bundle uses `answer_artifact_export.v1`, SHA-256 digests, and relative paths only.
 Phase 21.1 hardens integrity path validation by rejecting dot-segment and traversal-style paths while keeping the inspector read-only.
+Phase 21.2 is this docs-sync pass.
 This is still not a product answer workflow.
 
 ## Phase 11 — Obsidian Export
