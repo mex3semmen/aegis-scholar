@@ -98,6 +98,10 @@ It is discovery only, does not create directories or artifacts, does not build o
 It orders results deterministically by `source_id`, returns an empty index when no relevant artifacts exist, ignores unrelated files safely, and keeps malformed final answers as conservative typed read failures.
 Phase 13.1 hardens that boundary with deterministic ordering, empty-storage behavior, unrelated-file safety, and conservative malformed-final-answer handling.
 
+Phase 14.0 adds a read-only answer artifact health summary for persisted diagnostics.
+It reports global and per-source artifact counts, including malformed final answers and supported status breakdowns, while keeping output metadata-only and path-free.
+It does not create directories or artifacts, does not build or generate answers, and does not synthesize, rank, or edit anything.
+
 Manual verification checklist:
 
 - `npm run build`
@@ -110,6 +114,7 @@ Manual verification checklist:
   - loading is disabled during fetch
   - artifact overview shows persisted draft, grounded answer, and final answer counts
   - source artifact index shows only sources with persisted artifacts
+  - artifact health shows persisted diagnostic counts only
   - selecting a listed final answer fills the ID and loads it read-only
   - the list shows existing final answers when a source ID is entered
   - supported / `needs_evidence` / unsupported statements remain visible
