@@ -413,6 +413,27 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 41 — Source/Chunk Metadata Guarantee Baseline
+
+Planning boundary only.
+
+Phase 41.0 is the source/chunk metadata guarantee baseline.
+It is a focused backend test/docs pass for deterministic source and chunk identifiers, stable ordering, path-free metadata, and retrieval previews derived only from chunk text.
+No production behavior changed in this pass.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
