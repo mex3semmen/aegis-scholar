@@ -298,6 +298,27 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 35 — Answer/Evidence Deterministic Metadata Review
+
+Planning boundary only.
+
+Phase 35.0 is a no-op review.
+Existing tests already cover deterministic IDs, deterministic ordering, deterministic counts, deterministic summaries/overviews, path-free metadata, path-free typed errors, and read/list/overview no-side-effect behavior across answer drafts, grounded answers, final answers, and the pipeline smoke contract.
+No code, DTO, or validation changes were needed.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
