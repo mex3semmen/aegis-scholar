@@ -53,6 +53,8 @@ It stores a deterministic contract projection under the managed corpus tree, pre
 Phase 9.0 adds a narrow backend smoke test over the persisted answer contract chain.
 It exercises answer draft, grounded answer, and final answer persistence and read-back without adding UI, synthesis, or ranking.
 
+The next implementation milestone is retrieval / evidence pack hardening, focused on upstream lexical retrieval and evidence-pack metadata boundaries before any new answer work.
+
 Current regression checks:
 
 - `cargo test --manifest-path .\src-tauri\Cargo.toml answer -- --nocapture`
