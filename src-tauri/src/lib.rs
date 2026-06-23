@@ -18,7 +18,7 @@ use extraction::{ExtractionReport, ExtractionService};
 use errors::to_user_error;
 use answer_draft::{AnswerDraft, AnswerDraftService};
 use evidence::{EvidencePack, EvidenceService};
-use grounded_answer::{GroundedAnswer, GroundedAnswerService};
+use grounded_answer::{build_grounded_answer as build_grounded_answer_impl, read_grounded_answer as read_grounded_answer_impl, GroundedAnswer};
 use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
 use source_metadata::{CorpusStatus, SourceMetadataInput, SourceMetadataPatch, SourceRecord};
 
@@ -151,15 +151,13 @@ fn get_answer_draft(root: String, source_id: String, answer_draft_id: String) ->
 
 #[tauri::command]
 fn build_grounded_answer(root: String, source_id: String, answer_draft_id: String) -> Result<GroundedAnswer, String> {
-    GroundedAnswerService::new(root)
-        .build_grounded_answer(&source_id, &answer_draft_id)
+    build_grounded_answer_impl(root, &source_id, &answer_draft_id)
         .map_err(to_user_error)
 }
 
 #[tauri::command]
 fn get_grounded_answer(root: String, source_id: String, grounded_answer_id: String) -> Result<GroundedAnswer, String> {
-    GroundedAnswerService::new(root)
-        .read_grounded_answer(&source_id, &grounded_answer_id)
+    read_grounded_answer_impl(root, &source_id, &grounded_answer_id)
         .map_err(to_user_error)
 }
 

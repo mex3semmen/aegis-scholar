@@ -65,6 +65,14 @@ pub struct GroundedAnswerService {
     paths: CorpusPaths,
 }
 
+pub fn build_grounded_answer(root: impl Into<PathBuf>, source_id: &str, answer_draft_id: &str) -> AegisResult<GroundedAnswer> {
+    GroundedAnswerService::new(root).build_grounded_answer(source_id, answer_draft_id)
+}
+
+pub fn read_grounded_answer(root: impl Into<PathBuf>, source_id: &str, grounded_answer_id: &str) -> AegisResult<GroundedAnswer> {
+    GroundedAnswerService::new(root).read_grounded_answer(source_id, grounded_answer_id)
+}
+
 impl GroundedAnswerService {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self { paths: CorpusPaths::new(root) }
@@ -225,9 +233,9 @@ mod tests {
     use crate::corpus_authority::CorpusAuthority;
     use crate::evidence::EvidenceService;
     use crate::locators::CitationLocator;
-    use crate::retrieval::{RetrievalIndex, RetrievalIndexEntry};
-    use crate::source_metadata::{IngestionStatus, SourceMetadataInput, SourceType};
-    use std::fs;
+        use crate::retrieval::{RetrievalIndex, RetrievalIndexEntry};
+        use crate::source_metadata::{IngestionStatus, SourceMetadataInput, SourceType};
+        use std::fs;
 
     fn valid_metadata() -> SourceMetadataInput {
         SourceMetadataInput {
@@ -299,15 +307,14 @@ mod tests {
     #[test]
     fn grounded_answer_rejects_invalid_ids() {
         let temp = tempfile::tempdir().unwrap();
-        let service = GroundedAnswerService::new(temp.path().to_path_buf());
-        assert!(matches!(service.read_grounded_answer("", "gan_x"), Err(AegisError::GroundedAnswerInputMissing)));
-        assert!(matches!(service.read_grounded_answer("src_demo", ""), Err(AegisError::GroundedAnswerInvalidId)));
-        assert!(matches!(service.read_grounded_answer("src_demo", "../x"), Err(AegisError::GroundedAnswerInvalidId)));
-        assert!(matches!(service.read_grounded_answer("src_demo", "..\\x"), Err(AegisError::GroundedAnswerInvalidId)));
-        assert!(matches!(service.read_grounded_answer("src_demo", "/x"), Err(AegisError::GroundedAnswerInvalidId)));
-        assert!(matches!(service.read_grounded_answer("src_demo", "\\x"), Err(AegisError::GroundedAnswerInvalidId)));
-        assert!(matches!(service.read_grounded_answer("src_demo", "x/y"), Err(AegisError::GroundedAnswerInvalidId)));
-        assert!(matches!(service.read_grounded_answer("src_demo", "x\\y"), Err(AegisError::GroundedAnswerInvalidId)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "", "gan_x"), Err(AegisError::GroundedAnswerInputMissing)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "src_demo", ""), Err(AegisError::GroundedAnswerInvalidId)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "src_demo", "../x"), Err(AegisError::GroundedAnswerInvalidId)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "src_demo", "..\\x"), Err(AegisError::GroundedAnswerInvalidId)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "src_demo", "/x"), Err(AegisError::GroundedAnswerInvalidId)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "src_demo", "\\x"), Err(AegisError::GroundedAnswerInvalidId)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "src_demo", "x/y"), Err(AegisError::GroundedAnswerInvalidId)));
+        assert!(matches!(read_grounded_answer(temp.path().to_path_buf(), "src_demo", "x\\y"), Err(AegisError::GroundedAnswerInvalidId)));
     }
 
     #[test]
