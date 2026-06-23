@@ -476,6 +476,86 @@ mod tests {
     }
 
     #[test]
+    fn pipeline_smoke_persists_grounded_to_final_contract_chain() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, _draft_id, _grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let grounded_service = GroundedAnswerService::new(temp.path().to_path_buf());
+        let final_service = FinalAnswerService::new(temp.path().to_path_buf());
+
+        let draft_service = crate::answer_draft::AnswerDraftService::new(temp.path().to_path_buf());
+        let evidence_service = EvidenceService::new(temp.path().to_path_buf());
+        let evidence = evidence_service.build_evidence_pack(&source_id, "alpha", 5).unwrap();
+        let draft = draft_service.build_answer_draft(&source_id, &evidence.evidence_pack_id).unwrap();
+
+        let grounded_a = grounded_service.build_grounded_answer(&source_id, &draft.answer_draft_id).unwrap();
+        let grounded_b = read_grounded_answer(temp.path().to_path_buf(), &source_id, &grounded_a.grounded_answer_id).unwrap();
+        let grounded_c = grounded_service.build_grounded_answer(&source_id, &draft.answer_draft_id).unwrap();
+        assert_eq!(grounded_a.grounded_answer_id, grounded_c.grounded_answer_id);
+        assert_eq!(grounded_a.statements.len(), grounded_b.statements.len());
+        assert_eq!(grounded_b.statements.len(), 1);
+        assert_eq!(grounded_b.statements[0].status, GroundedStatementStatus::Supported);
+        assert_eq!(grounded_b.statements[0].claim_ids.len(), 1);
+        assert_eq!(grounded_b.statements[0].evidence_ids.len(), 1);
+        assert_eq!(grounded_b.statements[0].chunk_ids.len(), 1);
+        assert_eq!(grounded_b.statements[0].locators.len(), 1);
+
+        let final_a = final_service.build_final_answer(&source_id, &grounded_b.grounded_answer_id).unwrap();
+        let final_b = read_final_answer(temp.path().to_path_buf(), &source_id, &final_a.final_answer_id).unwrap();
+        let final_c = final_service.build_final_answer(&source_id, &grounded_b.grounded_answer_id).unwrap();
+        assert_eq!(final_a.final_answer_id, final_c.final_answer_id);
+        assert_eq!(final_a.final_answer_id.starts_with("fan_"), true);
+        assert_eq!(final_b.final_answer_id, final_a.final_answer_id);
+        assert_eq!(final_a.source_id, source_id);
+        assert_eq!(final_a.version_id, version_id);
+        assert_eq!(final_a.statement_count, grounded_b.statement_count);
+        assert_eq!(final_a.statement_count, final_b.statement_count);
+        assert_eq!(final_a.statements.len(), grounded_b.statements.len());
+        assert_eq!(final_a.statements.len(), 1);
+        assert_eq!(final_a.statements[0].status, FinalAnswerStatementStatus::Supported);
+        assert_eq!(final_a.statements[0].claim_ids, grounded_b.statements[0].claim_ids);
+        assert_eq!(final_a.statements[0].evidence_ids, grounded_b.statements[0].evidence_ids);
+        assert_eq!(final_a.statements[0].chunk_ids, grounded_b.statements[0].chunk_ids);
+        assert_eq!(final_a.statements[0].locators, grounded_b.statements[0].locators);
+        assert_eq!(final_a.statements[0].text, grounded_b.statements[0].text);
+        assert_eq!(final_a.unsupported_count, 0);
+        assert_eq!(final_b.statements[0].status, FinalAnswerStatementStatus::Supported);
+        assert!(!final_a.final_answer_id.contains('/'));
+        assert!(!final_a.final_answer_id.contains('\\'));
+        assert!(!grounded_b.grounded_answer_id.contains('/'));
+        assert!(!grounded_b.grounded_answer_id.contains('\\'));
+    }
+
+    #[test]
+    fn pipeline_smoke_preserves_needs_evidence_and_unsupported_statements() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, draft_id, _grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let mut draft = crate::answer_draft::AnswerDraftService::new(temp.path().to_path_buf())
+            .read_answer_draft(&source_id, &draft_id)
+            .unwrap();
+        draft.claims[0].status = crate::answer_draft::DraftClaimStatus::NeedsEvidence;
+        draft.claims[0].confidence = crate::answer_draft::DraftClaimConfidence::MissingEvidence;
+        let corpus = CorpusPaths::new(temp.path().to_path_buf());
+        let draft_path = corpus.source_version_dir(&source_id, &version_id).join("answer_drafts").join(format!("{}.json", draft.answer_draft_id));
+        fs::write(draft_path, serde_json::to_string_pretty(&draft).unwrap()).unwrap();
+
+        let grounded = GroundedAnswerService::new(temp.path().to_path_buf())
+            .build_grounded_answer(&source_id, &draft_id)
+            .unwrap();
+        assert_eq!(grounded.statements[0].status, GroundedStatementStatus::NeedsEvidence);
+        assert_eq!(grounded.statements[0].support_level, GroundedSupportLevel::MissingEvidence);
+
+        let final_answer = FinalAnswerService::new(temp.path().to_path_buf())
+            .build_final_answer(&source_id, &grounded.grounded_answer_id)
+            .unwrap();
+        assert_eq!(final_answer.statements[0].status, FinalAnswerStatementStatus::NeedsEvidence);
+        assert_eq!(final_answer.statements[0].support_level, FinalAnswerSupportLevel::MissingEvidence);
+        assert_eq!(final_answer.statements[0].claim_ids, grounded.statements[0].claim_ids);
+        assert_eq!(final_answer.statements[0].evidence_ids, grounded.statements[0].evidence_ids);
+        assert_eq!(final_answer.statements[0].locators, grounded.statements[0].locators);
+        assert_eq!(final_answer.unsupported_count, 1);
+    }
+
+    #[test]
     fn final_answer_adapter_preserves_supported_needs_evidence_and_unsupported_statuses() {
         let temp = tempfile::tempdir().unwrap();
         let (source_id, version_id, draft_id, _grounded_id) = prepare_grounded(&temp.path().to_path_buf());
