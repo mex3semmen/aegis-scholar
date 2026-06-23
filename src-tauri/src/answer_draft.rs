@@ -33,6 +33,7 @@ pub enum AnswerDraftMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct DraftClaim {
     pub claim_id: String,
     pub status: DraftClaimStatus,
@@ -76,7 +77,7 @@ impl AnswerDraftService {
             validate_answer_draft_id(evidence_pack_id)?;
             let evidence = EvidenceService::new(self.paths.root.clone()).read_evidence_pack(source_id, evidence_pack_id)?;
             if evidence.items.is_empty() {
-                return Err(AegisError::AnswerDraftEmpty);
+                return Err(AegisError::AnswerDraftEmptyEvidence);
             }
             let claims = evidence
                 .items
@@ -145,7 +146,7 @@ impl AnswerDraftService {
         let registry_path = self.paths.registry_path();
         let mut registry = SourceRegistry::load(&registry_path)?;
         let mut record = registry.get_source(source_id)?;
-        record.ingestion_status = IngestionStatus::EvidenceReady;
+        record.ingestion_status = IngestionStatus::AnswerDrafted;
         registry.replace(record)?;
         registry.save(&registry_path)?;
         Ok(())
@@ -176,7 +177,7 @@ fn deterministic_answer_draft_id(evidence: &EvidencePack, claims: &[DraftClaim])
     hasher.update(evidence.source_id.as_bytes());
     hasher.update(evidence.version_id.as_bytes());
     hasher.update(evidence.query.as_bytes());
-    hasher.update(format!("{:?}", AnswerDraftMode::EvidenceOnly).as_bytes());
+    hasher.update(serde_json::to_string(&AnswerDraftMode::EvidenceOnly).unwrap().as_bytes());
     for claim in claims {
         hasher.update(claim.claim_id.as_bytes());
     }
@@ -306,7 +307,13 @@ mod tests {
         assert_eq!(draft.claims[0].evidence_ids, vec![evidence.items[0].evidence_id.clone()]);
         assert_eq!(draft.claims[0].chunk_ids, vec!["chk_demo".to_string()]);
         let registry = SourceRegistry::load(&crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf()).registry_path()).unwrap();
-        assert_eq!(registry.get_source(&source_id).unwrap().ingestion_status, IngestionStatus::EvidenceReady);
+        assert_eq!(registry.get_source(&source_id).unwrap().ingestion_status, IngestionStatus::AnswerDrafted);
+        assert_eq!(draft.claims[0].status, DraftClaimStatus::Supported);
+        assert_eq!(draft.claims[0].confidence, DraftClaimConfidence::Mechanical);
+        assert_eq!(draft.unsupported_count, 0);
+        assert!(draft.claims[0].text.starts_with("Evidence states: "));
+        assert_eq!(draft.claims[0].locators, vec![locator()]);
+        assert_eq!(draft.claims[0].evidence_ids.len(), 1);
     }
 
     #[test]
@@ -330,5 +337,41 @@ mod tests {
         fs::create_dir_all(bad_path.parent().unwrap()).unwrap();
         fs::write(&bad_path, "{not-json").unwrap();
         assert!(matches!(service.read_answer_draft(&source_id, "adr_bad"), Err(AegisError::AnswerDraftReadFailed)));
+    }
+
+    #[test]
+    fn answer_draft_enums_serialize_as_snake_case() {
+        assert_eq!(serde_json::to_string(&AnswerDraftMode::EvidenceOnly).unwrap(), "\"evidence_only\"");
+        assert_eq!(serde_json::to_string(&DraftClaimStatus::NeedsEvidence).unwrap(), "\"needs_evidence\"");
+        assert_eq!(serde_json::to_string(&DraftClaimStatus::Unsupported).unwrap(), "\"unsupported\"");
+        assert_eq!(serde_json::to_string(&DraftClaimConfidence::Mechanical).unwrap(), "\"mechanical\"");
+        assert_eq!(serde_json::to_string(&DraftClaimConfidence::MissingEvidence).unwrap(), "\"missing_evidence\"");
+    }
+
+    #[test]
+    fn answer_draft_empty_evidence_pack_fails() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id) = prepare_evidence(&temp.path().to_path_buf());
+        let corpus = crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf());
+        let empty_pack = crate::evidence::EvidencePack {
+            evidence_pack_id: "evp_empty".to_string(),
+            source_id: source_id.clone(),
+            version_id: version_id.clone(),
+            query: "alpha".to_string(),
+            created_at: Utc::now(),
+            retrieval_index_version: "retrieval-index-v1".to_string(),
+            result_count: 0,
+            item_count: 0,
+            evidence_pack_version: "evidence-pack-v1".to_string(),
+            warnings: Vec::new(),
+            items: Vec::new(),
+        };
+        let pack_path = corpus.source_version_dir(&source_id, &version_id).join("evidence").join("evp_empty.json");
+        fs::create_dir_all(pack_path.parent().unwrap()).unwrap();
+        fs::write(&pack_path, serde_json::to_string_pretty(&empty_pack).unwrap()).unwrap();
+        let service = AnswerDraftService::new(temp.path().to_path_buf());
+        assert!(matches!(service.build_answer_draft(&source_id, "evp_empty"), Err(AegisError::AnswerDraftEmptyEvidence)));
+        let registry = SourceRegistry::load(&corpus.registry_path()).unwrap();
+        assert_ne!(registry.get_source(&source_id).unwrap().ingestion_status, IngestionStatus::AnswerDrafted);
     }
 }
