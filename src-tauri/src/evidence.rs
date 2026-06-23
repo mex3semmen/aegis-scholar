@@ -12,8 +12,6 @@ use std::fs;
 use std::path::PathBuf;
 
 const EVIDENCE_PACK_VERSION: &str = "evidence-pack-v1";
-const EVIDENCE_PREVIEW_LIMIT: usize = 240;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvidencePack {
     pub evidence_pack_id: String,
@@ -31,7 +29,7 @@ pub struct EvidencePack {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvidenceItem {
-    pub evidence_item_id: String,
+    pub evidence_id: String,
     pub chunk_id: String,
     pub source_id: String,
     pub version_id: String,
@@ -123,6 +121,7 @@ impl EvidenceService {
 
     pub fn read_evidence_pack(&self, source_id: &str, evidence_pack_id: &str) -> AegisResult<EvidencePack> {
         self.paths.ensure_layout()?;
+        validate_evidence_pack_id(evidence_pack_id)?;
         let registry = SourceRegistry::load(&self.paths.registry_path())?;
         let record = registry.get_source(source_id)?;
         let path = self.pack_path(&record.source_id, &record.version_id, evidence_pack_id);
@@ -158,7 +157,7 @@ impl EvidenceService {
 
 fn evidence_item_from_result(result: &RetrievalResult) -> EvidenceItem {
     EvidenceItem {
-        evidence_item_id: deterministic_evidence_item_id(result),
+        evidence_id: deterministic_evidence_item_id(result),
         chunk_id: result.chunk_id.clone(),
         source_id: result.source_id.clone(),
         version_id: result.version_id.clone(),
@@ -166,7 +165,7 @@ fn evidence_item_from_result(result: &RetrievalResult) -> EvidenceItem {
         text_hash: result.text_hash.clone(),
         score: result.score,
         matched_terms: result.matched_terms.clone(),
-        preview: preview_text(&result.preview, EVIDENCE_PREVIEW_LIMIT),
+        preview: result.preview.clone(),
     }
 }
 
@@ -177,7 +176,7 @@ fn deterministic_evidence_pack_id(source_id: &str, version_id: &str, query: &str
     hasher.update(query.as_bytes());
     hasher.update(index_version.as_bytes());
     for item in items {
-        hasher.update(item.evidence_item_id.as_bytes());
+        hasher.update(item.evidence_id.as_bytes());
     }
     format!("evp_{:x}", hasher.finalize())
 }
@@ -188,22 +187,23 @@ fn deterministic_evidence_item_id(result: &RetrievalResult) -> String {
     hasher.update(result.version_id.as_bytes());
     hasher.update(result.chunk_id.as_bytes());
     hasher.update(result.text_hash.as_bytes());
-    hasher.update(result.score.to_bits().to_string().as_bytes());
+    hasher.update(result.locator.label.as_bytes());
+    hasher.update(serde_json::to_string(&result.locator).unwrap().as_bytes());
+    hasher.update(result.score.to_bits().to_le_bytes());
     for term in &result.matched_terms {
         hasher.update(term.as_bytes());
     }
     format!("evi_{:x}", hasher.finalize())
 }
 
-fn preview_text(text: &str, limit: usize) -> String {
-    if text.len() <= limit {
-        return text.to_string();
+fn validate_evidence_pack_id(evidence_pack_id: &str) -> AegisResult<()> {
+    if evidence_pack_id.trim().is_empty() {
+        return Err(AegisError::EvidencePackInputMissing);
     }
-    let mut end = limit.min(text.len());
-    while end > 0 && !text.is_char_boundary(end) {
-        end -= 1;
+    if evidence_pack_id.contains('/') || evidence_pack_id.contains('\\') || evidence_pack_id.contains("..") {
+        return Err(AegisError::EvidencePackInputMissing);
     }
-    text[..end].trim_end().to_string()
+    Ok(())
 }
 
 #[cfg(test)]
@@ -212,6 +212,7 @@ mod tests {
     use crate::chunking::{ChunkRecord, ChunkingReport};
     use crate::corpus_authority::CorpusAuthority;
     use crate::locators::CitationLocator;
+    use crate::retrieval::{RetrievalIndex, RetrievalIndexEntry, RetrievalResult};
     use crate::source_metadata::{SourceMetadataInput, SourceType};
     use std::fs;
 
@@ -268,9 +269,47 @@ mod tests {
             .join("chunks.json");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, serde_json::to_string_pretty(&report).unwrap()).unwrap();
-        let retrieval = RetrievalService::new(root.clone());
-        retrieval.build_index(&record.source_id).unwrap();
+        write_index(root, &record.source_id, &record.version_id);
         record.source_id
+    }
+
+    fn write_index(root: &PathBuf, source_id: &str, version_id: &str) {
+        let index = RetrievalIndex {
+            source_id: source_id.to_string(),
+            version_id: version_id.to_string(),
+            indexed_at: Utc::now(),
+            chunk_count: 1,
+            index_version: "retrieval-index-v1".to_string(),
+            chunk_report_hash: "sha256:extraction".to_string(),
+            entries: vec![RetrievalIndexEntry {
+                chunk_id: "chk_demo".to_string(),
+                source_id: source_id.to_string(),
+                version_id: version_id.to_string(),
+                locator: locator(),
+                text_hash: "sha256:chunk".to_string(),
+                normalized_terms: vec!["alpha".to_string()],
+            }],
+            warnings: Vec::new(),
+        };
+        let path = crate::corpus_paths::CorpusPaths::new(root.clone())
+            .source_version_dir(source_id, version_id)
+            .join("retrieval")
+            .join("index.json");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, serde_json::to_string_pretty(&index).unwrap()).unwrap();
+    }
+
+    fn sample_result() -> RetrievalResult {
+        RetrievalResult {
+            chunk_id: "chk_demo".to_string(),
+            source_id: "src_demo".to_string(),
+            version_id: "srcv_demo".to_string(),
+            locator: locator(),
+            score: 0.5,
+            matched_terms: vec!["alpha".to_string()],
+            text_hash: "sha256:chunk".to_string(),
+            preview: "alpha beta gamma".to_string(),
+        }
     }
 
     #[test]
@@ -284,6 +323,8 @@ mod tests {
         assert_eq!(read_back.source_id, pack.source_id);
         assert_eq!(read_back.version_id, pack.version_id);
         assert_eq!(read_back.items[0].chunk_id, "chk_demo");
+        assert_eq!(read_back.items[0].preview, "alpha beta gamma");
+        assert!(read_back.items[0].evidence_id.starts_with("evi_"));
     }
 
     #[test]
@@ -291,5 +332,59 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let service = EvidenceService::new(temp.path().to_path_buf());
         assert!(matches!(service.build_evidence_pack("src_demo", "", 1), Err(AegisError::EvidencePackQueryEmpty)));
+    }
+
+    #[test]
+    fn evidence_item_id_changes_with_content_inputs() {
+        let mut a = sample_result();
+        let base = evidence_item_from_result(&a).evidence_id;
+        a.score = 0.75;
+        let score_changed = evidence_item_from_result(&a).evidence_id;
+        a.score = 0.5;
+        a.text_hash = "sha256:other".to_string();
+        let hash_changed = evidence_item_from_result(&a).evidence_id;
+        a.text_hash = "sha256:chunk".to_string();
+        a.locator = CitationLocator::paragraph("paragraph:2", Some(vec!["Notes".to_string()]), 1, 8);
+        let locator_changed = evidence_item_from_result(&a).evidence_id;
+        a.locator = locator();
+        a.matched_terms = vec!["beta".to_string()];
+        let terms_changed = evidence_item_from_result(&a).evidence_id;
+
+        assert_ne!(base, score_changed);
+        assert_ne!(base, hash_changed);
+        assert_ne!(base, locator_changed);
+        assert_ne!(base, terms_changed);
+        assert!(base.starts_with("evi_"));
+    }
+
+    #[test]
+    fn evidence_pack_id_is_deterministic_for_repeated_builds() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = prepare_index(&temp.path().to_path_buf());
+        let service = EvidenceService::new(temp.path().to_path_buf());
+        let first = service.build_evidence_pack(&source_id, "alpha", 5).unwrap();
+        let second = service.build_evidence_pack(&source_id, "alpha", 5).unwrap();
+        assert_eq!(first.evidence_pack_id, second.evidence_pack_id);
+        assert!(first.evidence_pack_id.starts_with("evp_"));
+    }
+
+    #[test]
+    fn evidence_pack_id_changes_with_query() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = prepare_index(&temp.path().to_path_buf());
+        let service = EvidenceService::new(temp.path().to_path_buf());
+        let alpha = service.build_evidence_pack(&source_id, "alpha", 5).unwrap();
+        let beta = service.build_evidence_pack(&source_id, "beta", 5).unwrap_err();
+        assert!(alpha.evidence_pack_id.starts_with("evp_"));
+        assert!(matches!(beta, AegisError::EvidencePackEmpty | AegisError::RetrievalQueryEmpty));
+    }
+
+    #[test]
+    fn evidence_pack_rejects_path_traversal_ids() {
+        let temp = tempfile::tempdir().unwrap();
+        let service = EvidenceService::new(temp.path().to_path_buf());
+        assert!(matches!(service.read_evidence_pack("src_demo", "../evil"), Err(AegisError::EvidencePackInputMissing)));
+        assert!(matches!(service.read_evidence_pack("src_demo", "evil/pack"), Err(AegisError::EvidencePackInputMissing)));
+        assert!(matches!(service.read_evidence_pack("src_demo", ""), Err(AegisError::EvidencePackInputMissing)));
     }
 }
