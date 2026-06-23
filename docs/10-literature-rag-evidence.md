@@ -113,6 +113,7 @@ Phase 16.0 adds a read-only answer artifact export manifest for preview-only ins
 It reports persisted metadata only, includes per-source final-answer metadata, and derives `issue_count` from the issue-list diagnostics.
 It does not write export files, does not create directories or artifacts, and does not build, generate, synthesize, rank, infer, rewrite, repair, or edit anything.
 Phase 16.1 hardens that boundary with deterministic ordering, path-free metadata, and tolerant handling of malformed final answers in the preview.
+This remains preview-only and still does not provide actual export.
 
 Manual verification checklist:
 
