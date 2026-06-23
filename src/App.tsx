@@ -14,6 +14,7 @@ type CitationLocator = {
   paragraph_index?: number | null;
   start_char: number;
   end_char: number;
+  [key: string]: unknown;
 };
 
 type FinalAnswerStatement = {
@@ -42,6 +43,18 @@ type FinalAnswer = {
   warnings: string[];
 };
 
+function sanitizeBackendError(error: unknown) {
+  const message = String(error);
+  return message.replace(/[A-Za-z]:\\[^"]+/g, "[path hidden]").replace(/E:\\[^"]+/g, "[path hidden]");
+}
+
+function locatorSummary(locator: CitationLocator) {
+  const section = locator.section ? `section=${locator.section}` : null;
+  const paragraph = locator.paragraph_index !== null && locator.paragraph_index !== undefined ? `paragraph=${locator.paragraph_index}` : null;
+  const range = `chars=${locator.start_char}-${locator.end_char}`;
+  return [locator.label, section, paragraph, range].filter(Boolean).join(" | ");
+}
+
 export default function App() {
   const [status, setStatus] = createSignal<CorpusStatus | null>(null);
   const [statusError, setStatusError] = createSignal<string | null>(null);
@@ -49,6 +62,7 @@ export default function App() {
   const [finalAnswerId, setFinalAnswerId] = createSignal("");
   const [finalAnswer, setFinalAnswer] = createSignal<FinalAnswer | null>(null);
   const [finalAnswerError, setFinalAnswerError] = createSignal<string | null>(null);
+  const [finalAnswerLoading, setFinalAnswerLoading] = createSignal(false);
 
   async function loadStatus() {
     setStatusError(null);
@@ -63,17 +77,31 @@ export default function App() {
   }
 
   async function loadFinalAnswer() {
+    const trimmedSourceId = sourceId().trim();
+    const trimmedFinalAnswerId = finalAnswerId().trim();
+
+    if (!trimmedSourceId || !trimmedFinalAnswerId) {
+      setFinalAnswerError("Source ID and final answer ID are required.");
+      return;
+    }
+
+    if (finalAnswerLoading()) {
+      return;
+    }
+
+    setFinalAnswerLoading(true);
     setFinalAnswerError(null);
-    setFinalAnswer(null);
     try {
       const result = await invoke<FinalAnswer>("get_final_answer", {
         root: ".",
-        source_id: sourceId(),
-        final_answer_id: finalAnswerId(),
+        source_id: trimmedSourceId,
+        final_answer_id: trimmedFinalAnswerId,
       });
       setFinalAnswer(result);
     } catch (err) {
-      setFinalAnswerError(String(err));
+      setFinalAnswerError(sanitizeBackendError(err));
+    } finally {
+      setFinalAnswerLoading(false);
     }
   }
 
@@ -127,7 +155,9 @@ export default function App() {
           </label>
         </div>
         <div class="hero-actions">
-          <button onClick={loadFinalAnswer}>Load final answer</button>
+          <button onClick={loadFinalAnswer} disabled={finalAnswerLoading()}>
+            {finalAnswerLoading() ? "Loading..." : "Load final answer"}
+          </button>
         </div>
         {finalAnswerError() && <p class="error">{finalAnswerError()}</p>}
         {finalAnswer() ? (
@@ -137,10 +167,12 @@ export default function App() {
               <div><span>Grounded answer ID</span><strong>{finalAnswer()!.grounded_answer_id}</strong></div>
               <div><span>Mode</span><strong>{finalAnswer()!.answer_mode}</strong></div>
               <div><span>Statements</span><strong>{finalAnswer()!.statement_count}</strong></div>
+              <div><span>Needs evidence</span><strong>{finalAnswer()!.statements.filter((statement) => statement.status === "needs_evidence").length}</strong></div>
               <div><span>Unsupported</span><strong>{finalAnswer()!.unsupported_count}</strong></div>
             </div>
-            <div class="statement-list">
-              {finalAnswer()!.statements.map((statement, index) => (
+            {finalAnswer()!.statements.length > 0 ? (
+              <div class="statement-list">
+                {finalAnswer()!.statements.map((statement, index) => (
                 <article class="statement-card">
                   <div class="statement-header">
                     <h3>
@@ -158,11 +190,23 @@ export default function App() {
                     <div><span>Claim IDs</span><code>{statement.claim_ids.join(", ") || "none"}</code></div>
                     <div><span>Evidence IDs</span><code>{statement.evidence_ids.join(", ") || "none"}</code></div>
                     <div><span>Chunk IDs</span><code>{statement.chunk_ids.join(", ") || "none"}</code></div>
-                    <div class="full-span"><span>Locators</span><code>{statement.locators.length > 0 ? JSON.stringify(statement.locators, null, 2) : "none"}</code></div>
+                    <div class="full-span">
+                      <span>Locators</span>
+                      <div class="locator-list">
+                        {statement.locators.length > 0 ? (
+                          statement.locators.map((locator) => <code>{locatorSummary(locator)}</code>)
+                        ) : (
+                          <code>none</code>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </article>
               ))}
-            </div>
+              </div>
+            ) : (
+              <p>No statements in this final answer.</p>
+            )}
             {finalAnswer()!.warnings.length > 0 && (
               <div class="warning-box">
                 <h3>Warnings</h3>
