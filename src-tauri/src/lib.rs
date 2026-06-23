@@ -19,7 +19,7 @@ use extraction::{ExtractionReport, ExtractionService};
 use errors::to_user_error;
 use answer_draft::{AnswerDraft, AnswerDraftService};
 use evidence::{EvidencePack, EvidenceService};
-use final_answer::{build_final_answer as build_final_answer_impl, get_answer_artifact_health as get_answer_artifact_health_impl, get_answer_artifact_overview as get_answer_artifact_overview_impl, list_answer_artifact_sources as list_answer_artifact_sources_impl, list_final_answers as list_final_answers_impl, read_final_answer as read_final_answer_impl, AnswerArtifactHealth, AnswerArtifactOverview, AnswerArtifactSourceMetadata, FinalAnswer, FinalAnswerMetadata};
+use final_answer::{build_final_answer as build_final_answer_impl, get_answer_artifact_health as get_answer_artifact_health_impl, list_answer_artifact_issues as list_answer_artifact_issues_impl, get_answer_artifact_overview as get_answer_artifact_overview_impl, list_answer_artifact_sources as list_answer_artifact_sources_impl, list_final_answers as list_final_answers_impl, read_final_answer as read_final_answer_impl, AnswerArtifactHealth, AnswerArtifactIssue, AnswerArtifactOverview, AnswerArtifactSourceMetadata, FinalAnswer, FinalAnswerMetadata};
 use grounded_answer::{build_grounded_answer as build_grounded_answer_impl, read_grounded_answer as read_grounded_answer_impl, GroundedAnswer};
 use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
 use source_metadata::{CorpusStatus, SourceMetadataInput, SourceMetadataPatch, SourceRecord};
@@ -199,6 +199,12 @@ fn get_answer_artifact_health(root: String) -> Result<AnswerArtifactHealth, Stri
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn list_answer_artifact_issues(root: String) -> Result<Vec<AnswerArtifactIssue>, String> {
+    list_answer_artifact_issues_impl(root)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -226,7 +232,8 @@ pub fn run() {
             list_final_answers,
             get_answer_artifact_overview,
             list_answer_artifact_sources,
-            get_answer_artifact_health
+            get_answer_artifact_health,
+            list_answer_artifact_issues
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");

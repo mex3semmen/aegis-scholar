@@ -87,6 +87,16 @@ type AnswerArtifactHealth = {
   sources: AnswerArtifactSourceHealth[];
 };
 
+type AnswerArtifactIssue = {
+  source_id: string;
+  issue_kind: "malformed_final_answer" | "unsupported_statement" | "needs_evidence_statement";
+  final_answer_id?: string | null;
+  grounded_answer_id?: string | null;
+  statement_index?: number | null;
+  statement_status?: string | null;
+  message: string;
+};
+
 function sanitizeBackendError(error: unknown) {
   const message = String(error);
   return message.replace(/[A-Za-z]:\\[^"]+/g, "[path hidden]").replace(/E:\\[^"]+/g, "[path hidden]");
@@ -116,6 +126,9 @@ export default function App() {
   const [artifactHealth, setArtifactHealth] = createSignal<AnswerArtifactHealth | null>(null);
   const [artifactHealthError, setArtifactHealthError] = createSignal<string | null>(null);
   const [artifactHealthLoading, setArtifactHealthLoading] = createSignal(false);
+  const [artifactIssues, setArtifactIssues] = createSignal<AnswerArtifactIssue[]>([]);
+  const [artifactIssuesError, setArtifactIssuesError] = createSignal<string | null>(null);
+  const [artifactIssuesLoading, setArtifactIssuesLoading] = createSignal(false);
 
   async function loadStatus() {
     setStatusError(null);
@@ -201,9 +214,33 @@ export default function App() {
     }
   }
 
+  async function loadArtifactIssues() {
+    if (artifactIssuesLoading()) {
+      return;
+    }
+    setArtifactIssuesLoading(true);
+    setArtifactIssuesError(null);
+    try {
+      const result = await invoke<AnswerArtifactIssue[]>("list_answer_artifact_issues", {
+        root: ".",
+      });
+      setArtifactIssues(result);
+    } catch (err) {
+      setArtifactIssues([]);
+      setArtifactIssuesError(sanitizeBackendError(err));
+    } finally {
+      setArtifactIssuesLoading(false);
+    }
+  }
+
   async function selectArtifactSource(item: AnswerArtifactSourceMetadata) {
     setSourceId(item.source_id);
     await loadArtifactOverviewBySourceId(item.source_id);
+  }
+
+  async function selectArtifactSourceId(source_id: string) {
+    setSourceId(source_id);
+    await loadArtifactOverviewBySourceId(source_id);
   }
 
   async function loadArtifactOverviewBySourceId(trimmedSourceId: string) {
@@ -297,11 +334,15 @@ export default function App() {
           <button onClick={loadArtifactHealth} disabled={artifactHealthLoading()}>
             {artifactHealthLoading() ? "Loading..." : "Load artifact health"}
           </button>
+          <button onClick={loadArtifactIssues} disabled={artifactIssuesLoading()}>
+            {artifactIssuesLoading() ? "Loading..." : "Load artifact issues"}
+          </button>
         </div>
         {finalAnswerError() && <p class="error">{finalAnswerError()}</p>}
         {artifactOverviewError() && <p class="error">{artifactOverviewError()}</p>}
         {artifactSourcesError() && <p class="error">{artifactSourcesError()}</p>}
         {artifactHealthError() && <p class="error">{artifactHealthError()}</p>}
+        {artifactIssuesError() && <p class="error">{artifactIssuesError()}</p>}
         <div class="artifact-overview">
           <h3>Sources with artifacts</h3>
           {artifactSources().length > 0 ? (
@@ -353,6 +394,37 @@ export default function App() {
             </>
           ) : (
             <p>No artifact health loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Artifact issues</h3>
+          {artifactIssues().length > 0 ? (
+            <>
+              <p class="muted">Issues: {artifactIssues().length}</p>
+              <ul class="final-answer-list-items">
+                {artifactIssues().map((item) => (
+                  <li>
+                    <div class="final-answer-list-item">
+                      <span>
+                        <button class="link-button" onClick={() => selectArtifactSourceId(item.source_id)}>
+                          {item.source_id}
+                        </button>
+                      </span>
+                      <small>
+                        {item.issue_kind}
+                        {item.final_answer_id ? ` | ${item.final_answer_id}` : ""}
+                        {item.statement_index !== null && item.statement_index !== undefined ? ` | statement=${item.statement_index}` : ""}
+                        {item.statement_status ? ` | status=${item.statement_status}` : ""}
+                        {item.grounded_answer_id ? ` | grounded=${item.grounded_answer_id}` : ""}
+                      </small>
+                      <p>{item.message}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p>No artifact issues loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">

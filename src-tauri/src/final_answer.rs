@@ -85,6 +85,25 @@ pub struct AnswerArtifactHealth {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnswerArtifactIssue {
+    pub source_id: String,
+    pub issue_kind: AnswerArtifactIssueKind,
+    pub final_answer_id: Option<String>,
+    pub grounded_answer_id: Option<String>,
+    pub statement_index: Option<usize>,
+    pub statement_status: Option<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AnswerArtifactIssueKind {
+    MalformedFinalAnswer,
+    UnsupportedStatement,
+    NeedsEvidenceStatement,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnswerArtifactSourceHealth {
     pub source_id: String,
     pub draft_count: usize,
@@ -136,6 +155,10 @@ pub fn list_answer_artifact_sources(root: impl Into<PathBuf>) -> AegisResult<Vec
 
 pub fn get_answer_artifact_health(root: impl Into<PathBuf>) -> AegisResult<AnswerArtifactHealth> {
     FinalAnswerService::new(root).get_answer_artifact_health()
+}
+
+pub fn list_answer_artifact_issues(root: impl Into<PathBuf>) -> AegisResult<Vec<AnswerArtifactIssue>> {
+    FinalAnswerService::new(root).list_answer_artifact_issues()
 }
 
 pub fn build_final_answer_from_grounded_answer(grounded_answer: &GroundedAnswer) -> AegisResult<FinalAnswer> {
@@ -328,6 +351,80 @@ impl FinalAnswerService {
         })
     }
 
+    pub fn list_answer_artifact_issues(&self) -> AegisResult<Vec<AnswerArtifactIssue>> {
+        let registry = SourceRegistry::load(&self.paths.registry_path())?;
+        let mut issues = Vec::new();
+
+        for record in registry.list_sources() {
+            let version_dir = self.paths.source_version_dir(&record.source_id, &record.version_id);
+            let final_answer_dir = version_dir.join("final_answers");
+            if !final_answer_dir.exists() {
+                continue;
+            }
+
+            for entry in fs::read_dir(&final_answer_dir).map_err(|_| AegisError::FinalAnswerReadFailed)? {
+                let entry = entry.map_err(|_| AegisError::FinalAnswerReadFailed)?;
+                let path = entry.path();
+                if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                    continue;
+                }
+                let content = fs::read_to_string(&path).map_err(|_| AegisError::FinalAnswerReadFailed)?;
+                match serde_json::from_str::<FinalAnswer>(&content) {
+                    Ok(answer) => {
+                        issues.extend(answer.statements.iter().enumerate().filter_map(|(index, statement)| {
+                            let issue_kind = match statement.status {
+                                FinalAnswerStatementStatus::Supported => return None,
+                                FinalAnswerStatementStatus::NeedsEvidence => AnswerArtifactIssueKind::NeedsEvidenceStatement,
+                                FinalAnswerStatementStatus::Unsupported => AnswerArtifactIssueKind::UnsupportedStatement,
+                            };
+                            Some(AnswerArtifactIssue {
+                                source_id: record.source_id.clone(),
+                                issue_kind,
+                                final_answer_id: Some(answer.final_answer_id.clone()),
+                                grounded_answer_id: Some(answer.grounded_answer_id.clone()),
+                                statement_index: Some(index),
+                                statement_status: Some(serde_json::to_string(&statement.status).unwrap().trim_matches('"').to_string()),
+                                message: match statement.status {
+                                    FinalAnswerStatementStatus::NeedsEvidence => "statement needs evidence".to_string(),
+                                    FinalAnswerStatementStatus::Unsupported => "statement is unsupported".to_string(),
+                                    FinalAnswerStatementStatus::Supported => unreachable!(),
+                                },
+                            })
+                        }));
+                    }
+                    Err(_) => {
+                        issues.push(AnswerArtifactIssue {
+                            source_id: record.source_id.clone(),
+                            issue_kind: AnswerArtifactIssueKind::MalformedFinalAnswer,
+                            final_answer_id: None,
+                            grounded_answer_id: None,
+                            statement_index: None,
+                            statement_status: None,
+                            message: "final answer could not be read".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+
+        issues.sort_by(|left, right| {
+            (
+                &left.source_id,
+                issue_kind_rank(&left.issue_kind),
+                left.final_answer_id.as_deref().unwrap_or(""),
+                left.statement_index.unwrap_or(usize::MAX),
+            )
+                .cmp(&(
+                    &right.source_id,
+                    issue_kind_rank(&right.issue_kind),
+                    right.final_answer_id.as_deref().unwrap_or(""),
+                    right.statement_index.unwrap_or(usize::MAX),
+                ))
+        });
+
+        Ok(issues)
+    }
+
     fn write_final_answer(&self, final_answer: &FinalAnswer) -> AegisResult<()> {
         let path = self.answer_path(&final_answer.source_id, &final_answer.version_id, &final_answer.final_answer_id);
         if let Some(parent) = path.parent() {
@@ -507,6 +604,14 @@ fn answer_artifact_counts_for_source(service: &FinalAnswerService, source_id: &s
         unsupported_statement_count,
         needs_evidence_statement_count,
     })
+}
+
+fn issue_kind_rank(issue_kind: &AnswerArtifactIssueKind) -> usize {
+    match issue_kind {
+        AnswerArtifactIssueKind::MalformedFinalAnswer => 0,
+        AnswerArtifactIssueKind::NeedsEvidenceStatement => 1,
+        AnswerArtifactIssueKind::UnsupportedStatement => 2,
+    }
 }
 
 #[cfg(test)]
@@ -1144,6 +1249,102 @@ mod tests {
         assert!(!version_dir.join("answer_drafts").exists());
         assert!(!version_dir.join("grounded_answers").exists());
         assert!(!version_dir.join("final_answers").exists());
+    }
+
+    #[test]
+    fn answer_artifact_issues_is_empty_for_empty_storage() {
+        let temp = tempfile::tempdir().unwrap();
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let issues = service.list_answer_artifact_issues().unwrap();
+        assert!(issues.is_empty());
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn answer_artifact_issues_counts_malformed_supported_and_unsupported_statements() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let valid_final = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let final_dir = CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_id, &version_id)
+            .join("final_answers");
+        let mut unsupported = valid_final.clone();
+        unsupported.final_answer_id = "fan_unsupported".to_string();
+        unsupported.statements[0].status = FinalAnswerStatementStatus::Unsupported;
+        unsupported.statement_count = 1;
+        unsupported.unsupported_count = 1;
+        fs::write(
+            final_dir.join("fan_unsupported.json"),
+            serde_json::to_string_pretty(&unsupported).unwrap(),
+        )
+        .unwrap();
+        let mut needs = valid_final.clone();
+        needs.final_answer_id = "fan_needs".to_string();
+        needs.statements[0].status = FinalAnswerStatementStatus::NeedsEvidence;
+        needs.statement_count = 1;
+        needs.unsupported_count = 1;
+        fs::write(final_dir.join("fan_needs.json"), serde_json::to_string_pretty(&needs).unwrap()).unwrap();
+        fs::write(final_dir.join("fan_bad.json"), "{not-json").unwrap();
+        fs::write(final_dir.join("notes.txt"), "ignore me").unwrap();
+
+        let issues = service.list_answer_artifact_issues().unwrap();
+        assert_eq!(issues.len(), 3);
+        assert_eq!(issues[0].issue_kind, AnswerArtifactIssueKind::MalformedFinalAnswer);
+        assert_eq!(issues[1].issue_kind, AnswerArtifactIssueKind::NeedsEvidenceStatement);
+        assert_eq!(issues[2].issue_kind, AnswerArtifactIssueKind::UnsupportedStatement);
+        assert_eq!(issues[0].source_id, source_id);
+        assert_eq!(issues[1].final_answer_id.as_deref(), Some("fan_needs"));
+        assert_eq!(issues[2].final_answer_id.as_deref(), Some("fan_unsupported"));
+        assert_eq!(issues[1].statement_status.as_deref(), Some("needs_evidence"));
+        assert_eq!(issues[2].statement_status.as_deref(), Some("unsupported"));
+        assert!(!format!("{issues:?}").contains(".aegis"));
+        assert!(!draft_id.is_empty());
+    }
+
+    #[test]
+    fn answer_artifact_issues_are_deterministic_across_multiple_sources() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_a, version_a, _draft_a, grounded_a) = prepare_grounded(&temp.path().to_path_buf());
+        let source_path_b = temp.path().join("notes_b.md");
+        fs::write(&source_path_b, "delta epsilon zeta").unwrap();
+        let authority = CorpusAuthority::new(temp.path().to_path_buf());
+        authority.register_source(source_path_b.to_string_lossy().to_string(), valid_metadata()).unwrap();
+        let registry = SourceRegistry::load(&CorpusPaths::new(temp.path().to_path_buf()).registry_path()).unwrap();
+        let source_b = registry.sources.iter().find(|record| record.source_id != source_a).cloned().unwrap();
+
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let valid_final_a = service.build_final_answer(&source_a, &grounded_a).unwrap();
+        let dir_a = CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_a, &version_a)
+            .join("final_answers");
+        let mut unsupported_a = valid_final_a.clone();
+        unsupported_a.final_answer_id = "fan_a".to_string();
+        unsupported_a.statements[0].status = FinalAnswerStatementStatus::Unsupported;
+        unsupported_a.statement_count = 1;
+        unsupported_a.unsupported_count = 1;
+        fs::write(dir_a.join("fan_a.json"), serde_json::to_string_pretty(&unsupported_a).unwrap()).unwrap();
+
+        let source_b_dir = CorpusPaths::new(temp.path().to_path_buf()).source_version_dir(&source_b.source_id, &source_b.version_id);
+        fs::create_dir_all(source_b_dir.join("final_answers")).unwrap();
+        fs::write(source_b_dir.join("final_answers").join("fan_b_bad.json"), "{not-json").unwrap();
+
+        let issues = service.list_answer_artifact_issues().unwrap();
+        assert_eq!(issues.len(), 2);
+        assert!(issues.windows(2).all(|pair| {
+            (
+                &pair[0].source_id,
+                issue_kind_rank(&pair[0].issue_kind),
+                pair[0].final_answer_id.as_deref().unwrap_or(""),
+                pair[0].statement_index.unwrap_or(usize::MAX),
+            ) <= (
+                &pair[1].source_id,
+                issue_kind_rank(&pair[1].issue_kind),
+                pair[1].final_answer_id.as_deref().unwrap_or(""),
+                pair[1].statement_index.unwrap_or(usize::MAX),
+            )
+        }));
+        assert!(issues.iter().all(|item| !item.message.contains(":\\") && !item.message.contains("/")));
     }
 
     #[test]
