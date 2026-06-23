@@ -120,6 +120,9 @@ Phase 14.0 adds a read-only answer artifact health summary for persisted diagnos
 It remains inspection-only, reports persisted metadata counts only, is deterministic by `source_id`, and is still not a product answer experience.
 Phase 14.1 hardens that boundary with zero-count empty-storage behavior, per-source/global count consistency, path-free DTO/debug output, and conservative malformed-final-answer handling.
 
+Phase 15.0 adds a read-only answer artifact issue list for persisted diagnostics.
+It remains inspection-only, reports malformed finals plus unsupported / `needs_evidence` statements, and is still not a product answer experience.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
