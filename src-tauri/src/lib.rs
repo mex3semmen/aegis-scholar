@@ -4,6 +4,7 @@ mod corpus_paths;
 mod chunking;
 mod extraction;
 mod evidence;
+mod answer_draft;
 mod errors;
 mod locators;
 mod retrieval;
@@ -14,6 +15,7 @@ use corpus_authority::CorpusAuthority;
 use chunking::{ChunkingReport, ChunkingService};
 use extraction::{ExtractionReport, ExtractionService};
 use errors::to_user_error;
+use answer_draft::{AnswerDraft, AnswerDraftService};
 use evidence::{EvidencePack, EvidenceService};
 use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
 use source_metadata::{CorpusStatus, SourceMetadataInput, SourceMetadataPatch, SourceRecord};
@@ -131,6 +133,20 @@ fn get_evidence_pack(root: String, source_id: String, evidence_pack_id: String) 
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn build_answer_draft(root: String, source_id: String, evidence_pack_id: String) -> Result<AnswerDraft, String> {
+    AnswerDraftService::new(root)
+        .build_answer_draft(&source_id, &evidence_pack_id)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
+fn get_answer_draft(root: String, source_id: String, answer_draft_id: String) -> Result<AnswerDraft, String> {
+    AnswerDraftService::new(root)
+        .read_answer_draft(&source_id, &answer_draft_id)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -148,7 +164,9 @@ pub fn run() {
             get_retrieval_index,
             search_source,
             build_evidence_pack,
-            get_evidence_pack
+            get_evidence_pack,
+            build_answer_draft,
+            get_answer_draft
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");

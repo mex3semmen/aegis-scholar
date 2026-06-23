@@ -106,6 +106,21 @@ pub enum AegisError {
     #[error("Evidence pack invalid limit")]
     EvidencePackInvalidLimit,
 
+    #[error("Answer draft missing")]
+    AnswerDraftMissing,
+
+    #[error("Answer draft read failed")]
+    AnswerDraftReadFailed,
+
+    #[error("Answer draft write failed")]
+    AnswerDraftWriteFailed,
+
+    #[error("Answer draft invalid id")]
+    AnswerDraftInvalidId,
+
+    #[error("Answer draft empty")]
+    AnswerDraftEmpty,
+
 }
 
 pub type AegisResult<T> = Result<T, AegisError>;

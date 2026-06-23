@@ -71,6 +71,8 @@ Phase 5.0 stores deterministic evidence packs as JSON under the managed corpus t
 
 Load declarative skills and route tasks to retrieval profiles and output contracts.
 
+Phase 6.0 introduces a mechanical Answer Draft scaffold built only from local Evidence Packs; it does not generate final answers or citations.
+
 ## Phase 7 — Psychology/Statistics MVP
 
 Add APA output, statistics explanations, method checks and course study workflows.
