@@ -165,8 +165,10 @@ It does not import, migrate, repair, rewrite, share, download, generate, or edit
 
 Phase 24.0 adds a read-only inspection issue detail view as part of the existing export bundle inspector DTO.
 The issue detail view is derived only from existing typed inspection issues, is deterministic and path-free, and does not read additional files, write report artifacts, or mutate inspected bundles.
-It groups existing issues into compact detail lines so review flows can inspect malformed final answers, schema-version problems, integrity problems, and other typed diagnostics without exposing raw internal filesystem paths.
-Phase 24.1, if added later, should remain a tests-only boundary hardening pass.
+It groups existing issues by issue kind into stable ordered compact detail lines so review flows can inspect malformed final answers, schema-version problems, integrity problems, and other typed diagnostics without exposing raw internal filesystem paths.
+Each group count matches its line count, and the total grouped line count mirrors the typed inspection issue count.
+Phase 24.1 is tests-only boundary hardening.
+Phase 24.2 is this docs-sync/finalization pass.
 It does not import, migrate, repair, rewrite, share, download, generate, or edit bundles or answers.
 
 Manual verification checklist:
