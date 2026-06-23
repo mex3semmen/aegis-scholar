@@ -202,6 +202,10 @@ It reorders the existing inspection_status, inspection_summary, file_statuses, i
 It does not add import/migration/repair/share/download/export-writing behavior or any new controls.
 Phase 27.1 is a no-op UX boundary review with verification only.
 
+Phase 28.0 is a frontend-only empty-state and label consistency pass for the existing export bundle inspector.
+It keeps the inspector read-only, keeps the existing diagnostic order, and only clarifies empty-state copy and section labels for existing DTO fields.
+It does not change backend inspection, export, validation, schema, integrity, or status semantics, and it does not add import/repair/share/download/report-writing behavior.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
