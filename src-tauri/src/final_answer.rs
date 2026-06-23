@@ -814,6 +814,15 @@ mod tests {
     }
 
     #[test]
+    fn answer_artifact_source_index_is_empty_when_storage_has_no_relevant_artifacts() {
+        let temp = tempfile::tempdir().unwrap();
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let index = service.list_answer_artifact_sources().unwrap();
+        assert!(index.is_empty());
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
     fn answer_artifact_source_index_ignores_unrelated_files_and_reports_typed_malformed_final_answer() {
         let temp = tempfile::tempdir().unwrap();
         let (source_id, version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
