@@ -319,6 +319,27 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 36 — Answer/Evidence Contract Closure Review
+
+Planning boundary only.
+
+Phase 36.0 is a bundled closure review for the remaining answer/evidence contract boundaries.
+Existing tests already cover no-generation, no claim inference, no evidence rewriting, no semantic ranking, no editing workflow, pipeline contract preservation, and unchanged DTO/validation semantics.
+No code, DTO, or validation changes were needed.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
