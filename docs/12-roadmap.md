@@ -149,9 +149,16 @@ There is no import workflow, no automatic export, and no repair/fix action yet.
 Phase 19.1 hardens that boundary with deterministic missing-file ordering, safe ignoring of unrelated files, and explicit empty-input rejection before filesystem access.
 
 Phase 20.0 adds explicit schema-version metadata to manual export bundles.
-The current schema version is `answer_artifact_export.v1`, written into export manifest, issue, and summary metadata and validated by the read-only inspector.
-The inspector reports typed issues for missing, unsupported, and mismatched schema versions without mutating, migrating, importing, repairing, sharing, or regenerating the bundle.
+The current schema version is `answer_artifact_export.v1`, written into export manifest, issue, summary, result, and inspection metadata and validated by the read-only inspector.
+`export_issues.json` is a versioned `{ schema_version, issues }` object.
+The inspector reports typed issues for missing, unsupported, and mismatched schema versions; it also accepts legacy raw issue arrays as a missing-schema-version compatibility case.
+Malformed object-shaped issue files are still typed read failures.
+The top-level inspection `schema_version` is only present for fully supported, fully consistent bundles; invalid bundles keep it absent.
 This remains artifact-audit compatibility metadata only and is still not a product answer or share workflow.
+There is no import workflow, no automatic export, and no repair/fix action yet.
+
+Phase 20.1 hardens that boundary with strict aggregate schema-version handling, compatibility parsing for legacy raw issue arrays, malformed-object safety, and the rule that invalid bundles keep aggregate `schema_version` absent instead of echoing unsupported values.
+Phase 20.2 is this docs-sync pass.
 
 ## Phase 11 — Obsidian Export
 

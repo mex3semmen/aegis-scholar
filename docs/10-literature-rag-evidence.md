@@ -136,9 +136,12 @@ Empty bundle input is rejected with `ExportBundleInputMissing` before filesystem
 Phase 20.0 adds explicit schema-version metadata to manual export bundles.
 The current bundle schema version is `answer_artifact_export.v1`, written to `export_manifest.json`, `export_issues.json`, and `summary.json`, and returned through export/inspection metadata.
 This is compatibility and audit metadata only.
+`export_issues.json` is now a versioned object of the form `{ schema_version, issues }`.
 The inspector validates missing, unsupported, and mismatched schema versions with typed deterministic inspection issues, but it does not migrate, repair, import, rewrite, or regenerate bundles.
-Older `export_issues.json` arrays are inspected as legacy issue data and reported as missing schema version instead of being treated as path-based failures.
-The bundle remains path-free and read-only during inspection.
+Older `export_issues.json` arrays are still accepted by the inspector and reported as missing schema version instead of malformed JSON.
+Malformed object-shaped `export_issues.json` remains a typed read failure.
+The top-level inspection `schema_version` is only present for a fully supported, fully consistent bundle; invalid bundles keep it absent.
+Valid current-version bundles inspect as consistent, and the bundle remains path-free and read-only during inspection.
 
 Manual verification checklist:
 
@@ -159,6 +162,8 @@ Manual verification checklist:
   - export manifest shows preview-only metadata and issue counts only
   - export bundle inspector validates manifest, issues, and summary consistency without mutation
   - export bundle inspector reports missing, unsupported, or mismatched schema versions without mutation
+  - `export_issues.json` shows the versioned `{ schema_version, issues }` shape
+  - legacy raw `export_issues.json` arrays still inspect as missing schema version
   - empty export bundles report missing-file inspection issues
   - malformed export bundle files report typed inspection issues
   - export bundle inspection stays path-free and read-only
