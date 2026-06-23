@@ -140,6 +140,7 @@ Phase 17.1 hardens that boundary with explicit destination handling, determinist
 Phase 18.0 adds a read-only `summary.json` audit file inside the manual export bundle.
 It remains artifact-only, is derived from persisted manifest and issues data only, is deterministic and path-free, and is still not a product answer or share workflow.
 There is no automatic export and no repair/fix action yet.
+Phase 18.1 hardens that boundary with deterministic hash-derived summary identity and manifest/issues alignment.
 
 ## Phase 11 — Obsidian Export
 

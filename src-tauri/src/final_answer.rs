@@ -1900,6 +1900,7 @@ mod tests {
 
         let result = service.export_answer_artifacts(&export_root).unwrap();
         let summary = read_export_summary(&export_root);
+        let summary_json = fs::read_to_string(export_root.join("summary.json")).unwrap();
 
         assert!(!summary.export_id.is_empty());
         assert_eq!(summary.generated_from, "persisted_artifacts");
@@ -1920,6 +1921,8 @@ mod tests {
         assert!(result.written_files.iter().any(|item| item.artifact_kind == ExportedArtifactKind::Summary));
         assert!(!format!("{summary:?}").contains(temp.path().to_string_lossy().as_ref()));
         assert!(!format!("{summary:?}").contains(".aegis"));
+        assert!(!summary_json.contains(temp.path().to_string_lossy().as_ref()));
+        assert!(!summary_json.contains(".aegis"));
     }
 
     #[test]
@@ -1982,6 +1985,39 @@ mod tests {
         assert!(first.manifest.sources[0].final_answers.iter().all(|item| item.final_answer_id != "fan_bad"));
         assert!(first.manifest.issue_count > 0);
         assert!(first.manifest.sources[0].issue_count > 0);
+    }
+
+    #[test]
+    fn answer_artifact_export_summary_export_id_changes_when_exported_content_changes() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let valid_final = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let final_dir = CorpusPaths::new(temp.path().to_path_buf())
+            .source_version_dir(&source_id, &version_id)
+            .join("final_answers");
+        fs::write(final_dir.join("fan_bad.json"), "{not-json").unwrap();
+
+        let export_root_a = temp.path().join("export-a");
+        let baseline = service.export_answer_artifacts(&export_root_a).unwrap();
+        let baseline_summary = read_export_summary(&export_root_a);
+
+        let mut changed = valid_final.clone();
+        changed.final_answer_id = "fan_changed".to_string();
+        changed.statements[0].text = "changed summary content".to_string();
+        changed.statement_count = 1;
+        fs::write(final_dir.join("fan_changed.json"), serde_json::to_string_pretty(&changed).unwrap()).unwrap();
+
+        let export_root_b = temp.path().join("export-b");
+        let updated = service.export_answer_artifacts(&export_root_b).unwrap();
+        let updated_summary = read_export_summary(&export_root_b);
+
+        assert_eq!(baseline.exported_issue_count, baseline_summary.issue_count);
+        assert_eq!(updated.exported_issue_count, updated_summary.issue_count);
+        assert_ne!(baseline_summary.export_id, updated_summary.export_id);
+        assert_ne!(baseline_summary, updated_summary);
+        assert!(!format!("{updated_summary:?}").contains(temp.path().to_string_lossy().as_ref()));
+        assert!(!format!("{updated_summary:?}").contains(".aegis"));
     }
 
     #[test]
