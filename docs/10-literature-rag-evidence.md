@@ -133,6 +133,13 @@ It remains path-free, does not mutate the bundle, does not import, repair, rewri
 Phase 19.1 hardens that inspector boundary with deterministic missing-file ordering and safe ignoring of unrelated files and nested noise inside the export bundle.
 Empty bundle input is rejected with `ExportBundleInputMissing` before filesystem access, and valid exported bundles inspect as consistent.
 
+Phase 20.0 adds explicit schema-version metadata to manual export bundles.
+The current bundle schema version is `answer_artifact_export.v1`, written to `export_manifest.json`, `export_issues.json`, and `summary.json`, and returned through export/inspection metadata.
+This is compatibility and audit metadata only.
+The inspector validates missing, unsupported, and mismatched schema versions with typed deterministic inspection issues, but it does not migrate, repair, import, rewrite, or regenerate bundles.
+Older `export_issues.json` arrays are inspected as legacy issue data and reported as missing schema version instead of being treated as path-based failures.
+The bundle remains path-free and read-only during inspection.
+
 Manual verification checklist:
 
 - `npm run build`
@@ -151,6 +158,7 @@ Manual verification checklist:
   - artifact issues show malformed finals and unsupported / `needs_evidence` statements only
   - export manifest shows preview-only metadata and issue counts only
   - export bundle inspector validates manifest, issues, and summary consistency without mutation
+  - export bundle inspector reports missing, unsupported, or mismatched schema versions without mutation
   - empty export bundles report missing-file inspection issues
   - malformed export bundle files report typed inspection issues
   - export bundle inspection stays path-free and read-only

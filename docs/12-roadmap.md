@@ -148,6 +148,11 @@ It remains artifact-only and is still not a product answer or share workflow.
 There is no import workflow, no automatic export, and no repair/fix action yet.
 Phase 19.1 hardens that boundary with deterministic missing-file ordering, safe ignoring of unrelated files, and explicit empty-input rejection before filesystem access.
 
+Phase 20.0 adds explicit schema-version metadata to manual export bundles.
+The current schema version is `answer_artifact_export.v1`, written into export manifest, issue, and summary metadata and validated by the read-only inspector.
+The inspector reports typed issues for missing, unsupported, and mismatched schema versions without mutating, migrating, importing, repairing, sharing, or regenerating the bundle.
+This remains artifact-audit compatibility metadata only and is still not a product answer or share workflow.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
