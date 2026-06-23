@@ -108,6 +108,9 @@ Phase 11.0 adds read-only discovery for already persisted Final Answer contracts
 Phase 11.1 hardens that discovery boundary with deterministic ordering, metadata-only output, typed malformed-file handling, and no directory-creation side effects.
 This remains inspection-only and is still not a product answer experience; it does not introduce generation, synthesis, ranking, or editing.
 
+Phase 12.0 adds a read-only answer-artifact overview that shows existing draft, grounded answer, and final answer counts for a source.
+It remains inspection-only and does not create, build, generate, or edit artifacts.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
