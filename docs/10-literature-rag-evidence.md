@@ -95,6 +95,8 @@ Phase 12.1 keeps the overview aligned with list_final_answers and hardens the bo
 Phase 13.0 adds a read-only source artifact index.
 It lists only source_ids that already have persisted answer artifacts and shows draft, grounded-answer, and final-answer counts.
 It is discovery only, does not create directories or artifacts, does not build or generate answers, and does not expose filesystem paths.
+It orders results deterministically by `source_id`, returns an empty index when no relevant artifacts exist, ignores unrelated files safely, and keeps malformed final answers as conservative typed read failures.
+Phase 13.1 hardens that boundary with deterministic ordering, empty-storage behavior, unrelated-file safety, and conservative malformed-final-answer handling.
 
 Manual verification checklist:
 
@@ -107,6 +109,7 @@ Manual verification checklist:
   - empty inputs are rejected
   - loading is disabled during fetch
   - artifact overview shows persisted draft, grounded answer, and final answer counts
+  - source artifact index shows only sources with persisted artifacts
   - selecting a listed final answer fills the ID and loads it read-only
   - the list shows existing final answers when a source ID is entered
   - supported / `needs_evidence` / unsupported statements remain visible

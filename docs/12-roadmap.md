@@ -113,7 +113,8 @@ It remains inspection-only, does not create directories or artifacts, and is sti
 Phase 12.1 hardens that boundary with deterministic overview/list alignment, multiple-artifact count coverage, and conservative malformed-final-answer handling.
 
 Phase 13.0 adds a read-only source artifact index that lists sources with persisted answer artifacts and their counts.
-It remains inspection-only and does not create, build, generate, or edit artifacts, and it is still not a product answer experience.
+It remains inspection-only, does not create directories or artifacts, and is still not a product answer experience.
+Phase 13.1 hardens that boundary with deterministic ordering, empty-storage behavior, unrelated-file safety, and conservative malformed-final-answer handling.
 
 ## Phase 11 — Obsidian Export
 
