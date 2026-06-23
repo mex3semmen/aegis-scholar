@@ -166,6 +166,9 @@ pub enum AegisError {
     #[error("Export destination missing")]
     ExportDestinationMissing,
 
+    #[error("Export bundle input missing")]
+    ExportBundleInputMissing,
+
     #[error("Export destination cannot be inside the corpus workspace")]
     ExportDestinationInsideCorpus,
 

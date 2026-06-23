@@ -6,10 +6,11 @@ use crate::locators::CitationLocator;
 use crate::source_metadata::IngestionStatus;
 use crate::source_registry::SourceRegistry;
 use chrono::{DateTime, Utc};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FinalAnswer {
@@ -165,6 +166,44 @@ pub struct AnswerArtifactExportIssueKindCount {
     pub count: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnswerArtifactExportBundleInspection {
+    pub has_manifest: bool,
+    pub has_issues: bool,
+    pub has_summary: bool,
+    pub is_consistent: bool,
+    pub issue_count: usize,
+    pub warning_count: usize,
+    pub errors: Vec<AnswerArtifactExportBundleInspectionIssue>,
+    pub warnings: Vec<AnswerArtifactExportBundleInspectionIssue>,
+    pub manifest_counts: Option<AnswerArtifactExportManifest>,
+    pub summary_counts: Option<AnswerArtifactExportSummary>,
+    pub issue_kind_counts: Option<Vec<AnswerArtifactExportIssueKindCount>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnswerArtifactExportBundleInspectionIssue {
+    pub kind: AnswerArtifactExportBundleInspectionIssueKind,
+    pub message: String,
+    pub relative_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AnswerArtifactExportBundleInspectionIssueKind {
+    MissingManifest,
+    ManifestReadFailed,
+    MissingIssues,
+    IssuesReadFailed,
+    MissingSummary,
+    SummaryReadFailed,
+    SummaryCountsMismatch,
+    SummaryIssueCountMismatch,
+    SummaryIssueKindCountsMismatch,
+    SummaryExportIdMismatch,
+    SummaryMetadataMismatch,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ExportedArtifactKind {
@@ -244,6 +283,10 @@ pub fn list_answer_artifact_issues(root: impl Into<PathBuf>) -> AegisResult<Vec<
 
 pub fn get_answer_artifact_export_manifest(root: impl Into<PathBuf>) -> AegisResult<AnswerArtifactExportManifest> {
     FinalAnswerService::new(root).get_answer_artifact_export_manifest()
+}
+
+pub fn inspect_answer_artifact_export_bundle(export_root: impl Into<PathBuf>) -> AegisResult<AnswerArtifactExportBundleInspection> {
+    inspect_answer_artifact_export_bundle_impl(export_root.into())
 }
 
 pub fn export_answer_artifacts(root: impl Into<PathBuf>, export_root: impl Into<PathBuf>) -> AegisResult<AnswerArtifactExportResult> {
@@ -920,6 +963,209 @@ fn build_export_summary(
         issue_kinds,
         sources,
     })
+}
+
+fn inspect_answer_artifact_export_bundle_impl(export_root: PathBuf) -> AegisResult<AnswerArtifactExportBundleInspection> {
+    if export_root.as_os_str().is_empty() || export_root.to_string_lossy().trim().is_empty() {
+        return Err(AegisError::ExportBundleInputMissing);
+    }
+
+    let mut errors: Vec<AnswerArtifactExportBundleInspectionIssue> = Vec::new();
+    let mut warnings: Vec<AnswerArtifactExportBundleInspectionIssue> = Vec::new();
+
+    let manifest: Option<AnswerArtifactExportManifest> = read_bundle_json_file(
+        &export_root,
+        "export_manifest.json",
+        AnswerArtifactExportBundleInspectionIssueKind::MissingManifest,
+        AnswerArtifactExportBundleInspectionIssueKind::ManifestReadFailed,
+        &mut errors,
+    );
+    let issues: Option<Vec<AnswerArtifactIssue>> = read_bundle_json_file(
+        &export_root,
+        "export_issues.json",
+        AnswerArtifactExportBundleInspectionIssueKind::MissingIssues,
+        AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed,
+        &mut errors,
+    );
+    let summary: Option<AnswerArtifactExportSummary> = read_bundle_json_file(
+        &export_root,
+        "summary.json",
+        AnswerArtifactExportBundleInspectionIssueKind::MissingSummary,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryReadFailed,
+        &mut errors,
+    );
+
+    let issue_kind_counts = issues.as_ref().map(|items| issue_kind_counts_from_export_issues(items));
+
+    if let (Some(manifest), Some(issues), Some(summary)) = (manifest.as_ref(), issues.as_ref(), summary.as_ref()) {
+        let expected_summary = build_export_summary(manifest, issues)?;
+        if summary.source_count != expected_summary.source_count
+            || summary.draft_count != expected_summary.draft_count
+            || summary.grounded_answer_count != expected_summary.grounded_answer_count
+            || summary.final_answer_count != expected_summary.final_answer_count
+            || summary.sources != expected_summary.sources
+        {
+            errors.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::SummaryCountsMismatch,
+                "summary.json source and artifact counts do not match the manifest".to_string(),
+                Some("summary.json".to_string()),
+            ));
+        }
+        if summary.issue_count != expected_summary.issue_count {
+            errors.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::SummaryIssueCountMismatch,
+                "summary.json issue_count does not match export_issues.json".to_string(),
+                Some("summary.json".to_string()),
+            ));
+        }
+        if summary.issue_kinds != expected_summary.issue_kinds {
+            errors.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::SummaryIssueKindCountsMismatch,
+                "summary.json issue-kind counts do not match export_issues.json".to_string(),
+                Some("summary.json".to_string()),
+            ));
+        }
+        if summary.export_id != expected_summary.export_id {
+            errors.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::SummaryExportIdMismatch,
+                "summary.json export_id does not match the derived hash".to_string(),
+                Some("summary.json".to_string()),
+            ));
+        }
+        if summary.generated_from != expected_summary.generated_from
+            || summary.export_scope != expected_summary.export_scope
+            || summary.non_goals != expected_summary.non_goals
+        {
+            errors.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::SummaryMetadataMismatch,
+                "summary.json metadata does not match the expected export summary contract".to_string(),
+                Some("summary.json".to_string()),
+            ));
+        }
+    }
+
+    errors.sort_by(|left, right| {
+        (
+            export_bundle_issue_kind_rank(&left.kind),
+            left.relative_path.as_deref().unwrap_or(""),
+            left.message.as_str(),
+        )
+            .cmp(&(
+                export_bundle_issue_kind_rank(&right.kind),
+                right.relative_path.as_deref().unwrap_or(""),
+                right.message.as_str(),
+            ))
+    });
+    warnings.sort_by(|left, right| {
+        (
+            export_bundle_issue_kind_rank(&left.kind),
+            left.relative_path.as_deref().unwrap_or(""),
+            left.message.as_str(),
+        )
+            .cmp(&(
+                export_bundle_issue_kind_rank(&right.kind),
+                right.relative_path.as_deref().unwrap_or(""),
+                right.message.as_str(),
+            ))
+    });
+
+    Ok(AnswerArtifactExportBundleInspection {
+        has_manifest: manifest.is_some(),
+        has_issues: issues.is_some(),
+        has_summary: summary.is_some(),
+        is_consistent: errors.is_empty(),
+        issue_count: errors.len(),
+        warning_count: warnings.len(),
+        errors,
+        warnings,
+        manifest_counts: manifest,
+        summary_counts: summary,
+        issue_kind_counts,
+    })
+}
+
+fn read_bundle_json_file<T: DeserializeOwned>(
+    export_root: &Path,
+    relative_path: &str,
+    missing_kind: AnswerArtifactExportBundleInspectionIssueKind,
+    read_failed_kind: AnswerArtifactExportBundleInspectionIssueKind,
+    issues: &mut Vec<AnswerArtifactExportBundleInspectionIssue>,
+) -> Option<T> {
+    let path = export_root.join(relative_path);
+    if !path.exists() {
+        issues.push(inspection_issue(
+            missing_kind,
+            format!("{relative_path} is missing"),
+            Some(relative_path.to_string()),
+        ));
+        return None;
+    }
+
+    let content = match fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(_) => {
+            issues.push(inspection_issue(
+                read_failed_kind,
+                format!("{relative_path} could not be read"),
+                Some(relative_path.to_string()),
+            ));
+            return None;
+        }
+    };
+
+    match serde_json::from_str::<T>(&content) {
+        Ok(value) => Some(value),
+        Err(_) => {
+            issues.push(inspection_issue(
+                read_failed_kind,
+                format!("{relative_path} is malformed"),
+                Some(relative_path.to_string()),
+            ));
+            None
+        }
+    }
+}
+
+fn issue_kind_counts_from_export_issues(issues: &[AnswerArtifactIssue]) -> Vec<AnswerArtifactExportIssueKindCount> {
+    let mut counts = [
+        AnswerArtifactIssueKind::MalformedFinalAnswer,
+        AnswerArtifactIssueKind::NeedsEvidenceStatement,
+        AnswerArtifactIssueKind::UnsupportedStatement,
+    ]
+    .iter()
+    .map(|issue_kind| AnswerArtifactExportIssueKindCount {
+        issue_kind: issue_kind.clone(),
+        count: issues.iter().filter(|issue| issue.issue_kind == *issue_kind).count(),
+    })
+    .filter(|item| item.count > 0)
+    .collect::<Vec<_>>();
+
+    counts.sort_by(|left, right| issue_kind_rank(&left.issue_kind).cmp(&issue_kind_rank(&right.issue_kind)));
+    counts
+}
+
+fn inspection_issue(
+    kind: AnswerArtifactExportBundleInspectionIssueKind,
+    message: String,
+    relative_path: Option<String>,
+) -> AnswerArtifactExportBundleInspectionIssue {
+    AnswerArtifactExportBundleInspectionIssue { kind, message, relative_path }
+}
+
+fn export_bundle_issue_kind_rank(kind: &AnswerArtifactExportBundleInspectionIssueKind) -> usize {
+    match kind {
+        AnswerArtifactExportBundleInspectionIssueKind::MissingManifest => 0,
+        AnswerArtifactExportBundleInspectionIssueKind::ManifestReadFailed => 1,
+        AnswerArtifactExportBundleInspectionIssueKind::MissingIssues => 2,
+        AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed => 3,
+        AnswerArtifactExportBundleInspectionIssueKind::MissingSummary => 4,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryReadFailed => 5,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryCountsMismatch => 6,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryIssueCountMismatch => 7,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryIssueKindCountsMismatch => 8,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryExportIdMismatch => 9,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryMetadataMismatch => 10,
+    }
 }
 
 fn copy_artifact_files(
@@ -2018,6 +2264,143 @@ mod tests {
         assert_ne!(baseline_summary, updated_summary);
         assert!(!format!("{updated_summary:?}").contains(temp.path().to_string_lossy().as_ref()));
         assert!(!format!("{updated_summary:?}").contains(".aegis"));
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_is_consistent_for_valid_export() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let final_answer = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("export-bundle");
+
+        let result = service.export_answer_artifacts(&export_root).unwrap();
+        let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+        let summary = read_export_summary(&export_root);
+
+        assert!(inspection.has_manifest);
+        assert!(inspection.has_issues);
+        assert!(inspection.has_summary);
+        assert!(inspection.is_consistent);
+        assert_eq!(inspection.issue_count, 0);
+        assert_eq!(inspection.warning_count, 0);
+        assert!(inspection.errors.is_empty());
+        assert!(inspection.warnings.is_empty());
+        assert!(inspection.manifest_counts.is_some());
+        assert!(inspection.summary_counts.is_some());
+        assert!(inspection.issue_kind_counts.is_some());
+        assert_eq!(inspection.manifest_counts.as_ref().unwrap().source_count, result.manifest.source_count);
+        assert_eq!(inspection.manifest_counts.as_ref().unwrap().draft_count, result.manifest.draft_count);
+        assert_eq!(inspection.manifest_counts.as_ref().unwrap().grounded_answer_count, result.manifest.grounded_answer_count);
+        assert_eq!(inspection.manifest_counts.as_ref().unwrap().final_answer_count, result.manifest.final_answer_count);
+        assert_eq!(inspection.manifest_counts.as_ref().unwrap().issue_count, result.manifest.issue_count);
+        assert_eq!(inspection.manifest_counts.as_ref().unwrap().sources.len(), result.manifest.sources.len());
+        assert_eq!(inspection.manifest_counts.as_ref().unwrap().sources[0].source_id, result.manifest.sources[0].source_id);
+        assert_eq!(inspection.manifest_counts.as_ref().unwrap().sources[0].final_answers.len(), result.manifest.sources[0].final_answers.len());
+        assert_eq!(inspection.summary_counts.as_ref().unwrap(), &summary);
+        assert!(inspection.summary_counts.as_ref().unwrap().issue_kinds.is_empty());
+        assert!(inspection.issue_kind_counts.as_ref().unwrap().is_empty());
+        assert!(inspection.summary_counts.as_ref().unwrap().sources.windows(2).all(|pair| pair[0].source_id <= pair[1].source_id));
+        assert!(format!("{inspection:?}").find(temp.path().to_string_lossy().as_ref()).is_none());
+        assert!(!final_answer.final_answer_id.is_empty());
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_reports_missing_files_for_empty_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let export_root = temp.path().join("empty-export-bundle");
+        fs::create_dir(&export_root).unwrap();
+
+        let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+
+        assert!(!inspection.has_manifest);
+        assert!(!inspection.has_issues);
+        assert!(!inspection.has_summary);
+        assert!(!inspection.is_consistent);
+        assert_eq!(inspection.issue_count, 3);
+        assert_eq!(inspection.warning_count, 0);
+        assert!(inspection.manifest_counts.is_none());
+        assert!(inspection.summary_counts.is_none());
+        assert!(inspection.issue_kind_counts.is_none());
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::MissingManifest));
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::MissingIssues));
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::MissingSummary));
+        assert!(inspection.errors.iter().all(|issue| matches!(issue.relative_path.as_deref(), Some("export_manifest.json" | "export_issues.json" | "summary.json"))));
+        assert!(fs::read_dir(&export_root).unwrap().next().is_none());
+        assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_rejects_empty_input_before_filesystem_access() {
+        assert!(matches!(inspect_answer_artifact_export_bundle(""), Err(AegisError::ExportBundleInputMissing)));
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_detects_malformed_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+
+        let manifest_root = temp.path().join("manifest-bundle");
+        service.export_answer_artifacts(&manifest_root).unwrap();
+        fs::write(manifest_root.join("export_manifest.json"), "{not-json").unwrap();
+        let manifest_inspection = inspect_answer_artifact_export_bundle(&manifest_root).unwrap();
+        assert!(!manifest_inspection.has_manifest);
+        assert!(manifest_inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::ManifestReadFailed));
+        assert!(!manifest_inspection.is_consistent);
+
+        let issues_root = temp.path().join("issues-bundle");
+        service.export_answer_artifacts(&issues_root).unwrap();
+        fs::write(issues_root.join("export_issues.json"), "{not-json").unwrap();
+        let issues_inspection = inspect_answer_artifact_export_bundle(&issues_root).unwrap();
+        assert!(!issues_inspection.has_issues);
+        assert!(issues_inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed));
+        assert!(!issues_inspection.is_consistent);
+
+        let summary_root = temp.path().join("summary-bundle");
+        service.export_answer_artifacts(&summary_root).unwrap();
+        fs::write(summary_root.join("summary.json"), "{not-json").unwrap();
+        let summary_inspection = inspect_answer_artifact_export_bundle(&summary_root).unwrap();
+        assert!(!summary_inspection.has_summary);
+        assert!(summary_inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SummaryReadFailed));
+        assert!(!summary_inspection.is_consistent);
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_detects_summary_mismatches() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("mismatch-bundle");
+        service.export_answer_artifacts(&export_root).unwrap();
+
+        let mut summary = read_export_summary(&export_root);
+        summary.source_count += 1;
+        summary.draft_count += 1;
+        summary.grounded_answer_count += 1;
+        summary.final_answer_count += 1;
+        summary.issue_count += 1;
+        summary.issue_kinds = vec![AnswerArtifactExportIssueKindCount { issue_kind: AnswerArtifactIssueKind::UnsupportedStatement, count: 99 }];
+        summary.export_id = "sha256:deadbeef".to_string();
+        summary.generated_from = "unexpected".to_string();
+        summary.export_scope = "unexpected".to_string();
+        summary.non_goals.push("unexpected_goal".to_string());
+        summary.sources[0].draft_count += 1;
+        fs::write(export_root.join("summary.json"), serde_json::to_string_pretty(&summary).unwrap()).unwrap();
+
+        let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+        assert!(!inspection.is_consistent);
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SummaryCountsMismatch));
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SummaryIssueCountMismatch));
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SummaryIssueKindCountsMismatch));
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SummaryExportIdMismatch));
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SummaryMetadataMismatch));
+        assert!(inspection.manifest_counts.is_some());
+        assert!(inspection.summary_counts.is_some());
+        assert!(inspection.issue_kind_counts.as_ref().unwrap().is_empty());
+        assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
     #[test]

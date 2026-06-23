@@ -127,6 +127,10 @@ Phase 18.0 adds a read-only `summary.json` audit file inside the manual export b
 The summary is derived only from the persisted manifest and issues data, stays deterministic and path-free, includes compact per-source and issue-kind counts, and is for audit/review only rather than import, share, or product answer flow.
 Phase 18.1 hardens that summary boundary with deterministic hash-derived summary identity, manifest/issues alignment, and path-free export bundle output.
 
+Phase 19.0 adds a read-only export bundle inspector for an existing manual export bundle.
+It validates the persisted `export_manifest.json`, `export_issues.json`, and `summary.json` metadata only, compares the parsed summary against the derived manifest/issues summary, and reports typed inspection issues for missing or malformed bundle files.
+It remains path-free, does not mutate the bundle, does not import, repair, rewrite, or regenerate anything, and does not add a share/download workflow.
+
 Manual verification checklist:
 
 - `npm run build`
@@ -144,6 +148,10 @@ Manual verification checklist:
   - artifact health output stays path-free and deterministic by source
   - artifact issues show malformed finals and unsupported / `needs_evidence` statements only
   - export manifest shows preview-only metadata and issue counts only
+  - export bundle inspector validates manifest, issues, and summary consistency without mutation
+  - empty export bundles report missing-file inspection issues
+  - malformed export bundle files report typed inspection issues
+  - export bundle inspection stays path-free and read-only
   - selecting a listed final answer fills the ID and loads it read-only
   - the list shows existing final answers when a source ID is entered
   - supported / `needs_evidence` / unsupported statements remain visible
