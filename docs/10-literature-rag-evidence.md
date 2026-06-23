@@ -110,9 +110,11 @@ It does not create directories or artifacts, and it does not build, generate, sy
 Phase 15.1 hardens that boundary with supported-statement exclusion, deterministic ordering, and path-free diagnostics.
 
 Phase 16.0 adds a read-only answer artifact export manifest for preview-only inspection.
-It reports persisted metadata only, includes per-source final-answer metadata, and derives `issue_count` from the issue-list diagnostics.
-It does not write export files, does not create directories or artifacts, and does not build, generate, synthesize, rank, infer, rewrite, repair, or edit anything.
-Phase 16.1 hardens that boundary with deterministic ordering, path-free metadata, and tolerant handling of malformed final answers in the preview.
+It reports persisted metadata only, does not write export or manifest files, does not add download buttons, and does not create directories or artifacts.
+It reports global and per-source counts, derives `issue_count` from the issue-list diagnostics, keeps per-source `issue_count` aligned with source issues, and preserves deterministic ordering by `source_id` and `final_answer_id`.
+Malformed final answers are excluded from valid final-answer metadata and reflected through issue counts; DTO/debug output remains path-free.
+It does not build, generate, synthesize, rank, infer, rewrite, repair, or edit anything.
+Phase 16.1 hardens that boundary with deterministic ordering, issue-count rollup, and tolerant handling of malformed final answers in the preview.
 This remains preview-only and still does not provide actual export.
 
 Manual verification checklist:
