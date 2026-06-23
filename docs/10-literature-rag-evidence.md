@@ -47,6 +47,9 @@ It converts each evidence item into one conservative supported claim and does no
 Phase 7.0 adds a Grounded Answer contract over Answer Drafts.
 It stores mechanical statement projections under the managed corpus tree and preserves unsupported / needs-evidence status without final prose generation.
 
+Phase 8.0 adds a Final Answer contract over Grounded Answers.
+It stores a deterministic contract projection under the managed corpus tree, preserves grounded statement identity and status, and does not generate final prose, rankings, or LLM output.
+
 ## Evidence unit
 
 Each evidence unit must carry:

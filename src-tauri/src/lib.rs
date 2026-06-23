@@ -5,6 +5,7 @@ mod chunking;
 mod extraction;
 mod evidence;
 mod answer_draft;
+mod final_answer;
 mod grounded_answer;
 mod errors;
 mod locators;

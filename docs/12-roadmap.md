@@ -83,6 +83,8 @@ Phase 7.0 introduces a mechanical Grounded Answer contract built only from Answe
 
 Implement llama.cpp process lifecycle, health, logs, port/PID ownership and model profiles.
 
+Phase 8.0 introduces a deterministic Final Answer contract built only from Grounded Answers; it does not generate final prose, add semantic ranking, or add LLM inference.
+
 ## Phase 9 — Composer UI
 
 Show sources, evidence packs, retrieval mode, diagnostics and output controls.
