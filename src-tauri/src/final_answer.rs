@@ -1497,6 +1497,8 @@ mod tests {
         assert_eq!(source_a_manifest.final_answers.len(), 2);
         assert_eq!(source_b_manifest.final_answers.len(), 1);
         assert_eq!(source_a_manifest.issue_count + source_b_manifest.issue_count, manifest.issue_count);
+        assert_eq!(source_a_manifest.issue_count, issues.iter().filter(|issue| issue.source_id == source_a).count());
+        assert_eq!(source_b_manifest.issue_count, issues.iter().filter(|issue| issue.source_id == source_b.source_id).count());
         assert!(source_a_manifest.final_answers.iter().all(|item| item.final_answer_id != "fan_bad"));
         assert!(source_a_manifest.final_answers.iter().any(|item| item.final_answer_id == final_answer.final_answer_id));
         assert!(source_a_manifest.final_answers.iter().any(|item| item.final_answer_id == "fan_unsupported"));
