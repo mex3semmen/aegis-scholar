@@ -41,6 +41,9 @@ The pack is built from deterministic lexical retrieval only.
 It preserves source, version, chunk, locator, score, text hash, matched terms, and a short preview.
 This phase does not use embeddings, vector search, or answer synthesis.
 
+Phase 6.0 adds a mechanical Answer Draft scaffold over an Evidence Pack.
+It converts each evidence item into one conservative supported claim and does not synthesize final prose.
+
 ## Evidence unit
 
 Each evidence unit must carry:

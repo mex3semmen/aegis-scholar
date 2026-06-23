@@ -20,6 +20,8 @@ pub enum AuditEventType {
     SourceIndexingFailed,
     EvidencePackBuilt,
     EvidencePackFailed,
+    AnswerDraftBuilt,
+    AnswerDraftFailed,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
