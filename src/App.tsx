@@ -330,6 +330,19 @@ function locatorSummary(locator: CitationLocator) {
   return [locator.label, section, paragraph, range].filter(Boolean).join(" | ");
 }
 
+function renderMetricGrid(entries: { label: string; value: string | number }[]) {
+  return (
+    <div class="contract-meta">
+      {entries.map((entry) => (
+        <div>
+          <span>{entry.label}</span>
+          <strong>{entry.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function App() {
   const [status, setStatus] = createSignal<CorpusStatus | null>(null);
   const [statusError, setStatusError] = createSignal<string | null>(null);
@@ -844,22 +857,25 @@ export default function App() {
           {artifactBundleInspection() ? (
             <>
               <div class="artifact-overview">
-                <h4>Inspection summary</h4>
-                <div class="contract-meta">
-                  <div><span>Status code</span><strong>{artifactBundleInspection()!.inspection_status.code}</strong></div>
-                  <div><span>Status label</span><strong>{artifactBundleInspection()!.inspection_status.label}</strong></div>
-                  <div><span>Severity</span><strong>{artifactBundleInspection()!.inspection_status.severity}</strong></div>
-                </div>
+                <h4>Inspection status</h4>
+                {renderMetricGrid([
+                  { label: "Status code", value: artifactBundleInspection()!.inspection_status.code },
+                  { label: "Status label", value: artifactBundleInspection()!.inspection_status.label },
+                  { label: "Severity", value: artifactBundleInspection()!.inspection_status.severity },
+                ])}
                 <p class="muted">{artifactBundleInspection()!.inspection_status.reason}</p>
-                <div class="contract-meta">
-                  <div><span>Consistent</span><strong>{artifactBundleInspection()!.inspection_summary.is_consistent ? "yes" : "no"}</strong></div>
-                  <div><span>Schema supported</span><strong>{artifactBundleInspection()!.inspection_summary.schema_supported ? "yes" : "no"}</strong></div>
-                  <div><span>Integrity verified</span><strong>{artifactBundleInspection()!.inspection_summary.integrity_verified ? "yes" : "no"}</strong></div>
-                  <div><span>Issues</span><strong>{artifactBundleInspection()!.inspection_summary.issue_count}</strong></div>
-                  <div><span>Warnings</span><strong>{artifactBundleInspection()!.inspection_summary.warning_count}</strong></div>
-                  <div><span>Checked files</span><strong>{artifactBundleInspection()!.inspection_summary.checked_file_count}</strong></div>
-                  <div><span>Integrity files</span><strong>{artifactBundleInspection()!.inspection_summary.integrity_file_count}</strong></div>
-                </div>
+              </div>
+              <div class="artifact-overview">
+                <h4>Inspection summary</h4>
+                {renderMetricGrid([
+                  { label: "Consistent", value: artifactBundleInspection()!.inspection_summary.is_consistent ? "yes" : "no" },
+                  { label: "Schema supported", value: artifactBundleInspection()!.inspection_summary.schema_supported ? "yes" : "no" },
+                  { label: "Integrity verified", value: artifactBundleInspection()!.inspection_summary.integrity_verified ? "yes" : "no" },
+                  { label: "Issues", value: artifactBundleInspection()!.inspection_summary.issue_count },
+                  { label: "Warnings", value: artifactBundleInspection()!.inspection_summary.warning_count },
+                  { label: "Checked files", value: artifactBundleInspection()!.inspection_summary.checked_file_count },
+                  { label: "Integrity files", value: artifactBundleInspection()!.inspection_summary.integrity_file_count },
+                ])}
                 {artifactBundleInspection()!.inspection_summary.issue_counts_by_kind.length > 0 ? (
                   <ul class="final-answer-list-items">
                     {artifactBundleInspection()!.inspection_summary.issue_counts_by_kind.map((item) => (
@@ -871,17 +887,63 @@ export default function App() {
                       </li>
                     ))}
                   </ul>
-                  ) : null}
+                ) : null}
+              </div>
+              <div class="artifact-overview">
+                <h4>File statuses</h4>
+                {artifactBundleInspection()!.file_statuses.length > 0 ? (
+                  <ul class="final-answer-list-items">
+                    {artifactBundleInspection()!.file_statuses.map((fileStatus) => (
+                      <li>
+                        <div class="final-answer-list-item">
+                          <span>{fileStatus.file_label}</span>
+                          <small>
+                            status={fileStatus.status} | present={fileStatus.present ? "yes" : "no"} | parsed={fileStatus.parsed ? "yes" : "no"} | malformed={fileStatus.malformed ? "yes" : "no"} | schema={fileStatus.schema_status} | integrity={fileStatus.integrity_status} | issues={fileStatus.issue_count}
+                          </small>
+                          {fileStatus.schema_version ? <small>schema_version={fileStatus.schema_version}</small> : null}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No file statuses available.</p>
+                )}
+              </div>
+              <div class="artifact-overview">
+                <h4>Issue detail groups</h4>
+                {artifactBundleInspection()!.issue_groups.length > 0 ? (
+                  artifactBundleInspection()!.issue_groups.map((group) => (
+                    <div class="artifact-overview">
+                      <h5>{group.kind}</h5>
+                      {renderMetricGrid([{ label: "Count", value: group.count }])}
+                      {group.lines.length > 0 ? (
+                        <ul class="final-answer-list-items">
+                          {group.lines.map((line) => (
+                            <li>
+                              <div class="final-answer-list-item">
+                                <span>{line}</span>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>No lines available.</p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p>No issue groups available.</p>
+                )}
               </div>
               <div class="artifact-overview">
                 <h4>{artifactBundleInspection()!.report_preview.title}</h4>
-                <div class="contract-meta">
-                  <div><span>Schema</span><strong>{artifactBundleInspection()!.report_preview.schema_version}</strong></div>
-                  <div><span>Consistent</span><strong>{artifactBundleInspection()!.report_preview.is_consistent ? "yes" : "no"}</strong></div>
-                  <div><span>Integrity verified</span><strong>{artifactBundleInspection()!.report_preview.integrity_verified ? "yes" : "no"}</strong></div>
-                  <div><span>Issues</span><strong>{artifactBundleInspection()!.report_preview.issue_count}</strong></div>
-                  <div><span>Warnings</span><strong>{artifactBundleInspection()!.report_preview.warning_count}</strong></div>
-                </div>
+                {renderMetricGrid([
+                  { label: "Schema", value: artifactBundleInspection()!.report_preview.schema_version },
+                  { label: "Consistent", value: artifactBundleInspection()!.report_preview.is_consistent ? "yes" : "no" },
+                  { label: "Integrity verified", value: artifactBundleInspection()!.report_preview.integrity_verified ? "yes" : "no" },
+                  { label: "Issues", value: artifactBundleInspection()!.report_preview.issue_count },
+                  { label: "Warnings", value: artifactBundleInspection()!.report_preview.warning_count },
+                ])}
                 {artifactBundleInspection()!.report_preview.sections.length > 0 ? (
                   artifactBundleInspection()!.report_preview.sections.map((section) => (
                     <div class="artifact-overview">
@@ -905,56 +967,6 @@ export default function App() {
                   <p>No preview sections available.</p>
                 )}
               </div>
-              <div class="artifact-overview">
-                <h4>Issue detail groups</h4>
-                {artifactBundleInspection()!.issue_groups.length > 0 ? (
-                  artifactBundleInspection()!.issue_groups.map((group) => (
-                    <div class="artifact-overview">
-                      <h5>{group.kind}</h5>
-                      <div class="contract-meta">
-                        <div><span>Count</span><strong>{group.count}</strong></div>
-                      </div>
-                      {group.lines.length > 0 ? (
-                        <ul class="final-answer-list-items">
-                          {group.lines.map((line) => (
-                            <li>
-                              <div class="final-answer-list-item">
-                                <span>{line}</span>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p>No lines available.</p>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <p>No issue groups available.</p>
-                )}
-              </div>
-              <div class="artifact-overview">
-                <h4>File statuses</h4>
-                {artifactBundleInspection()!.file_statuses.length > 0 ? (
-                  <ul class="final-answer-list-items">
-                    {artifactBundleInspection()!.file_statuses.map((fileStatus) => (
-                      <li>
-                        <div class="final-answer-list-item">
-                          <span>{fileStatus.file_label}</span>
-                          <small>
-                            status={fileStatus.status} | present={fileStatus.present ? "yes" : "no"} | parsed={fileStatus.parsed ? "yes" : "no"} | malformed={fileStatus.malformed ? "yes" : "no"} | schema={fileStatus.schema_status} | integrity={fileStatus.integrity_status} | issues={fileStatus.issue_count}
-                          </small>
-                          {fileStatus.schema_version ? (
-                            <small>schema_version={fileStatus.schema_version}</small>
-                          ) : null}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>No file statuses available.</p>
-                )}
-              </div>
               <div class="contract-meta">
                 <div><span>Schema</span><strong>{artifactBundleInspection()!.schema_version || "mixed / missing"}</strong></div>
                 <div><span>Has manifest</span><strong>{artifactBundleInspection()!.has_manifest ? "yes" : "no"}</strong></div>
@@ -968,14 +980,14 @@ export default function App() {
               {artifactBundleInspection()!.manifest_counts ? (
                 <div class="artifact-overview">
                   <h4>Manifest counts</h4>
-                  <div class="contract-meta">
-                    <div><span>Schema</span><strong>{artifactBundleInspection()!.manifest_counts!.schema_version || "missing"}</strong></div>
-                    <div><span>Sources</span><strong>{artifactBundleInspection()!.manifest_counts!.source_count}</strong></div>
-                    <div><span>Drafts</span><strong>{artifactBundleInspection()!.manifest_counts!.draft_count}</strong></div>
-                    <div><span>Grounded answers</span><strong>{artifactBundleInspection()!.manifest_counts!.grounded_answer_count}</strong></div>
-                    <div><span>Final answers</span><strong>{artifactBundleInspection()!.manifest_counts!.final_answer_count}</strong></div>
-                    <div><span>Issues</span><strong>{artifactBundleInspection()!.manifest_counts!.issue_count}</strong></div>
-                  </div>
+                  {renderMetricGrid([
+                    { label: "Schema", value: artifactBundleInspection()!.manifest_counts!.schema_version || "missing" },
+                    { label: "Sources", value: artifactBundleInspection()!.manifest_counts!.source_count },
+                    { label: "Drafts", value: artifactBundleInspection()!.manifest_counts!.draft_count },
+                    { label: "Grounded answers", value: artifactBundleInspection()!.manifest_counts!.grounded_answer_count },
+                    { label: "Final answers", value: artifactBundleInspection()!.manifest_counts!.final_answer_count },
+                    { label: "Issues", value: artifactBundleInspection()!.manifest_counts!.issue_count },
+                  ])}
                   {artifactBundleInspection()!.manifest_counts!.sources.length > 0 ? (
                     <ul class="final-answer-list-items">
                       {artifactBundleInspection()!.manifest_counts!.sources.map((item) => (
@@ -1002,17 +1014,17 @@ export default function App() {
               {artifactBundleInspection()!.summary_counts ? (
                 <div class="artifact-overview">
                   <h4>Summary counts</h4>
-                  <div class="contract-meta">
-                    <div><span>Schema</span><strong>{artifactBundleInspection()!.summary_counts!.schema_version || "missing"}</strong></div>
-                    <div><span>Export ID</span><strong>{artifactBundleInspection()!.summary_counts!.export_id}</strong></div>
-                    <div><span>Generated from</span><strong>{artifactBundleInspection()!.summary_counts!.generated_from}</strong></div>
-                    <div><span>Scope</span><strong>{artifactBundleInspection()!.summary_counts!.export_scope}</strong></div>
-                    <div><span>Sources</span><strong>{artifactBundleInspection()!.summary_counts!.source_count}</strong></div>
-                    <div><span>Drafts</span><strong>{artifactBundleInspection()!.summary_counts!.draft_count}</strong></div>
-                    <div><span>Grounded answers</span><strong>{artifactBundleInspection()!.summary_counts!.grounded_answer_count}</strong></div>
-                    <div><span>Final answers</span><strong>{artifactBundleInspection()!.summary_counts!.final_answer_count}</strong></div>
-                    <div><span>Issues</span><strong>{artifactBundleInspection()!.summary_counts!.issue_count}</strong></div>
-                  </div>
+                  {renderMetricGrid([
+                    { label: "Schema", value: artifactBundleInspection()!.summary_counts!.schema_version || "missing" },
+                    { label: "Export ID", value: artifactBundleInspection()!.summary_counts!.export_id },
+                    { label: "Generated from", value: artifactBundleInspection()!.summary_counts!.generated_from },
+                    { label: "Scope", value: artifactBundleInspection()!.summary_counts!.export_scope },
+                    { label: "Sources", value: artifactBundleInspection()!.summary_counts!.source_count },
+                    { label: "Drafts", value: artifactBundleInspection()!.summary_counts!.draft_count },
+                    { label: "Grounded answers", value: artifactBundleInspection()!.summary_counts!.grounded_answer_count },
+                    { label: "Final answers", value: artifactBundleInspection()!.summary_counts!.final_answer_count },
+                    { label: "Issues", value: artifactBundleInspection()!.summary_counts!.issue_count },
+                  ])}
                   {artifactBundleInspection()!.summary_counts!.issue_kinds.length > 0 && (
                     <ul class="final-answer-list-items">
                       {artifactBundleInspection()!.summary_counts!.issue_kinds.map((item) => (
@@ -1030,11 +1042,11 @@ export default function App() {
               {artifactBundleInspection()!.integrity_counts ? (
                 <div class="artifact-overview">
                   <h4>Integrity metadata</h4>
-                  <div class="contract-meta">
-                    <div><span>Schema</span><strong>{artifactBundleInspection()!.integrity_counts!.schema_version || "missing"}</strong></div>
-                    <div><span>Algorithm</span><strong>{artifactBundleInspection()!.integrity_counts!.algorithm}</strong></div>
-                    <div><span>Files</span><strong>{artifactBundleInspection()!.integrity_counts!.files.length}</strong></div>
-                  </div>
+                  {renderMetricGrid([
+                    { label: "Schema", value: artifactBundleInspection()!.integrity_counts!.schema_version || "missing" },
+                    { label: "Algorithm", value: artifactBundleInspection()!.integrity_counts!.algorithm },
+                    { label: "Files", value: artifactBundleInspection()!.integrity_counts!.files.length },
+                  ])}
                 </div>
               ) : null}
               {artifactBundleInspection()!.issue_kind_counts && artifactBundleInspection()!.issue_kind_counts!.length > 0 ? (
