@@ -216,6 +216,18 @@ type AnswerArtifactExportBundleInspectionIssueGroup = {
   lines: string[];
 };
 
+type AnswerArtifactExportBundleFileStatus = {
+  file_label: string;
+  present: boolean;
+  parsed: boolean;
+  malformed: boolean;
+  schema_version?: string | null;
+  schema_status: string;
+  integrity_status: string;
+  issue_count: number;
+  status: string;
+};
+
 type AnswerArtifactExportSummarySource = {
   source_id: string;
   draft_count: number;
@@ -246,6 +258,17 @@ type AnswerArtifactExportBundleInspectionIssueKind =
   | "issues_read_failed"
   | "missing_summary"
   | "summary_read_failed"
+  | "missing_integrity"
+  | "integrity_read_failed"
+  | "integrity_schema_version_missing"
+  | "integrity_schema_version_unsupported"
+  | "integrity_algorithm_missing"
+  | "integrity_algorithm_unsupported"
+  | "integrity_duplicate_path"
+  | "integrity_path_invalid"
+  | "integrity_missing_file"
+  | "integrity_byte_count_mismatch"
+  | "integrity_digest_mismatch"
   | "schema_version_missing"
   | "schema_version_unsupported"
   | "schema_version_mismatch"
@@ -271,6 +294,7 @@ type AnswerArtifactExportBundleInspection = {
   inspection_summary: AnswerArtifactExportBundleInspectionSummary;
   report_preview: AnswerArtifactExportBundleInspectionReportPreview;
   issue_groups: AnswerArtifactExportBundleInspectionIssueGroup[];
+  file_statuses: AnswerArtifactExportBundleFileStatus[];
   has_manifest: boolean;
   has_issues: boolean;
   has_summary: boolean;
@@ -893,6 +917,28 @@ export default function App() {
                   ))
                 ) : (
                   <p>No issue groups available.</p>
+                )}
+              </div>
+              <div class="artifact-overview">
+                <h4>File statuses</h4>
+                {artifactBundleInspection()!.file_statuses.length > 0 ? (
+                  <ul class="final-answer-list-items">
+                    {artifactBundleInspection()!.file_statuses.map((fileStatus) => (
+                      <li>
+                        <div class="final-answer-list-item">
+                          <span>{fileStatus.file_label}</span>
+                          <small>
+                            status={fileStatus.status} | present={fileStatus.present ? "yes" : "no"} | parsed={fileStatus.parsed ? "yes" : "no"} | malformed={fileStatus.malformed ? "yes" : "no"} | schema={fileStatus.schema_status} | integrity={fileStatus.integrity_status} | issues={fileStatus.issue_count}
+                          </small>
+                          {fileStatus.schema_version ? (
+                            <small>schema_version={fileStatus.schema_version}</small>
+                          ) : null}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No file statuses available.</p>
                 )}
               </div>
               <div class="contract-meta">

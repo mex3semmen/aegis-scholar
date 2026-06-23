@@ -171,6 +171,13 @@ Phase 24.1 is tests-only boundary hardening.
 Phase 24.2 is this docs-sync/finalization pass.
 It does not import, migrate, repair, rewrite, share, download, generate, or edit bundles or answers.
 
+Phase 25.0 adds a read-only file status view to the existing export bundle inspector DTO.
+The file status view reports deterministic status rows for the expected bundle files: `export_manifest.json`, `export_issues.json`, `summary.json`, and `export_integrity.json`.
+Each row uses public relative file labels only and reports present, parsed, malformed, schema, integrity, issue-count, and compact status metadata derived from the inspector’s existing parsed state, typed issues, schema metadata, and integrity metadata.
+It does not change validation semantics, read additional files, write report artifacts, mutate inspected bundles, or expose raw internal filesystem paths.
+The frontend renders these rows read-only below the existing summary, report preview, and issue groups.
+It does not import, migrate, repair, rewrite, share, download, generate, or edit bundles or answers.
+
 Manual verification checklist:
 
 - `npm run build`
@@ -191,6 +198,7 @@ Manual verification checklist:
   - export bundle inspector validates manifest, issues, and summary consistency without mutation
   - export bundle inspector reports missing, unsupported, or mismatched schema versions without mutation
   - export bundle inspection report preview renders below the inspection summary and stays read-only
+  - export bundle file statuses render for manifest, issues, summary, and integrity files
   - `export_issues.json` shows the versioned `{ schema_version, issues }` shape
   - legacy raw `export_issues.json` arrays still inspect as missing schema version
   - empty export bundles report missing-file inspection issues
