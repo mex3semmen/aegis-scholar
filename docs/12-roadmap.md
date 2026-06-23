@@ -160,6 +160,11 @@ There is no import workflow, no automatic export, and no repair/fix action yet.
 Phase 20.1 hardens that boundary with strict aggregate schema-version handling, compatibility parsing for legacy raw issue arrays, malformed-object safety, and the rule that invalid bundles keep aggregate `schema_version` absent instead of echoing unsupported values.
 Phase 20.2 is this docs-sync pass.
 
+Phase 21.0 adds deterministic export integrity metadata to the manual export bundle.
+It remains artifact-audit metadata only, is read-only, and validates exported bundle files without enabling import, migration, repair, share, or upload workflows.
+The integrity bundle uses `answer_artifact_export.v1`, SHA-256 digests, and relative paths only.
+This is still not a product answer workflow.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
