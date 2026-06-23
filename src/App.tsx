@@ -118,14 +118,27 @@ type AnswerArtifactExportManifest = {
 
 type ExportedArtifactFile = {
   relative_path: string;
-  artifact_kind: "manifest" | "issues" | "summary" | "answer_draft" | "grounded_answer" | "final_answer";
+  artifact_kind: "manifest" | "issues" | "summary" | "integrity" | "answer_draft" | "grounded_answer" | "final_answer";
   source_id?: string | null;
   artifact_id?: string | null;
+};
+
+type AnswerArtifactExportIntegrityFile = {
+  relative_path: string;
+  byte_count: number;
+  sha256: string;
+};
+
+type AnswerArtifactExportIntegrity = {
+  schema_version: string;
+  algorithm: string;
+  files: AnswerArtifactExportIntegrityFile[];
 };
 
 type AnswerArtifactExportResult = {
   schema_version: string;
   manifest: AnswerArtifactExportManifest;
+  integrity: AnswerArtifactExportIntegrity;
   exported_source_count: number;
   exported_draft_count: number;
   exported_grounded_answer_count: number;
@@ -190,9 +203,12 @@ type AnswerArtifactExportBundleInspection = {
   manifest_schema_version?: string | null;
   issues_schema_version?: string | null;
   summary_schema_version?: string | null;
+  integrity_schema_version?: string | null;
+  integrity_algorithm?: string | null;
   has_manifest: boolean;
   has_issues: boolean;
   has_summary: boolean;
+  has_integrity: boolean;
   is_consistent: boolean;
   issue_count: number;
   warning_count: number;
@@ -200,6 +216,7 @@ type AnswerArtifactExportBundleInspection = {
   warnings: AnswerArtifactExportBundleInspectionIssue[];
   manifest_counts?: AnswerArtifactExportManifest | null;
   summary_counts?: AnswerArtifactExportSummary | null;
+  integrity_counts?: AnswerArtifactExportIntegrity | null;
   issue_kind_counts?: AnswerArtifactExportIssueKindCount[] | null;
 };
 
@@ -680,6 +697,7 @@ export default function App() {
                 <div><span>Grounded answers</span><strong>{artifactExportResult()!.exported_grounded_answer_count}</strong></div>
                 <div><span>Final answers</span><strong>{artifactExportResult()!.exported_final_answer_count}</strong></div>
                 <div><span>Issues</span><strong>{artifactExportResult()!.exported_issue_count}</strong></div>
+                <div><span>Integrity</span><strong>{artifactExportResult()!.integrity.schema_version ? `${artifactExportResult()!.integrity.algorithm} | ${artifactExportResult()!.integrity.files.length} files` : "missing"}</strong></div>
               </div>
               {artifactExportResult()!.written_files.length > 0 ? (
                 <ul class="final-answer-list-items">
@@ -732,6 +750,7 @@ export default function App() {
                 <div><span>Has manifest</span><strong>{artifactBundleInspection()!.has_manifest ? "yes" : "no"}</strong></div>
                 <div><span>Has issues</span><strong>{artifactBundleInspection()!.has_issues ? "yes" : "no"}</strong></div>
                 <div><span>Has summary</span><strong>{artifactBundleInspection()!.has_summary ? "yes" : "no"}</strong></div>
+                <div><span>Has integrity</span><strong>{artifactBundleInspection()!.has_integrity ? "yes" : "no"}</strong></div>
                 <div><span>Consistent</span><strong>{artifactBundleInspection()!.is_consistent ? "yes" : "no"}</strong></div>
                 <div><span>Issues</span><strong>{artifactBundleInspection()!.issue_count}</strong></div>
                 <div><span>Warnings</span><strong>{artifactBundleInspection()!.warning_count}</strong></div>
@@ -796,6 +815,16 @@ export default function App() {
                       ))}
                     </ul>
                   )}
+                </div>
+              ) : null}
+              {artifactBundleInspection()!.integrity_counts ? (
+                <div class="artifact-overview">
+                  <h4>Integrity metadata</h4>
+                  <div class="contract-meta">
+                    <div><span>Schema</span><strong>{artifactBundleInspection()!.integrity_counts!.schema_version || "missing"}</strong></div>
+                    <div><span>Algorithm</span><strong>{artifactBundleInspection()!.integrity_counts!.algorithm}</strong></div>
+                    <div><span>Files</span><strong>{artifactBundleInspection()!.integrity_counts!.files.length}</strong></div>
+                  </div>
                 </div>
               ) : null}
               {artifactBundleInspection()!.issue_kind_counts && artifactBundleInspection()!.issue_kind_counts!.length > 0 ? (

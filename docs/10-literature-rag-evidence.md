@@ -143,6 +143,12 @@ Malformed object-shaped `export_issues.json` remains a typed read failure.
 The top-level inspection `schema_version` is only present for a fully supported, fully consistent bundle; invalid bundles keep it absent.
 Valid current-version bundles inspect as consistent, and the bundle remains path-free and read-only during inspection.
 
+Phase 21.0 adds `export_integrity.json` to the manual export bundle as deterministic audit metadata.
+It is versioned with `answer_artifact_export.v1`, uses SHA-256 digests, and lists only relative bundle paths with byte counts and digests.
+The integrity file excludes itself from hashing, remains path-free, and is read-only audit metadata only.
+The inspector validates integrity metadata for presence, schema version, algorithm, relative-path safety, missing files, byte-count mismatches, digest mismatches, and duplicate entries.
+It does not import, migrate, repair, rewrite, or share bundles, and it does not add any answer-generation behavior.
+
 Manual verification checklist:
 
 - `npm run build`

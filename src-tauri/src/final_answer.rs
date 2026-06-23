@@ -13,6 +13,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub const ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION: &str = "answer_artifact_export.v1";
+pub const ANSWER_ARTIFACT_EXPORT_INTEGRITY_ALGORITHM: &str = "sha256";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FinalAnswer {
@@ -131,6 +132,7 @@ pub struct AnswerArtifactExportIssues {
 pub struct AnswerArtifactExportResult {
     pub schema_version: String,
     pub manifest: AnswerArtifactExportManifest,
+    pub integrity: AnswerArtifactExportIntegrity,
     pub exported_source_count: usize,
     pub exported_draft_count: usize,
     pub exported_grounded_answer_count: usize,
@@ -146,6 +148,21 @@ pub struct ExportedArtifactFile {
     pub artifact_kind: ExportedArtifactKind,
     pub source_id: Option<String>,
     pub artifact_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnswerArtifactExportIntegrity {
+    #[serde(default)]
+    pub schema_version: String,
+    pub algorithm: String,
+    pub files: Vec<AnswerArtifactExportIntegrityFile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnswerArtifactExportIntegrityFile {
+    pub relative_path: String,
+    pub byte_count: u64,
+    pub sha256: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -186,9 +203,12 @@ pub struct AnswerArtifactExportBundleInspection {
     pub manifest_schema_version: Option<String>,
     pub issues_schema_version: Option<String>,
     pub summary_schema_version: Option<String>,
+    pub integrity_schema_version: Option<String>,
+    pub integrity_algorithm: Option<String>,
     pub has_manifest: bool,
     pub has_issues: bool,
     pub has_summary: bool,
+    pub has_integrity: bool,
     pub is_consistent: bool,
     pub issue_count: usize,
     pub warning_count: usize,
@@ -197,6 +217,7 @@ pub struct AnswerArtifactExportBundleInspection {
     pub manifest_counts: Option<AnswerArtifactExportManifest>,
     pub summary_counts: Option<AnswerArtifactExportSummary>,
     pub issue_kind_counts: Option<Vec<AnswerArtifactExportIssueKindCount>>,
+    pub integrity_counts: Option<AnswerArtifactExportIntegrity>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -215,6 +236,17 @@ pub enum AnswerArtifactExportBundleInspectionIssueKind {
     IssuesReadFailed,
     MissingSummary,
     SummaryReadFailed,
+    MissingIntegrity,
+    IntegrityReadFailed,
+    IntegritySchemaVersionMissing,
+    IntegritySchemaVersionUnsupported,
+    IntegrityAlgorithmMissing,
+    IntegrityAlgorithmUnsupported,
+    IntegrityDuplicatePath,
+    IntegrityPathInvalid,
+    IntegrityMissingFile,
+    IntegrityByteCountMismatch,
+    IntegrityDigestMismatch,
     SchemaVersionMissing,
     SchemaVersionUnsupported,
     SchemaVersionMismatch,
@@ -231,6 +263,7 @@ pub enum ExportedArtifactKind {
     Manifest,
     Issues,
     Summary,
+    Integrity,
     AnswerDraft,
     GroundedAnswer,
     FinalAnswer,
@@ -721,6 +754,16 @@ impl FinalAnswerService {
             artifact_id: None,
         });
 
+        let integrity = build_export_integrity(&export_root, &written_files)?;
+        let integrity_path = export_root.join("export_integrity.json");
+        fs::write(&integrity_path, serde_json::to_string_pretty(&integrity)?).map_err(|_| AegisError::FinalAnswerWriteFailed)?;
+        written_files.push(ExportedArtifactFile {
+            relative_path: "export_integrity.json".to_string(),
+            artifact_kind: ExportedArtifactKind::Integrity,
+            source_id: None,
+            artifact_id: None,
+        });
+
         written_files.sort_by(|left, right| {
             (
                 &left.relative_path,
@@ -737,6 +780,7 @@ impl FinalAnswerService {
         Ok(AnswerArtifactExportResult {
             schema_version: ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION.to_string(),
             manifest,
+            integrity,
             exported_source_count,
             exported_draft_count,
             exported_grounded_answer_count,
@@ -994,6 +1038,35 @@ fn build_export_summary(
     })
 }
 
+fn build_export_integrity(
+    export_root: &Path,
+    written_files: &[ExportedArtifactFile],
+) -> AegisResult<AnswerArtifactExportIntegrity> {
+    let mut files = written_files
+        .iter()
+        .filter(|item| item.relative_path != "export_integrity.json")
+        .map(|item| {
+            let path = export_root.join(&item.relative_path);
+            let bytes = fs::read(&path).map_err(|_| AegisError::FinalAnswerReadFailed)?;
+            let mut hasher = Sha256::new();
+            hasher.update(&bytes);
+            Ok(AnswerArtifactExportIntegrityFile {
+                relative_path: item.relative_path.clone(),
+                byte_count: bytes.len() as u64,
+                sha256: format!("sha256:{:x}", hasher.finalize()),
+            })
+        })
+        .collect::<AegisResult<Vec<_>>>()?;
+
+    files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+
+    Ok(AnswerArtifactExportIntegrity {
+        schema_version: ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION.to_string(),
+        algorithm: ANSWER_ARTIFACT_EXPORT_INTEGRITY_ALGORITHM.to_string(),
+        files,
+    })
+}
+
 fn inspect_answer_artifact_export_bundle_impl(export_root: PathBuf) -> AegisResult<AnswerArtifactExportBundleInspection> {
     if export_root.as_os_str().is_empty() || export_root.to_string_lossy().trim().is_empty() {
         return Err(AegisError::ExportBundleInputMissing);
@@ -1020,12 +1093,27 @@ fn inspect_answer_artifact_export_bundle_impl(export_root: PathBuf) -> AegisResu
         AnswerArtifactExportBundleInspectionIssueKind::SummaryReadFailed,
         &mut errors,
     );
+    let integrity: Option<AnswerArtifactExportIntegrity> = read_bundle_integrity_file(&export_root, &mut errors);
 
     let issue_kind_counts = issues
         .as_ref()
         .map(|items| issue_kind_counts_from_export_issues(&items.issues));
 
-    validate_export_bundle_schema_versions(manifest.as_ref(), issues.as_ref(), summary.as_ref(), &mut errors);
+    validate_export_bundle_schema_versions(
+        manifest.as_ref(),
+        issues.as_ref(),
+        summary.as_ref(),
+        integrity.as_ref(),
+        &mut errors,
+    );
+    validate_export_bundle_integrity(
+        &export_root,
+        manifest.as_ref(),
+        issues.as_ref(),
+        summary.as_ref(),
+        integrity.as_ref(),
+        &mut errors,
+    );
 
     if let (Some(manifest), Some(issues), Some(summary)) = (manifest.as_ref(), issues.as_ref(), summary.as_ref()) {
         let expected_summary = build_export_summary(manifest, issues)?;
@@ -1100,13 +1188,16 @@ fn inspect_answer_artifact_export_bundle_impl(export_root: PathBuf) -> AegisResu
     });
 
     Ok(AnswerArtifactExportBundleInspection {
-        schema_version: common_export_bundle_schema_version(manifest.as_ref(), issues.as_ref(), summary.as_ref()),
+        schema_version: common_export_bundle_schema_version(manifest.as_ref(), issues.as_ref(), summary.as_ref(), integrity.as_ref()),
         manifest_schema_version: non_empty_schema_version(manifest.as_ref().map(|value| value.schema_version.as_str())),
         issues_schema_version: non_empty_schema_version(issues.as_ref().map(|value| value.schema_version.as_str())),
         summary_schema_version: non_empty_schema_version(summary.as_ref().map(|value| value.schema_version.as_str())),
+        integrity_schema_version: non_empty_schema_version(integrity.as_ref().map(|value| value.schema_version.as_str())),
+        integrity_algorithm: integrity.as_ref().map(|value| value.algorithm.clone()).filter(|value| !value.trim().is_empty()),
         has_manifest: manifest.is_some(),
         has_issues: issues.is_some(),
         has_summary: summary.is_some(),
+        has_integrity: integrity.is_some(),
         is_consistent: errors.is_empty(),
         issue_count: errors.len(),
         warning_count: warnings.len(),
@@ -1115,6 +1206,7 @@ fn inspect_answer_artifact_export_bundle_impl(export_root: PathBuf) -> AegisResu
         manifest_counts: manifest,
         summary_counts: summary,
         issue_kind_counts,
+        integrity_counts: integrity,
     })
 }
 
@@ -1229,16 +1321,58 @@ fn read_bundle_issues_file(
     }
 }
 
+fn read_bundle_integrity_file(
+    export_root: &Path,
+    issues: &mut Vec<AnswerArtifactExportBundleInspectionIssue>,
+) -> Option<AnswerArtifactExportIntegrity> {
+    let relative_path = "export_integrity.json";
+    let path = export_root.join(relative_path);
+    if !path.exists() {
+        issues.push(inspection_issue(
+            AnswerArtifactExportBundleInspectionIssueKind::MissingIntegrity,
+            format!("{relative_path} is missing"),
+            Some(relative_path.to_string()),
+        ));
+        return None;
+    }
+
+    let content = match fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(_) => {
+            issues.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::IntegrityReadFailed,
+                format!("{relative_path} could not be read"),
+                Some(relative_path.to_string()),
+            ));
+            return None;
+        }
+    };
+
+    match serde_json::from_str::<AnswerArtifactExportIntegrity>(&content) {
+        Ok(value) => Some(value),
+        Err(_) => {
+            issues.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::IntegrityReadFailed,
+                format!("{relative_path} is malformed"),
+                Some(relative_path.to_string()),
+            ));
+            None
+        }
+    }
+}
+
 fn validate_export_bundle_schema_versions(
     manifest: Option<&AnswerArtifactExportManifest>,
     issues: Option<&AnswerArtifactExportIssues>,
     summary: Option<&AnswerArtifactExportSummary>,
+    integrity: Option<&AnswerArtifactExportIntegrity>,
     errors: &mut Vec<AnswerArtifactExportBundleInspectionIssue>,
 ) {
     let versions = [
         ("export_manifest.json", manifest.map(|value| value.schema_version.as_str())),
         ("export_issues.json", issues.map(|value| value.schema_version.as_str())),
         ("summary.json", summary.map(|value| value.schema_version.as_str())),
+        ("export_integrity.json", integrity.map(|value| value.schema_version.as_str())),
     ];
 
     for (relative_path, version) in versions {
@@ -1265,6 +1399,7 @@ fn validate_export_bundle_schema_versions(
         manifest.map(|value| value.schema_version.trim()),
         issues.map(|value| value.schema_version.trim()),
         summary.map(|value| value.schema_version.trim()),
+        integrity.map(|value| value.schema_version.trim()),
     ]
     .into_iter()
     .flatten()
@@ -1282,6 +1417,112 @@ fn validate_export_bundle_schema_versions(
     }
 }
 
+fn validate_export_bundle_integrity(
+    export_root: &Path,
+    _manifest: Option<&AnswerArtifactExportManifest>,
+    _issues: Option<&AnswerArtifactExportIssues>,
+    _summary: Option<&AnswerArtifactExportSummary>,
+    integrity: Option<&AnswerArtifactExportIntegrity>,
+    errors: &mut Vec<AnswerArtifactExportBundleInspectionIssue>,
+) {
+    let Some(integrity) = integrity else {
+        return;
+    };
+
+    let relative_path = "export_integrity.json".to_string();
+    let integrity_schema_version = integrity.schema_version.trim();
+    if integrity_schema_version.is_empty() {
+        errors.push(inspection_issue(
+            AnswerArtifactExportBundleInspectionIssueKind::IntegritySchemaVersionMissing,
+            "export_integrity.json is missing schema_version".to_string(),
+            Some(relative_path.clone()),
+        ));
+    } else if integrity_schema_version != ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION {
+        errors.push(inspection_issue(
+            AnswerArtifactExportBundleInspectionIssueKind::IntegritySchemaVersionUnsupported,
+            "export_integrity.json has unsupported schema_version".to_string(),
+            Some(relative_path.clone()),
+        ));
+    }
+
+    let algorithm = integrity.algorithm.trim();
+    if algorithm.is_empty() {
+        errors.push(inspection_issue(
+            AnswerArtifactExportBundleInspectionIssueKind::IntegrityAlgorithmMissing,
+            "export_integrity.json is missing algorithm".to_string(),
+            Some(relative_path.clone()),
+        ));
+    } else if algorithm != ANSWER_ARTIFACT_EXPORT_INTEGRITY_ALGORITHM {
+        errors.push(inspection_issue(
+            AnswerArtifactExportBundleInspectionIssueKind::IntegrityAlgorithmUnsupported,
+            "export_integrity.json has unsupported algorithm".to_string(),
+            Some(relative_path.clone()),
+        ));
+    }
+
+    let mut seen_paths = std::collections::BTreeSet::new();
+    for file in &integrity.files {
+        let normalized = file.relative_path.trim();
+        let path = Path::new(normalized);
+        if normalized.is_empty()
+            || path.is_absolute()
+            || path.components().any(|component| matches!(component, std::path::Component::ParentDir))
+        {
+            errors.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::IntegrityPathInvalid,
+                "export_integrity.json lists an invalid relative_path".to_string(),
+                Some("export_integrity.json".to_string()),
+            ));
+            continue;
+        }
+        if !seen_paths.insert(normalized.to_string()) {
+            errors.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::IntegrityDuplicatePath,
+                "export_integrity.json lists a duplicate relative_path".to_string(),
+                Some("export_integrity.json".to_string()),
+            ));
+            continue;
+        }
+        let file_path = export_root.join(normalized);
+        if !file_path.exists() {
+            errors.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::IntegrityMissingFile,
+                format!("{normalized} is missing from the export bundle"),
+                Some("export_integrity.json".to_string()),
+            ));
+            continue;
+        }
+        let bytes = match fs::read(&file_path) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                errors.push(inspection_issue(
+                    AnswerArtifactExportBundleInspectionIssueKind::IntegrityReadFailed,
+                    format!("{normalized} could not be read"),
+                    Some("export_integrity.json".to_string()),
+                ));
+                continue;
+            }
+        };
+        if bytes.len() as u64 != file.byte_count {
+            errors.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::IntegrityByteCountMismatch,
+                format!("{normalized} byte_count does not match the bundle file"),
+                Some("export_integrity.json".to_string()),
+            ));
+        }
+        let mut hasher = Sha256::new();
+        hasher.update(&bytes);
+        let digest = format!("sha256:{:x}", hasher.finalize());
+        if digest != file.sha256 {
+            errors.push(inspection_issue(
+                AnswerArtifactExportBundleInspectionIssueKind::IntegrityDigestMismatch,
+                format!("{normalized} digest does not match the bundle file"),
+                Some("export_integrity.json".to_string()),
+            ));
+        }
+    }
+}
+
 fn non_empty_schema_version(version: Option<&str>) -> Option<String> {
     version
         .map(str::trim)
@@ -1293,15 +1534,17 @@ fn common_export_bundle_schema_version(
     manifest: Option<&AnswerArtifactExportManifest>,
     issues: Option<&AnswerArtifactExportIssues>,
     summary: Option<&AnswerArtifactExportSummary>,
+    integrity: Option<&AnswerArtifactExportIntegrity>,
 ) -> Option<String> {
     let manifest_version = manifest.map(|value| value.schema_version.trim());
     let issues_version = issues.map(|value| value.schema_version.trim());
     let summary_version = summary.map(|value| value.schema_version.trim());
-    let versions = [manifest_version, issues_version, summary_version]
+    let integrity_version = integrity.map(|value| value.schema_version.trim());
+    let versions = [manifest_version, issues_version, summary_version, integrity_version]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>();
-    if versions.len() == 3
+    if versions.len() == 4
         && versions.iter().all(|version| !version.is_empty())
         && versions.iter().all(|version| *version == ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION)
     {
@@ -1345,14 +1588,25 @@ fn export_bundle_issue_kind_rank(kind: &AnswerArtifactExportBundleInspectionIssu
         AnswerArtifactExportBundleInspectionIssueKind::IssuesReadFailed => 3,
         AnswerArtifactExportBundleInspectionIssueKind::MissingSummary => 4,
         AnswerArtifactExportBundleInspectionIssueKind::SummaryReadFailed => 5,
-        AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMissing => 6,
-        AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionUnsupported => 7,
-        AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch => 8,
-        AnswerArtifactExportBundleInspectionIssueKind::SummaryCountsMismatch => 9,
-        AnswerArtifactExportBundleInspectionIssueKind::SummaryIssueCountMismatch => 10,
-        AnswerArtifactExportBundleInspectionIssueKind::SummaryIssueKindCountsMismatch => 11,
-        AnswerArtifactExportBundleInspectionIssueKind::SummaryExportIdMismatch => 12,
-        AnswerArtifactExportBundleInspectionIssueKind::SummaryMetadataMismatch => 13,
+        AnswerArtifactExportBundleInspectionIssueKind::MissingIntegrity => 6,
+        AnswerArtifactExportBundleInspectionIssueKind::IntegrityReadFailed => 7,
+        AnswerArtifactExportBundleInspectionIssueKind::IntegritySchemaVersionMissing => 8,
+        AnswerArtifactExportBundleInspectionIssueKind::IntegritySchemaVersionUnsupported => 9,
+        AnswerArtifactExportBundleInspectionIssueKind::IntegrityAlgorithmMissing => 10,
+        AnswerArtifactExportBundleInspectionIssueKind::IntegrityAlgorithmUnsupported => 11,
+        AnswerArtifactExportBundleInspectionIssueKind::IntegrityDuplicatePath => 12,
+        AnswerArtifactExportBundleInspectionIssueKind::IntegrityPathInvalid => 13,
+        AnswerArtifactExportBundleInspectionIssueKind::IntegrityMissingFile => 14,
+        AnswerArtifactExportBundleInspectionIssueKind::IntegrityByteCountMismatch => 15,
+        AnswerArtifactExportBundleInspectionIssueKind::IntegrityDigestMismatch => 16,
+        AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMissing => 17,
+        AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionUnsupported => 18,
+        AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch => 19,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryCountsMismatch => 20,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryIssueCountMismatch => 21,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryIssueKindCountsMismatch => 22,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryExportIdMismatch => 23,
+        AnswerArtifactExportBundleInspectionIssueKind::SummaryMetadataMismatch => 24,
     }
 }
 
@@ -1397,7 +1651,7 @@ fn copy_artifact_files(
                     ExportedArtifactKind::AnswerDraft => "answer_drafts",
                     ExportedArtifactKind::GroundedAnswer => "grounded_answers",
                     ExportedArtifactKind::FinalAnswer => "final_answers",
-                    ExportedArtifactKind::Manifest | ExportedArtifactKind::Issues | ExportedArtifactKind::Summary => unreachable!(),
+                    ExportedArtifactKind::Manifest | ExportedArtifactKind::Issues | ExportedArtifactKind::Summary | ExportedArtifactKind::Integrity => unreachable!(),
                 })
                 .join(format!("{artifact_id}.json"))
                 .to_string_lossy()
@@ -1570,6 +1824,10 @@ mod tests {
         serde_json::from_str(&fs::read_to_string(export_root.join("export_issues.json")).unwrap()).unwrap()
     }
 
+    fn read_export_integrity(export_root: &PathBuf) -> AnswerArtifactExportIntegrity {
+        serde_json::from_str(&fs::read_to_string(export_root.join("export_integrity.json")).unwrap()).unwrap()
+    }
+
     fn remove_bundle_schema_version(export_root: &PathBuf, relative_path: &str) {
         let path = export_root.join(relative_path);
         let mut value: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
@@ -1584,6 +1842,13 @@ mod tests {
             "schema_version".to_string(),
             serde_json::Value::String(schema_version.to_string()),
         );
+        fs::write(path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
+    }
+
+    fn mutate_export_integrity(export_root: &PathBuf, mutate: impl FnOnce(&mut serde_json::Value)) {
+        let path = export_root.join("export_integrity.json");
+        let mut value: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        mutate(&mut value);
         fs::write(path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
     }
 
@@ -2340,10 +2605,12 @@ mod tests {
         assert_eq!(read_export_manifest(&export_root).schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
         assert_eq!(read_export_issues(&export_root).schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
         assert_eq!(read_export_summary(&export_root).schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert_eq!(read_export_integrity(&export_root).schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
         assert!(export_root.join(&source_id).join("answer_drafts").join(format!("{draft_id}.json")).exists());
         assert!(export_root.join(&source_id).join("grounded_answers").join(format!("{grounded_id}.json")).exists());
         assert!(export_root.join(&source_id).join("final_answers").join(format!("{}.json", final_answer.final_answer_id)).exists());
         assert!(result.written_files.iter().any(|item| item.artifact_kind == ExportedArtifactKind::Summary));
+        assert!(result.written_files.iter().any(|item| item.artifact_kind == ExportedArtifactKind::Integrity));
         assert_eq!(before_snapshot, after_snapshot);
         assert!(matches!(service.export_answer_artifacts(&export_root), Err(AegisError::ExportDestinationExists)));
     }
@@ -2455,6 +2722,7 @@ mod tests {
         assert!(first.manifest.sources[0].final_answers.iter().all(|item| item.final_answer_id != "fan_bad"));
         assert!(first.manifest.issue_count > 0);
         assert!(first.manifest.sources[0].issue_count > 0);
+        assert!(first.written_files.iter().any(|item| item.artifact_kind == ExportedArtifactKind::Integrity));
     }
 
     #[test]
@@ -2505,10 +2773,13 @@ mod tests {
         assert!(inspection.has_manifest);
         assert!(inspection.has_issues);
         assert!(inspection.has_summary);
+        assert!(inspection.has_integrity);
         assert_eq!(inspection.schema_version.as_deref(), Some(ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION));
         assert_eq!(inspection.manifest_schema_version.as_deref(), Some(ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION));
         assert_eq!(inspection.issues_schema_version.as_deref(), Some(ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION));
         assert_eq!(inspection.summary_schema_version.as_deref(), Some(ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION));
+        assert_eq!(inspection.integrity_schema_version.as_deref(), Some(ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION));
+        assert_eq!(inspection.integrity_algorithm.as_deref(), Some(ANSWER_ARTIFACT_EXPORT_INTEGRITY_ALGORITHM));
         assert!(inspection.is_consistent);
         assert_eq!(inspection.issue_count, 0);
         assert_eq!(inspection.warning_count, 0);
@@ -2516,6 +2787,7 @@ mod tests {
         assert!(inspection.warnings.is_empty());
         assert!(inspection.manifest_counts.is_some());
         assert!(inspection.summary_counts.is_some());
+        assert!(inspection.integrity_counts.is_some());
         assert!(inspection.issue_kind_counts.is_some());
         assert_eq!(inspection.manifest_counts.as_ref().unwrap().source_count, result.manifest.source_count);
         assert_eq!(inspection.manifest_counts.as_ref().unwrap().draft_count, result.manifest.draft_count);
@@ -2528,6 +2800,9 @@ mod tests {
         assert_eq!(inspection.summary_counts.as_ref().unwrap(), &summary);
         assert_eq!(inspection.manifest_counts.as_ref().unwrap().schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
         assert_eq!(inspection.summary_counts.as_ref().unwrap().schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert_eq!(inspection.integrity_counts.as_ref().unwrap().schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert_eq!(inspection.integrity_counts.as_ref().unwrap().algorithm, ANSWER_ARTIFACT_EXPORT_INTEGRITY_ALGORITHM);
+        assert_eq!(inspection.integrity_counts.as_ref().unwrap().files.len(), result.written_files.len() - 1);
         assert!(inspection.summary_counts.as_ref().unwrap().issue_kinds.is_empty());
         assert!(inspection.issue_kind_counts.as_ref().unwrap().is_empty());
         assert!(inspection.summary_counts.as_ref().unwrap().sources.windows(2).all(|pair| pair[0].source_id <= pair[1].source_id));
@@ -2555,6 +2830,140 @@ mod tests {
         assert_eq!(summary.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
         assert_eq!(issues.issues.len(), result.exported_issue_count);
         assert!(!format!("{result:?}{manifest:?}{issues:?}{summary:?}").contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn answer_artifact_export_integrity_is_written_and_deterministic() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root_a = temp.path().join("integrity-a");
+        let export_root_b = temp.path().join("integrity-b");
+
+        let result_a = service.export_answer_artifacts(&export_root_a).unwrap();
+        let result_b = service.export_answer_artifacts(&export_root_b).unwrap();
+        let integrity_a = read_export_integrity(&export_root_a);
+        let integrity_b = read_export_integrity(&export_root_b);
+
+        assert_eq!(result_a.integrity, integrity_a);
+        assert_eq!(result_b.integrity, integrity_b);
+        assert_eq!(integrity_a.schema_version, ANSWER_ARTIFACT_EXPORT_SCHEMA_VERSION);
+        assert_eq!(integrity_a.algorithm, ANSWER_ARTIFACT_EXPORT_INTEGRITY_ALGORITHM);
+        assert_eq!(integrity_a, integrity_b);
+        assert!(integrity_a.files.windows(2).all(|pair| pair[0].relative_path <= pair[1].relative_path));
+        assert!(integrity_a.files.iter().all(|file| !file.relative_path.is_empty() && !file.relative_path.contains("..") && !Path::new(&file.relative_path).is_absolute()));
+        assert!(integrity_a.files.iter().all(|file| file.relative_path != "export_integrity.json"));
+        assert_eq!(integrity_a.files.len(), result_a.written_files.len() - 1);
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_detects_missing_integrity_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("missing-integrity-bundle");
+        service.export_answer_artifacts(&export_root).unwrap();
+        fs::remove_file(export_root.join("export_integrity.json")).unwrap();
+
+        let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+
+        assert!(!inspection.has_integrity);
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::MissingIntegrity));
+        assert!(!inspection.is_consistent);
+        assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_detects_malformed_integrity_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("malformed-integrity-bundle");
+        service.export_answer_artifacts(&export_root).unwrap();
+        fs::write(export_root.join("export_integrity.json"), "{not-json").unwrap();
+
+        let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IntegrityReadFailed));
+        assert!(!inspection.is_consistent);
+        assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_detects_unsupported_integrity_algorithm() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("unsupported-algorithm-bundle");
+        service.export_answer_artifacts(&export_root).unwrap();
+        mutate_export_integrity(&export_root, |value| {
+            value["algorithm"] = serde_json::Value::String("md5".to_string());
+        });
+
+        let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IntegrityAlgorithmUnsupported));
+        assert!(!inspection.is_consistent);
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_detects_missing_listed_integrity_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("missing-listed-integrity-file-bundle");
+        service.export_answer_artifacts(&export_root).unwrap();
+        mutate_export_integrity(&export_root, |value| {
+            let files = value["files"].as_array_mut().unwrap();
+            files[0]["relative_path"] = serde_json::Value::String("missing-file.json".to_string());
+        });
+
+        let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IntegrityMissingFile));
+        assert!(!inspection.is_consistent);
+    }
+
+    #[test]
+    fn answer_artifact_export_bundle_inspection_detects_missing_and_mismatched_integrity_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, _version_id, _draft_id, grounded_id) = prepare_grounded(&temp.path().to_path_buf());
+        let service = FinalAnswerService::new(temp.path().to_path_buf());
+        let _ = service.build_final_answer(&source_id, &grounded_id).unwrap();
+        let export_root = temp.path().join("integrity-entry-bundle");
+        service.export_answer_artifacts(&export_root).unwrap();
+
+        mutate_export_integrity(&export_root, |value| {
+            let files = value["files"].as_array_mut().unwrap();
+            if let Some(first) = files.first_mut() {
+                first["relative_path"] = serde_json::Value::String("missing/../bad.json".to_string());
+            }
+        });
+
+        let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IntegrityPathInvalid));
+
+        mutate_export_integrity(&export_root, |value| {
+            let files = value["files"].as_array_mut().unwrap();
+            let duplicate = files.first().cloned().unwrap();
+            if let Some(first) = files.first_mut() {
+                first["relative_path"] = serde_json::Value::String("summary.json".to_string());
+                first["byte_count"] = serde_json::Value::Number(serde_json::Number::from(0));
+                first["sha256"] = serde_json::Value::String("sha256:deadbeef".to_string());
+            }
+            files.push(duplicate);
+        });
+
+        let inspection = inspect_answer_artifact_export_bundle(&export_root).unwrap();
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IntegrityDuplicatePath));
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IntegrityByteCountMismatch));
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::IntegrityDigestMismatch));
+        assert!(!inspection.is_consistent);
     }
 
     #[test]
@@ -2642,7 +3051,7 @@ mod tests {
             issue.relative_path.as_deref(),
             Some("export_manifest.json" | "export_issues.json" | "summary.json")
         )));
-        assert!(!inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch));
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::SchemaVersionMismatch));
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
 
@@ -2729,24 +3138,28 @@ mod tests {
         assert!(!inspection.has_manifest);
         assert!(!inspection.has_issues);
         assert!(!inspection.has_summary);
+        assert!(!inspection.has_integrity);
         assert!(!inspection.is_consistent);
-        assert_eq!(inspection.issue_count, 3);
+        assert_eq!(inspection.issue_count, 4);
         assert_eq!(inspection.warning_count, 0);
         assert!(inspection.manifest_counts.is_none());
         assert!(inspection.summary_counts.is_none());
+        assert!(inspection.integrity_counts.is_none());
         assert!(inspection.issue_kind_counts.is_none());
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::MissingManifest));
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::MissingIssues));
         assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::MissingSummary));
+        assert!(inspection.errors.iter().any(|issue| issue.kind == AnswerArtifactExportBundleInspectionIssueKind::MissingIntegrity));
         assert_eq!(
             inspection.errors.iter().map(|issue| &issue.kind).collect::<Vec<_>>(),
             vec![
                 &AnswerArtifactExportBundleInspectionIssueKind::MissingManifest,
                 &AnswerArtifactExportBundleInspectionIssueKind::MissingIssues,
                 &AnswerArtifactExportBundleInspectionIssueKind::MissingSummary,
+                &AnswerArtifactExportBundleInspectionIssueKind::MissingIntegrity,
             ]
         );
-        assert!(inspection.errors.iter().all(|issue| matches!(issue.relative_path.as_deref(), Some("export_manifest.json" | "export_issues.json" | "summary.json"))));
+        assert!(inspection.errors.iter().all(|issue| matches!(issue.relative_path.as_deref(), Some("export_manifest.json" | "export_issues.json" | "summary.json" | "export_integrity.json"))));
         assert!(fs::read_dir(&export_root).unwrap().next().is_none());
         assert!(!format!("{inspection:?}").contains(temp.path().to_string_lossy().as_ref()));
     }
