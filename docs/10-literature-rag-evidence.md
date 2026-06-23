@@ -87,8 +87,10 @@ Listing remains read-only and returns metadata only, not filesystem paths.
 Ordering is deterministic, metadata counts are derived from the persisted FinalAnswer statements, malformed files are treated as typed read failures, traversal-like `source_id` inputs stay away from arbitrary path access, and listing does not create missing directories as a side effect.
 
 Phase 12.0 adds a read-only answer-artifact overview for a source.
-It reports persisted draft, grounded answer, and final answer counts, and reuses FinalAnswer metadata for inspection only.
-It does not build, generate, edit, or synthesize artifacts.
+It reports persisted answer-draft, grounded-answer, and final-answer counts, and reuses FinalAnswer metadata for inspection only.
+It is read-only, exposes metadata only, does not surface filesystem paths, does not create directories, and does not create draft, grounded, or final artifacts.
+It does not build, generate, edit, synthesize, or rank answers.
+Phase 12.1 keeps the overview aligned with list_final_answers and hardens the boundary with deterministic ordering, multiple-artifact count coverage, and conservative typed malformed-final-answer handling.
 
 Manual verification checklist:
 
@@ -100,8 +102,9 @@ Manual verification checklist:
 - open the app and confirm:
   - empty inputs are rejected
   - loading is disabled during fetch
-  - the list shows existing final answers when a source ID is entered
+  - artifact overview shows persisted draft, grounded answer, and final answer counts
   - selecting a listed final answer fills the ID and loads it read-only
+  - the list shows existing final answers when a source ID is entered
   - supported / `needs_evidence` / unsupported statements remain visible
   - statement order is preserved
   - locator summaries render

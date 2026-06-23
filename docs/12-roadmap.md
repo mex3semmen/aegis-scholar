@@ -109,7 +109,8 @@ Phase 11.1 hardens that discovery boundary with deterministic ordering, metadata
 This remains inspection-only and is still not a product answer experience; it does not introduce generation, synthesis, ranking, or editing.
 
 Phase 12.0 adds a read-only answer-artifact overview that shows existing draft, grounded answer, and final answer counts for a source.
-It remains inspection-only and does not create, build, generate, or edit artifacts.
+It remains inspection-only, does not create directories or artifacts, and is still not a product answer experience.
+Phase 12.1 hardens that boundary with deterministic overview/list alignment, multiple-artifact count coverage, and conservative malformed-final-answer handling.
 
 ## Phase 11 — Obsidian Export
 
