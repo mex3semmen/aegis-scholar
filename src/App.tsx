@@ -115,6 +115,24 @@ type AnswerArtifactExportManifest = {
   sources: AnswerArtifactExportSource[];
 };
 
+type ExportedArtifactFile = {
+  relative_path: string;
+  artifact_kind: "manifest" | "issues" | "answer_draft" | "grounded_answer" | "final_answer";
+  source_id?: string | null;
+  artifact_id?: string | null;
+};
+
+type AnswerArtifactExportResult = {
+  manifest: AnswerArtifactExportManifest;
+  exported_source_count: number;
+  exported_draft_count: number;
+  exported_grounded_answer_count: number;
+  exported_final_answer_count: number;
+  exported_issue_count: number;
+  export_id: string;
+  written_files: ExportedArtifactFile[];
+};
+
 function sanitizeBackendError(error: unknown) {
   const message = String(error);
   return message.replace(/[A-Za-z]:\\[^"]+/g, "[path hidden]").replace(/E:\\[^"]+/g, "[path hidden]");
@@ -150,6 +168,10 @@ export default function App() {
   const [artifactManifest, setArtifactManifest] = createSignal<AnswerArtifactExportManifest | null>(null);
   const [artifactManifestError, setArtifactManifestError] = createSignal<string | null>(null);
   const [artifactManifestLoading, setArtifactManifestLoading] = createSignal(false);
+  const [exportRoot, setExportRoot] = createSignal("");
+  const [artifactExportResult, setArtifactExportResult] = createSignal<AnswerArtifactExportResult | null>(null);
+  const [artifactExportError, setArtifactExportError] = createSignal<string | null>(null);
+  const [artifactExportLoading, setArtifactExportLoading] = createSignal(false);
 
   async function loadStatus() {
     setStatusError(null);
@@ -273,6 +295,31 @@ export default function App() {
     }
   }
 
+  async function exportArtifacts() {
+    const trimmedExportRoot = exportRoot().trim();
+    if (!trimmedExportRoot) {
+      setArtifactExportError("Export destination is required.");
+      return;
+    }
+    if (artifactExportLoading()) {
+      return;
+    }
+    setArtifactExportLoading(true);
+    setArtifactExportError(null);
+    try {
+      const result = await invoke<AnswerArtifactExportResult>("export_answer_artifacts", {
+        root: ".",
+        export_root: trimmedExportRoot,
+      });
+      setArtifactExportResult(result);
+    } catch (err) {
+      setArtifactExportResult(null);
+      setArtifactExportError(sanitizeBackendError(err));
+    } finally {
+      setArtifactExportLoading(false);
+    }
+  }
+
   async function selectArtifactSource(item: AnswerArtifactSourceMetadata) {
     setSourceId(item.source_id);
     await loadArtifactOverviewBySourceId(item.source_id);
@@ -380,6 +427,18 @@ export default function App() {
           <button onClick={loadArtifactManifest} disabled={artifactManifestLoading()}>
             {artifactManifestLoading() ? "Loading..." : "Load export manifest"}
           </button>
+          <label class="inline-field">
+            Export destination
+            <input
+              type="text"
+              value={exportRoot()}
+              onInput={(event) => setExportRoot(event.currentTarget.value)}
+              placeholder="E:\\path\\to\\export"
+            />
+          </label>
+          <button onClick={exportArtifacts} disabled={artifactExportLoading()}>
+            {artifactExportLoading() ? "Loading..." : "Export artifacts"}
+          </button>
         </div>
         {finalAnswerError() && <p class="error">{finalAnswerError()}</p>}
         {artifactOverviewError() && <p class="error">{artifactOverviewError()}</p>}
@@ -387,6 +446,7 @@ export default function App() {
         {artifactHealthError() && <p class="error">{artifactHealthError()}</p>}
         {artifactIssuesError() && <p class="error">{artifactIssuesError()}</p>}
         {artifactManifestError() && <p class="error">{artifactManifestError()}</p>}
+        {artifactExportError() && <p class="error">{artifactExportError()}</p>}
         <div class="artifact-overview">
           <h3>Sources with artifacts</h3>
           {artifactSources().length > 0 ? (
@@ -506,6 +566,41 @@ export default function App() {
             </>
           ) : (
             <p>No export manifest loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Export result</h3>
+          {artifactExportResult() ? (
+            <>
+              <div class="contract-meta">
+                <div><span>Export ID</span><strong>{artifactExportResult()!.export_id}</strong></div>
+                <div><span>Sources</span><strong>{artifactExportResult()!.exported_source_count}</strong></div>
+                <div><span>Drafts</span><strong>{artifactExportResult()!.exported_draft_count}</strong></div>
+                <div><span>Grounded answers</span><strong>{artifactExportResult()!.exported_grounded_answer_count}</strong></div>
+                <div><span>Final answers</span><strong>{artifactExportResult()!.exported_final_answer_count}</strong></div>
+                <div><span>Issues</span><strong>{artifactExportResult()!.exported_issue_count}</strong></div>
+              </div>
+              {artifactExportResult()!.written_files.length > 0 ? (
+                <ul class="final-answer-list-items">
+                  {artifactExportResult()!.written_files.map((item) => (
+                    <li>
+                      <div class="final-answer-list-item">
+                        <span>{item.relative_path}</span>
+                        <small>
+                          {item.artifact_kind}
+                          {item.source_id ? ` | ${item.source_id}` : ""}
+                          {item.artifact_id ? ` | ${item.artifact_id}` : ""}
+                        </small>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No exported files listed yet.</p>
+              )}
+            </>
+          ) : (
+            <p>No export result loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">

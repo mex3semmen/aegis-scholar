@@ -117,6 +117,11 @@ It does not build, generate, synthesize, rank, infer, rewrite, repair, or edit a
 Phase 16.1 hardens that boundary with deterministic ordering, issue-count rollup, and tolerant handling of malformed final answers in the preview.
 This remains preview-only and still does not provide actual export.
 
+Phase 17.0 adds an explicit manual export step for persisted answer artifacts.
+It exports persisted artifact data only, writes only under the chosen export destination, keeps returned file paths relative, and includes issue information so malformed / unsupported / `needs_evidence` state remains visible.
+It does not generate, build, infer, rank, rewrite, repair, or edit answers.
+Phase 17.1 hardens that boundary with deterministic export order, explicit destination handling, and path-safe export output.
+
 Manual verification checklist:
 
 - `npm run build`

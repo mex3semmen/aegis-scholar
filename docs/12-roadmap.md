@@ -131,6 +131,11 @@ There are no repair/fix actions yet.
 Phase 16.1 hardens that boundary with deterministic ordering, issue-count rollup, and tolerant preview handling for malformed finals.
 This remains preview-only; there is no actual export workflow yet.
 
+Phase 17.0 adds an explicit manual export step for persisted answer artifacts.
+It remains artifact-only, writes only under the chosen export destination, returns relative exported file paths, and is still not a product answer experience.
+There are no repair/fix actions yet.
+Phase 17.1 hardens that boundary with explicit destination handling, deterministic export output, and path-safe export manifests.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
