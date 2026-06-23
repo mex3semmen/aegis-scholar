@@ -54,6 +54,7 @@ Phase 9.0 adds a narrow backend smoke test over the persisted answer contract ch
 It exercises answer draft, grounded answer, and final answer persistence and read-back without adding UI, synthesis, or ranking.
 
 The next implementation milestone is retrieval / evidence pack hardening, focused on upstream lexical retrieval and evidence-pack metadata boundaries before any new answer work.
+Phase 38.0 is the retrieval / evidence pack contract baseline.
 
 Current regression checks:
 
