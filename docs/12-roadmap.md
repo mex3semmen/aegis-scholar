@@ -998,6 +998,42 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 73 — Runtime Smoke Output Boundary
+
+Phase 73.0 adds diagnostic-only boundary metadata and UI copy for local runtime smoke output. Smoke results now carry explicit runtime-diagnostic classification flags so the preview cannot be confused with Scholar Chat answers. This remains preview-only and does not generate Scholar Chat answers, grounded answers, Evidence Packs, or final answers.
+
+Do not implement:
+
+- LLM calls
+- retrieval execution
+- Evidence Pack building
+- answer generation
+- config persistence
+- model download/install behavior
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
+## Phase 74 — Scholar Chat Answer Readiness Gate
+
+Phase 74.0 adds a read-only Scholar Chat answer-readiness gate using the existing `preview_scholar_chat_answer_readiness` command and compact UI copy.
+It previews whether the current Scholar Chat request, source context, and local runtime configuration could proceed toward a future local draft inference, but it remains preview-only and does not execute the runtime, call an LLM, generate answers, build Evidence Packs, or persist anything.
+
+Do not implement:
+
+- LLM calls
+- runtime execution
+- retrieval execution changes
+- Evidence Pack building
+- answer generation
+- config persistence
+- model download/install behavior
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.

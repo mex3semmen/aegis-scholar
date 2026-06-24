@@ -1,6 +1,14 @@
 use crate::errors::{AegisError, AegisResult};
 use crate::locators::CitationLocator;
 use crate::retrieval::{RetrievalResponse, RetrievalService};
+use crate::local_runtime::{
+    preview_local_model_runtime_health,
+    preview_local_runtime_invocation_plan,
+    LocalModelRuntimeConfig,
+    LocalModelRuntimeHealthStatus,
+    LocalRuntimeInvocationPlanRequest,
+    LocalRuntimeInvocationPlanStatus,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -187,6 +195,69 @@ pub struct ScholarChatPromptPackPreviewResponse {
     pub warnings: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatAnswerReadinessStatus {
+    Blocked,
+    NeedsSources,
+    NeedsRetrievalIndex,
+    NeedsEvidenceCandidates,
+    NeedsRuntimeConfig,
+    NeedsExecutionConsent,
+    ReadyForDraftInferenceLater,
+    ReadyForGroundedDraftLater,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatAnswerReadinessOutputClassification {
+    Blocked,
+    UngroundedDraft,
+    SourceContextDraft,
+    GroundedDraftCandidate,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatAnswerReadinessBlocker {
+    pub kind: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatAnswerReadinessWarning {
+    pub kind: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ScholarChatAnswerReadinessRequest {
+    pub scholar_chat_request: ScholarChatRequest,
+    pub runtime_config: LocalModelRuntimeConfig,
+    pub allow_model_execution: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ScholarChatAnswerReadinessPreview {
+    pub status: ScholarChatAnswerReadinessStatus,
+    pub normalized_prompt: String,
+    pub mode: ScholarChatMode,
+    pub grounding_policy: GroundingPolicy,
+    pub selected_source_count: usize,
+    pub retrieval_candidate_count: usize,
+    pub evidence_candidate_count: usize,
+    pub prompt_pack_ready: bool,
+    pub runtime_health_status: LocalModelRuntimeHealthStatus,
+    pub invocation_plan_status: LocalRuntimeInvocationPlanStatus,
+    pub allow_model_execution: bool,
+    pub would_generate_answer_now: bool,
+    pub would_build_evidence_pack_now: bool,
+    pub would_create_final_answer_now: bool,
+    pub future_output_classification: ScholarChatAnswerReadinessOutputClassification,
+    pub blockers: Vec<ScholarChatAnswerReadinessBlocker>,
+    pub warnings: Vec<ScholarChatAnswerReadinessWarning>,
+    pub next_required_actions: Vec<String>,
+}
+
 enum ScholarChatPreviewKind {
     Request,
     Retrieval,
@@ -349,6 +420,190 @@ pub fn preview_scholar_chat_prompt_pack(
         prompt_pack,
         context_items,
         warnings,
+    })
+}
+
+pub fn preview_scholar_chat_answer_readiness(
+    root: impl Into<PathBuf>,
+    request: ScholarChatAnswerReadinessRequest,
+) -> AegisResult<ScholarChatAnswerReadinessPreview> {
+    let root = root.into();
+    let scholar_chat_request = request.scholar_chat_request;
+    let request_preview = preview_scholar_chat_request(&root, scholar_chat_request.clone())?;
+    let retrieval_preview = preview_scholar_chat_retrieval(&root, scholar_chat_request.clone())?;
+    let evidence_plan_preview = preview_scholar_chat_evidence_plan(&root, scholar_chat_request.clone())?;
+    let prompt_pack_preview = preview_scholar_chat_prompt_pack(&root, scholar_chat_request.clone())?;
+    let runtime_health_preview = preview_local_model_runtime_health(&root, request.runtime_config.clone())?;
+    let invocation_plan_preview = preview_local_runtime_invocation_plan(
+        &root,
+        LocalRuntimeInvocationPlanRequest {
+            runtime_config: request.runtime_config,
+            prompt_text: Some(request_preview.normalized_prompt.clone()),
+            estimated_input_char_count: Some(request_preview.normalized_prompt.chars().count() as u32),
+            max_output_tokens: Some(1),
+            stop_sequences: None,
+        },
+    )?;
+
+    let selected_source_count = request_preview.selected_source_count;
+    let retrieval_candidate_count = retrieval_preview.candidate_count;
+    let evidence_candidate_count = evidence_plan_preview.evidence_candidate_count;
+    let prompt_pack_ready = prompt_pack_preview.prompt_pack.section_count > 0;
+    let runtime_ready = matches!(runtime_health_preview.status, LocalModelRuntimeHealthStatus::ReadyToTestLater);
+    let invocation_ready = matches!(invocation_plan_preview.status, LocalRuntimeInvocationPlanStatus::ReadyToInvokeLater);
+
+    let mut blockers = Vec::new();
+    let mut warnings = Vec::new();
+    let mut next_required_actions = Vec::new();
+
+    for warning in request_preview.warnings {
+        push_readiness_warning(&mut warnings, "request_preview", &warning);
+    }
+    for warning in retrieval_preview.warnings {
+        push_readiness_warning(&mut warnings, "retrieval_preview", &warning);
+    }
+    for warning in evidence_plan_preview.warnings {
+        push_readiness_warning(&mut warnings, "evidence_plan_preview", &warning);
+    }
+    for warning in prompt_pack_preview.warnings {
+        push_readiness_warning(&mut warnings, "prompt_pack_preview", &warning);
+    }
+    for warning in runtime_health_preview.warnings {
+        push_readiness_warning(&mut warnings, &warning.kind, &warning.message);
+    }
+    for warning in invocation_plan_preview.plan.warnings {
+        push_readiness_warning(&mut warnings, &warning.kind, &warning.message);
+    }
+    for blocker in invocation_plan_preview.plan.blockers {
+        push_readiness_blocker(&mut blockers, &blocker.kind, &blocker.message);
+    }
+
+    if selected_source_count == 0 {
+        push_readiness_action(
+            &mut next_required_actions,
+            "Select one or more Scholar Chat sources.",
+        );
+        if matches!(request_preview.grounding_policy, GroundingPolicy::LocalOnly) {
+            push_readiness_blocker(
+                &mut blockers,
+                "needs_sources",
+                "local_only requires selected sources before a grounded draft can be prepared.",
+            );
+        }
+    }
+
+    if selected_source_count > 0 && retrieval_candidate_count == 0 {
+        push_readiness_action(
+            &mut next_required_actions,
+            "Build or refresh the retrieval index for the selected sources.",
+        );
+        if matches!(request_preview.grounding_policy, GroundingPolicy::LocalOnly) {
+            push_readiness_blocker(
+                &mut blockers,
+                "blocked",
+                "local_only requires local evidence before a grounded draft can be prepared.",
+            );
+        } else {
+            push_readiness_blocker(
+                &mut blockers,
+                "needs_retrieval_index",
+                "Retrieval data is not ready for the selected sources yet.",
+            );
+        }
+    }
+
+    if selected_source_count > 0 && evidence_candidate_count == 0 {
+        push_readiness_action(
+            &mut next_required_actions,
+            "Assemble local evidence candidates for the selected sources.",
+        );
+        if matches!(request_preview.grounding_policy, GroundingPolicy::LocalOnly) {
+            push_readiness_blocker(
+                &mut blockers,
+                "blocked",
+                "local_only requires local evidence before a grounded draft can be prepared.",
+            );
+        } else {
+            push_readiness_blocker(
+                &mut blockers,
+                "needs_evidence_candidates",
+                "No evidence candidates are available yet for the selected sources.",
+            );
+        }
+    }
+
+    if !runtime_ready {
+        push_readiness_action(
+            &mut next_required_actions,
+            "Configure a local runtime model and executable.",
+        );
+        push_readiness_blocker(
+            &mut blockers,
+            "needs_runtime_config",
+            "The local runtime configuration is not ready yet.",
+        );
+    }
+
+    if !request.allow_model_execution {
+        push_readiness_action(
+            &mut next_required_actions,
+            "Allow future model execution when you are ready to proceed.",
+        );
+        push_readiness_blocker(
+            &mut blockers,
+            "needs_execution_consent",
+            "Future model execution is not allowed yet.",
+        );
+    }
+
+    if prompt_pack_ready {
+        push_readiness_action(
+            &mut next_required_actions,
+            "The prompt pack can be assembled later from the current request preview.",
+        );
+    }
+
+    let status = readiness_status(
+        request_preview.grounding_policy.clone(),
+        selected_source_count,
+        retrieval_candidate_count,
+        evidence_candidate_count,
+        runtime_ready,
+        invocation_ready,
+        request.allow_model_execution,
+    );
+
+    if matches!(request_preview.grounding_policy, GroundingPolicy::AllowMarkedModelKnowledge)
+        && runtime_ready
+        && invocation_ready
+        && request.allow_model_execution
+    {
+        push_readiness_warning(
+            &mut warnings,
+            "future_draft_marking_required",
+            "A future ungrounded draft would need explicit model-knowledge marking later.",
+        );
+    }
+
+    Ok(ScholarChatAnswerReadinessPreview {
+        status: status.clone(),
+        normalized_prompt: request_preview.normalized_prompt,
+        mode: request_preview.mode,
+        grounding_policy: request_preview.grounding_policy,
+        selected_source_count,
+        retrieval_candidate_count,
+        evidence_candidate_count,
+        prompt_pack_ready,
+        runtime_health_status: runtime_health_preview.status,
+        invocation_plan_status: invocation_plan_preview.status,
+        allow_model_execution: request.allow_model_execution,
+        would_generate_answer_now: false,
+        would_build_evidence_pack_now: false,
+        would_create_final_answer_now: false,
+        future_output_classification: readiness_output_classification(status),
+        blockers,
+        warnings,
+        next_required_actions,
     })
 }
 
@@ -626,6 +881,103 @@ fn push_warning(warnings: &mut Vec<String>, message: &str) {
     }
 }
 
+fn push_readiness_warning(
+    warnings: &mut Vec<ScholarChatAnswerReadinessWarning>,
+    kind: &str,
+    message: &str,
+) {
+    if !warnings.iter().any(|warning| warning.kind == kind && warning.message == message) {
+        warnings.push(ScholarChatAnswerReadinessWarning {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        });
+    }
+}
+
+fn push_readiness_blocker(
+    blockers: &mut Vec<ScholarChatAnswerReadinessBlocker>,
+    kind: &str,
+    message: &str,
+) {
+    if !blockers.iter().any(|blocker| blocker.kind == kind && blocker.message == message) {
+        blockers.push(ScholarChatAnswerReadinessBlocker {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        });
+    }
+}
+
+fn push_readiness_action(actions: &mut Vec<String>, action: &str) {
+    if !actions.iter().any(|existing| existing == action) {
+        actions.push(action.to_string());
+    }
+}
+
+fn readiness_status(
+    policy: GroundingPolicy,
+    selected_source_count: usize,
+    retrieval_candidate_count: usize,
+    evidence_candidate_count: usize,
+    runtime_ready: bool,
+    invocation_ready: bool,
+    allow_model_execution: bool,
+) -> ScholarChatAnswerReadinessStatus {
+    if selected_source_count == 0 {
+        if matches!(policy, GroundingPolicy::AllowMarkedModelKnowledge) && runtime_ready && invocation_ready && allow_model_execution {
+            return ScholarChatAnswerReadinessStatus::ReadyForDraftInferenceLater;
+        }
+        return ScholarChatAnswerReadinessStatus::NeedsSources;
+    }
+    if retrieval_candidate_count == 0 {
+        return if matches!(policy, GroundingPolicy::LocalOnly) {
+            ScholarChatAnswerReadinessStatus::Blocked
+        } else {
+            ScholarChatAnswerReadinessStatus::NeedsRetrievalIndex
+        };
+    }
+    if evidence_candidate_count == 0 {
+        return if matches!(policy, GroundingPolicy::LocalOnly) {
+            ScholarChatAnswerReadinessStatus::Blocked
+        } else {
+            ScholarChatAnswerReadinessStatus::NeedsEvidenceCandidates
+        };
+    }
+    if !runtime_ready {
+        return ScholarChatAnswerReadinessStatus::NeedsRuntimeConfig;
+    }
+    if !allow_model_execution {
+        return ScholarChatAnswerReadinessStatus::NeedsExecutionConsent;
+    }
+    if matches!(policy, GroundingPolicy::AllowMarkedModelKnowledge) {
+        ScholarChatAnswerReadinessStatus::ReadyForDraftInferenceLater
+    } else {
+        ScholarChatAnswerReadinessStatus::ReadyForGroundedDraftLater
+    }
+}
+
+fn readiness_output_classification(
+    status: ScholarChatAnswerReadinessStatus,
+) -> ScholarChatAnswerReadinessOutputClassification {
+    match status {
+        ScholarChatAnswerReadinessStatus::Blocked
+        | ScholarChatAnswerReadinessStatus::NeedsSources
+        | ScholarChatAnswerReadinessStatus::NeedsRuntimeConfig
+        | ScholarChatAnswerReadinessStatus::NeedsExecutionConsent => {
+            ScholarChatAnswerReadinessOutputClassification::Blocked
+        }
+        ScholarChatAnswerReadinessStatus::NeedsRetrievalIndex
+        | ScholarChatAnswerReadinessStatus::NeedsEvidenceCandidates => {
+            ScholarChatAnswerReadinessOutputClassification::SourceContextDraft
+        }
+        ScholarChatAnswerReadinessStatus::ReadyForDraftInferenceLater => {
+            ScholarChatAnswerReadinessOutputClassification::UngroundedDraft
+        }
+        ScholarChatAnswerReadinessStatus::ReadyForGroundedDraftLater => {
+            ScholarChatAnswerReadinessOutputClassification::GroundedDraftCandidate
+        }
+    }
+}
+
 fn evidence_plan(
     mode: &ScholarChatMode,
     policy: &GroundingPolicy,
@@ -685,6 +1037,7 @@ fn validate_source_id(source_id: &str) -> AegisResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::local_runtime::LocalModelRuntimeKind;
     use std::fs;
 
     fn request(prompt: &str) -> ScholarChatRequest {
@@ -783,6 +1136,36 @@ mod tests {
         }
     }
 
+    fn runtime_config(model_path: Option<&str>, executable_path: Option<&str>) -> LocalModelRuntimeConfig {
+        LocalModelRuntimeConfig {
+            runtime_kind: LocalModelRuntimeKind::LlamaCpp,
+            model_path: model_path.map(|value| value.to_string()),
+            executable_path: executable_path.map(|value| value.to_string()),
+            context_window: Some(512),
+            gpu_layers: Some(0),
+            temperature: Some(0.0),
+        }
+    }
+
+    fn answer_readiness_request(
+        prompt: &str,
+        grounding_policy: GroundingPolicy,
+        selected_source_ids: Vec<String>,
+        runtime_config: LocalModelRuntimeConfig,
+        allow_model_execution: bool,
+    ) -> ScholarChatAnswerReadinessRequest {
+        ScholarChatAnswerReadinessRequest {
+            scholar_chat_request: ScholarChatRequest {
+                prompt: prompt.to_string(),
+                mode: ScholarChatMode::ThesisWriting,
+                grounding_policy,
+                selected_source_ids,
+            },
+            runtime_config,
+            allow_model_execution,
+        }
+    }
+
     fn build_source_with_index(temp: &tempfile::TempDir, text: &str) -> String {
         let source_path = temp.path().join("note.md");
         fs::write(&source_path, text).unwrap();
@@ -811,6 +1194,24 @@ mod tests {
             .build_index(&source.source_id)
             .unwrap();
         source.source_id
+    }
+
+    fn build_runtime_fixture(temp: &tempfile::TempDir) -> LocalModelRuntimeConfig {
+        let model_path = temp.path().join("ready-model.gguf");
+        let executable_path = temp.path().join("ready-smoke-helper.exe");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        fs::write(&executable_path, "runtime placeholder").unwrap();
+        runtime_config(
+            Some(model_path.to_string_lossy().as_ref()),
+            Some(executable_path.to_string_lossy().as_ref()),
+        )
+    }
+
+    fn assert_readiness_boundary_fields(preview: &ScholarChatAnswerReadinessPreview) {
+        assert!(!preview.would_generate_answer_now);
+        assert!(!preview.would_build_evidence_pack_now);
+        assert!(!preview.would_create_final_answer_now);
+        assert!(preview.prompt_pack_ready);
     }
 
     #[test]
@@ -1070,5 +1471,216 @@ mod tests {
         assert!(!debug.contains(temp_path.as_ref()));
         assert!(!json.contains(temp_path.as_ref()));
         assert!(!temp.path().join(".aegis").join("corpus").join("sources").join("missing").exists());
+    }
+
+    #[test]
+    fn scholar_chat_answer_readiness_rejects_empty_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_answer_readiness(
+            temp.path(),
+            answer_readiness_request(
+                "   ",
+                GroundingPolicy::LocalOnly,
+                vec![],
+                runtime_config(None, None),
+                false,
+            ),
+        );
+        assert!(matches!(result, Err(AegisError::ScholarChatPromptEmpty)));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_answer_readiness_rejects_invalid_source_ids_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["", " ", "..", "../evil", "evil/source", "evil\\source"] {
+            let result = preview_scholar_chat_answer_readiness(
+                temp.path(),
+                answer_readiness_request(
+                    "Explain alpha",
+                    GroundingPolicy::LocalOnly,
+                    vec![invalid.to_string()],
+                    runtime_config(None, None),
+                    false,
+                ),
+            );
+            assert!(matches!(result, Err(AegisError::ScholarChatInvalidSourceId)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
+    }
+
+    #[test]
+    fn scholar_chat_answer_readiness_requires_sources_for_local_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let runtime_config = build_runtime_fixture(&temp);
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let response = preview_scholar_chat_answer_readiness(
+            temp.path(),
+            answer_readiness_request(
+                "Explain alpha",
+                GroundingPolicy::LocalOnly,
+                vec![],
+                runtime_config,
+                true,
+            ),
+        )
+        .unwrap();
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(response.status, ScholarChatAnswerReadinessStatus::NeedsSources);
+        assert_eq!(response.future_output_classification, ScholarChatAnswerReadinessOutputClassification::Blocked);
+        assert_eq!(response.selected_source_count, 0);
+        assert!(response.blockers.iter().any(|blocker| blocker.kind == "needs_sources"));
+        assert!(response.next_required_actions.iter().any(|action| action.contains("Select one or more Scholar Chat sources")));
+        assert_eq!(before_entries, after_entries);
+        assert_readiness_boundary_fields(&response);
+        let debug = format!("{response:?}");
+        let json = serde_json::to_string(&response).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+    }
+
+    #[test]
+    fn scholar_chat_answer_readiness_blocks_local_only_without_retrieval_candidates() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("note.md");
+        fs::write(&source_path, "alpha beta\n").unwrap();
+        let authority = crate::corpus_authority::CorpusAuthority::new(temp.path());
+        let source = authority.register_source(&source_path, crate::source_metadata::SourceMetadataInput {
+            title: "Notes".to_string(),
+            source_type: crate::source_metadata::SourceType::MarkdownNote,
+            discipline: "psychology".to_string(),
+            subdiscipline: Some("statistics".to_string()),
+            language: "en".to_string(),
+            tags: vec!["study".to_string()],
+            reliability_notes: None,
+        }).unwrap();
+        crate::extraction::ExtractionService::new(temp.path()).extract_source(&source.source_id).unwrap();
+        crate::chunking::ChunkingService::new(temp.path()).chunk_source(&source.source_id).unwrap();
+        let runtime_config = build_runtime_fixture(&temp);
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let response = preview_scholar_chat_answer_readiness(
+            temp.path(),
+            answer_readiness_request(
+                "Explain alpha",
+                GroundingPolicy::LocalOnly,
+                vec![source.source_id.clone()],
+                runtime_config,
+                true,
+            ),
+        )
+        .unwrap();
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(response.status, ScholarChatAnswerReadinessStatus::Blocked);
+        assert_eq!(response.future_output_classification, ScholarChatAnswerReadinessOutputClassification::Blocked);
+        assert_eq!(response.selected_source_count, 1);
+        assert_eq!(response.retrieval_candidate_count, 0);
+        assert_eq!(response.evidence_candidate_count, 0);
+        assert!(response.blockers.iter().any(|blocker| blocker.kind == "blocked"));
+        assert!(response.next_required_actions.iter().any(|action| action.contains("retrieval index")));
+        assert_eq!(before_entries, after_entries);
+        assert_readiness_boundary_fields(&response);
+        let debug = format!("{response:?}");
+        let json = serde_json::to_string(&response).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+    }
+
+    #[test]
+    fn scholar_chat_answer_readiness_needs_runtime_config_when_local_runtime_is_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta\n\nalpha gamma\n");
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let response = preview_scholar_chat_answer_readiness(
+            temp.path(),
+            answer_readiness_request(
+                "Explain alpha",
+                GroundingPolicy::LocalFirst,
+                vec![source_id.clone()],
+                runtime_config(None, None),
+                true,
+            ),
+        )
+        .unwrap();
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(response.status, ScholarChatAnswerReadinessStatus::NeedsRuntimeConfig);
+        assert_eq!(response.runtime_health_status, LocalModelRuntimeHealthStatus::ConfigPresent);
+        assert!(response.blockers.iter().any(|blocker| blocker.kind == "needs_runtime_config"));
+        assert_eq!(before_entries, after_entries);
+        assert_readiness_boundary_fields(&response);
+        let debug = format!("{response:?}");
+        let json = serde_json::to_string(&response).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+    }
+
+    #[test]
+    fn scholar_chat_answer_readiness_requires_execution_consent_when_runtime_is_ready() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta\n\nalpha gamma\n");
+        let runtime_config = build_runtime_fixture(&temp);
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let response = preview_scholar_chat_answer_readiness(
+            temp.path(),
+            answer_readiness_request(
+                "Explain alpha",
+                GroundingPolicy::LocalFirst,
+                vec![source_id.clone()],
+                runtime_config,
+                false,
+            ),
+        )
+        .unwrap();
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(response.status, ScholarChatAnswerReadinessStatus::NeedsExecutionConsent);
+        assert_eq!(response.invocation_plan_status, LocalRuntimeInvocationPlanStatus::ReadyToInvokeLater);
+        assert!(response.blockers.iter().any(|blocker| blocker.kind == "needs_execution_consent"));
+        assert_eq!(before_entries, after_entries);
+        assert_readiness_boundary_fields(&response);
+        let debug = format!("{response:?}");
+        let json = serde_json::to_string(&response).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+    }
+
+    #[test]
+    fn scholar_chat_answer_readiness_can_be_ready_for_draft_inference_later() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta\n\nalpha gamma\n");
+        let runtime_config = build_runtime_fixture(&temp);
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let request = answer_readiness_request(
+            "  Explain alpha  ",
+            GroundingPolicy::AllowMarkedModelKnowledge,
+            vec![source_id.clone()],
+            runtime_config,
+            true,
+        );
+        let first = preview_scholar_chat_answer_readiness(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_answer_readiness(temp.path(), request).unwrap();
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(first, second);
+        assert_eq!(first.status, ScholarChatAnswerReadinessStatus::ReadyForDraftInferenceLater);
+        assert_eq!(first.future_output_classification, ScholarChatAnswerReadinessOutputClassification::UngroundedDraft);
+        assert_eq!(first.normalized_prompt, "Explain alpha");
+        assert_eq!(first.mode, ScholarChatMode::ThesisWriting);
+        assert_eq!(first.grounding_policy, GroundingPolicy::AllowMarkedModelKnowledge);
+        assert_eq!(first.selected_source_count, 1);
+        assert!(first.prompt_pack_ready);
+        assert!(first.would_generate_answer_now == false);
+        assert!(first.would_build_evidence_pack_now == false);
+        assert!(first.would_create_final_answer_now == false);
+        assert!(first.warnings.iter().any(|warning| warning.kind == "future_draft_marking_required"));
+        assert!(first.next_required_actions.iter().any(|action| action.contains("prompt pack")));
+        assert_eq!(before_entries, after_entries);
+        assert_readiness_boundary_fields(&first);
+        let debug = format!("{first:?}");
+        let json = serde_json::to_string(&first).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
     }
 }
