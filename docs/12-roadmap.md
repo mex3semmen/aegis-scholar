@@ -456,6 +456,26 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 43 — Developer-Facing Diagnostics and Onboarding Baseline
+
+Planning boundary only.
+
+Phase 43.0 is a docs-only developer-facing diagnostics and onboarding baseline.
+It adds concise navigation and verification pointers for the current architecture, current closed contract areas, and standard checks without changing production behavior or adding new workflows.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
