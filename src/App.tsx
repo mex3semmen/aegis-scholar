@@ -8,6 +8,26 @@ type CorpusStatus = {
   failed_count: number;
 };
 
+type RetrievalIndexEntry = {
+  chunk_id: string;
+  source_id: string;
+  version_id: string;
+  locator: CitationLocator;
+  text_hash: string;
+  normalized_terms: string[];
+};
+
+type RetrievalIndex = {
+  source_id: string;
+  version_id: string;
+  indexed_at: string;
+  chunk_count: number;
+  index_version: string;
+  chunk_report_hash: string;
+  entries: RetrievalIndexEntry[];
+  warnings: string[];
+};
+
 type CitationLocator = {
   label: string;
   section?: string | null;
@@ -354,6 +374,9 @@ export default function App() {
   const [artifactOverview, setArtifactOverview] = createSignal<AnswerArtifactOverview | null>(null);
   const [artifactOverviewError, setArtifactOverviewError] = createSignal<string | null>(null);
   const [artifactOverviewLoading, setArtifactOverviewLoading] = createSignal(false);
+  const [retrievalIndex, setRetrievalIndex] = createSignal<RetrievalIndex | null>(null);
+  const [retrievalIndexError, setRetrievalIndexError] = createSignal<string | null>(null);
+  const [retrievalIndexLoading, setRetrievalIndexLoading] = createSignal(false);
   const [artifactSources, setArtifactSources] = createSignal<AnswerArtifactSourceMetadata[]>([]);
   const [artifactSourcesError, setArtifactSourcesError] = createSignal<string | null>(null);
   const [artifactSourcesLoading, setArtifactSourcesLoading] = createSignal(false);
@@ -419,6 +442,31 @@ export default function App() {
 
   async function loadArtifactOverview() {
     await loadArtifactOverviewBySourceId(sourceId().trim());
+  }
+
+  async function loadRetrievalIndex() {
+    const trimmedSourceId = sourceId().trim();
+    if (!trimmedSourceId) {
+      setRetrievalIndexError("Source ID is required to load the retrieval index.");
+      return;
+    }
+    if (retrievalIndexLoading()) {
+      return;
+    }
+    setRetrievalIndexLoading(true);
+    setRetrievalIndexError(null);
+    try {
+      const result = await invoke<RetrievalIndex>("get_retrieval_index", {
+        root: ".",
+        source_id: trimmedSourceId,
+      });
+      setRetrievalIndex(result);
+    } catch (err) {
+      setRetrievalIndex(null);
+      setRetrievalIndexError(sanitizeBackendError(err));
+    } finally {
+      setRetrievalIndexLoading(false);
+    }
   }
 
   async function loadArtifactSources() {
@@ -668,6 +716,7 @@ export default function App() {
         </div>
         {finalAnswerError() && <p class="error">{finalAnswerError()}</p>}
         {artifactOverviewError() && <p class="error">{artifactOverviewError()}</p>}
+        {retrievalIndexError() && <p class="error">{retrievalIndexError()}</p>}
         {artifactSourcesError() && <p class="error">{artifactSourcesError()}</p>}
         {artifactHealthError() && <p class="error">{artifactHealthError()}</p>}
         {artifactIssuesError() && <p class="error">{artifactIssuesError()}</p>}
@@ -1125,6 +1174,42 @@ export default function App() {
           ) : artifactOverview() ? (
             <p>No final answers listed yet.</p>
           ) : null}
+        </div>
+        <div class="artifact-overview">
+          <h3>Retrieval index</h3>
+          <p class="muted">Read-only retrieval metadata for the source ID above.</p>
+          <div class="hero-actions">
+            <button onClick={loadRetrievalIndex} disabled={retrievalIndexLoading()}>
+              {retrievalIndexLoading() ? "Loading..." : "Load retrieval index"}
+            </button>
+          </div>
+          {retrievalIndex() ? (
+            <>
+              <div class="contract-meta">
+                <div><span>Source ID</span><strong>{retrievalIndex()!.source_id}</strong></div>
+                <div><span>Version ID</span><strong>{retrievalIndex()!.version_id}</strong></div>
+                <div><span>Indexed at</span><strong>{retrievalIndex()!.indexed_at}</strong></div>
+                <div><span>Chunk count</span><strong>{retrievalIndex()!.chunk_count}</strong></div>
+                <div><span>Index version</span><strong>{retrievalIndex()!.index_version}</strong></div>
+                <div><span>Chunk report hash</span><strong>{retrievalIndex()!.chunk_report_hash}</strong></div>
+                <div><span>Entries</span><strong>{retrievalIndex()!.entries.length}</strong></div>
+                <div><span>Warnings</span><strong>{retrievalIndex()!.warnings.length}</strong></div>
+              </div>
+              {retrievalIndex()!.warnings.length > 0 ? (
+                <ul class="final-answer-list-items">
+                  {retrievalIndex()!.warnings.map((warning) => (
+                    <li>
+                      <div class="final-answer-list-item">
+                        <span>{warning}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          ) : (
+            <p>No retrieval index loaded yet.</p>
+          )}
         </div>
         {finalAnswer() ? (
           <div class="contract-view">
