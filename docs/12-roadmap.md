@@ -476,6 +476,29 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 48 — Backend Command Inventory and Next Product Slice
+
+Planning boundary only.
+
+Phase 48.0 is a backend/frontend command inventory and next-slice selection note.
+The backend already exposes retrieval, evidence-pack, answer-draft, grounded-answer, final-answer, artifact overview, source index, health, issues, export manifest, and export bundle inspection commands; the frontend already surfaces the answer-artifact and export-bundle diagnostics, but not retrieval search results or retrieval index metadata.
+Recommended next product-facing slice: surface existing read-only retrieval search/index results in the UI.
+Rationale: it adds visible value from already-tested backend behavior without changing retrieval semantics or answer/export contracts.
+No production behavior changed in this pass.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
