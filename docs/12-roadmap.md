@@ -519,6 +519,27 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 50 — Read-Only Retrieval Search UI Surface
+
+Implementation boundary.
+
+Phase 50.0 adds a small read-only retrieval search surface in the UI using the already-exposed `search_source` command.
+It shows compact deterministic search results with loading, empty, and error states, and it does not change retrieval scoring or evidence semantics.
+No backend command exposure was needed in this pass.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
