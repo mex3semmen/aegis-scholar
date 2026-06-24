@@ -296,6 +296,66 @@ type ScholarChatDraftInferencePreview = {
   warnings: ScholarChatDraftInferenceWarning[];
 };
 
+type ScholarChatDraftGroundingInspectionStatus =
+  | "blocked"
+  | "no_draft_text"
+  | "no_evidence_candidates"
+  | "inspected";
+
+type ScholarChatDraftGroundingSupportStatus =
+  | "not_inspected"
+  | "unsupported"
+  | "weakly_supported"
+  | "supported_by_local_evidence";
+
+type ScholarChatDraftGroundingInspectionBlocker = {
+  kind: string;
+  message: string;
+};
+
+type ScholarChatDraftGroundingInspectionWarning = {
+  kind: string;
+  message: string;
+};
+
+type ScholarChatDraftGroundingInspectionRequest = {
+  scholar_chat_request: ScholarChatRequest;
+  draft_text: string | null;
+  max_items: number | null;
+};
+
+type ScholarChatDraftGroundingInspectionItem = {
+  item_index: number;
+  text_preview: string;
+  support_status: ScholarChatDraftGroundingSupportStatus;
+  matched_evidence_count: number;
+  source_ids: string[];
+  locator_previews: string[];
+};
+
+type ScholarChatDraftGroundingInspectionPreview = {
+  status: ScholarChatDraftGroundingInspectionStatus;
+  normalized_prompt: string;
+  draft_char_count: number;
+  selected_source_count: number;
+  evidence_candidate_count: number;
+  inspected_item_count: number;
+  unsupported_item_count: number;
+  weakly_supported_item_count: number;
+  supported_item_count: number;
+  items: ScholarChatDraftGroundingInspectionItem[];
+  inspection_only: boolean;
+  not_grounded_answer: boolean;
+  not_final_answer: boolean;
+  no_evidence_pack_built: boolean;
+  no_answer_artifact_created: boolean;
+  no_persistence: boolean;
+  no_llm_call: boolean;
+  no_runtime_execution: boolean;
+  blockers: ScholarChatDraftGroundingInspectionBlocker[];
+  warnings: ScholarChatDraftGroundingInspectionWarning[];
+};
+
 type LocalModelRuntimeKind = "llama_cpp" | "none";
 
 type LocalModelRuntimeHealthStatus =
@@ -827,6 +887,14 @@ function locatorSummary(locator: CitationLocator) {
   return [locator.label, section, paragraph, range].filter(Boolean).join(" | ");
 }
 
+function compactTextPreview(text: string, maxChars = 240) {
+  const compacted = text.split(/\s+/).filter(Boolean).join(" ").trim();
+  if (compacted.length <= maxChars) {
+    return compacted;
+  }
+  return `${compacted.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+}
+
 function renderMetricGrid(entries: { label: string; value: string | number }[]) {
   return (
     <div class="contract-meta">
@@ -878,6 +946,12 @@ export default function App() {
   const [scholarChatDraftInferenceValidationError, setScholarChatDraftInferenceValidationError] = createSignal<string | null>(null);
   const [scholarChatDraftInferenceLoading, setScholarChatDraftInferenceLoading] = createSignal(false);
   const [scholarChatDraftInferenceHasRun, setScholarChatDraftInferenceHasRun] = createSignal(false);
+  const [scholarChatDraftGroundingInspectionDraftText, setScholarChatDraftGroundingInspectionDraftText] = createSignal("");
+  const [scholarChatDraftGroundingInspectionPreview, setScholarChatDraftGroundingInspectionPreview] = createSignal<ScholarChatDraftGroundingInspectionPreview | null>(null);
+  const [scholarChatDraftGroundingInspectionError, setScholarChatDraftGroundingInspectionError] = createSignal<string | null>(null);
+  const [scholarChatDraftGroundingInspectionValidationError, setScholarChatDraftGroundingInspectionValidationError] = createSignal<string | null>(null);
+  const [scholarChatDraftGroundingInspectionLoading, setScholarChatDraftGroundingInspectionLoading] = createSignal(false);
+  const [scholarChatDraftGroundingInspectionHasRun, setScholarChatDraftGroundingInspectionHasRun] = createSignal(false);
   const [localRuntimeKind, setLocalRuntimeKind] = createSignal<LocalModelRuntimeKind>("none");
   const [localRuntimeModelPath, setLocalRuntimeModelPath] = createSignal("");
   const [localRuntimeExecutablePath, setLocalRuntimeExecutablePath] = createSignal("");
@@ -1446,6 +1520,14 @@ export default function App() {
     setScholarChatDraftInferenceError(null);
     setScholarChatDraftInferenceValidationError(null);
     setScholarChatDraftInferenceHasRun(false);
+    clearScholarChatDraftGroundingInspectionPreview();
+  }
+
+  function clearScholarChatDraftGroundingInspectionPreview() {
+    setScholarChatDraftGroundingInspectionPreview(null);
+    setScholarChatDraftGroundingInspectionError(null);
+    setScholarChatDraftGroundingInspectionValidationError(null);
+    setScholarChatDraftGroundingInspectionHasRun(false);
   }
 
   function normalizeOptionalTextInput(value: string) {
@@ -1586,6 +1668,7 @@ export default function App() {
     setFinalAnswerId("");
     setFinalAnswer(null);
     setFinalAnswerError(null);
+    clearScholarChatDraftInferencePreview();
     await loadArtifactOverviewBySourceId(source_id);
   }
 
@@ -1837,6 +1920,7 @@ export default function App() {
     setScholarChatDraftInferenceError(null);
     setScholarChatDraftInferenceValidationError(null);
     setScholarChatDraftInferencePreview(null);
+    clearScholarChatDraftGroundingInspectionPreview();
     try {
       const result = await invoke<ScholarChatDraftInferencePreview>("preview_scholar_chat_draft_inference", {
         root: ".",
@@ -1865,6 +1949,47 @@ export default function App() {
       setScholarChatDraftInferenceError(sanitizeBackendError(err));
     } finally {
       setScholarChatDraftInferenceLoading(false);
+    }
+  }
+
+  async function previewScholarChatDraftGroundingInspection() {
+    const trimmedPrompt = scholarChatPrompt().trim();
+    if (!trimmedPrompt) {
+      setScholarChatDraftGroundingInspectionPreview(null);
+      setScholarChatDraftGroundingInspectionError(null);
+      setScholarChatDraftGroundingInspectionValidationError("Prompt is required to preview draft grounding inspection.");
+      return;
+    }
+    if (scholarChatDraftGroundingInspectionLoading()) {
+      return;
+    }
+
+    const draftText = scholarChatDraftGroundingInspectionDraftText().trim();
+
+    setScholarChatDraftGroundingInspectionHasRun(true);
+    setScholarChatDraftGroundingInspectionLoading(true);
+    setScholarChatDraftGroundingInspectionError(null);
+    setScholarChatDraftGroundingInspectionValidationError(null);
+    setScholarChatDraftGroundingInspectionPreview(null);
+    try {
+      const result = await invoke<ScholarChatDraftGroundingInspectionPreview>("preview_scholar_chat_draft_grounding_inspection", {
+        root: ".",
+        request: {
+          scholar_chat_request: {
+            prompt: trimmedPrompt,
+            mode: scholarChatMode(),
+            grounding_policy: scholarChatGroundingPolicy(),
+            selected_source_ids: selectedScholarChatSourceIds(),
+          },
+          draft_text: draftText ? draftText : null,
+          max_items: 8,
+        } satisfies ScholarChatDraftGroundingInspectionRequest,
+      });
+      setScholarChatDraftGroundingInspectionPreview(result);
+    } catch (err) {
+      setScholarChatDraftGroundingInspectionError(sanitizeBackendError(err));
+    } finally {
+      setScholarChatDraftGroundingInspectionLoading(false);
     }
   }
 
@@ -2698,6 +2823,108 @@ export default function App() {
             )
           ) : (
             <p>No Scholar Chat draft inference preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Draft grounding inspection</h3>
+          <p class="muted">
+            Read-only diagnostic inspection of draft text against local evidence candidates only. It does not read runtime stdout/stderr, does not create a grounded answer, and does not persist anything.
+          </p>
+          <p class="muted">{scholarChatSelectedSourceIdsSummary()}</p>
+          <label>
+            Draft text preview
+            <textarea
+              rows={5}
+              value={scholarChatDraftGroundingInspectionDraftText()}
+              onInput={(event) => {
+                setScholarChatDraftGroundingInspectionDraftText(event.currentTarget.value);
+                clearScholarChatDraftGroundingInspectionPreview();
+              }}
+              placeholder="Paste generated_text_preview or draft text here."
+            />
+          </label>
+          <div class="hero-actions">
+            <button onClick={previewScholarChatDraftGroundingInspection} disabled={scholarChatDraftGroundingInspectionLoading()}>
+              {scholarChatDraftGroundingInspectionLoading() ? "Inspecting..." : "Inspect draft grounding"}
+            </button>
+          </div>
+          <p class="muted">Diagnostic only — no answer was generated. No grounded answer was created. No Evidence Pack was built. No final answer was created.</p>
+          {scholarChatDraftGroundingInspectionValidationError() && <p class="error">{scholarChatDraftGroundingInspectionValidationError()}</p>}
+          {scholarChatDraftGroundingInspectionError() && <p class="error">{scholarChatDraftGroundingInspectionError()}</p>}
+          {scholarChatDraftGroundingInspectionLoading() ? (
+            <p>Inspecting draft grounding...</p>
+          ) : scholarChatDraftGroundingInspectionHasRun() ? (
+            scholarChatDraftGroundingInspectionPreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(scholarChatDraftGroundingInspectionPreview()!.status) },
+                  { label: "Draft chars", value: scholarChatDraftGroundingInspectionPreview()!.draft_char_count },
+                  { label: "Selected sources", value: scholarChatDraftGroundingInspectionPreview()!.selected_source_count },
+                  { label: "Evidence candidates", value: scholarChatDraftGroundingInspectionPreview()!.evidence_candidate_count },
+                  { label: "Inspected items", value: scholarChatDraftGroundingInspectionPreview()!.inspected_item_count },
+                  { label: "Supported items", value: scholarChatDraftGroundingInspectionPreview()!.supported_item_count },
+                  { label: "Weakly supported items", value: scholarChatDraftGroundingInspectionPreview()!.weakly_supported_item_count },
+                  { label: "Unsupported items", value: scholarChatDraftGroundingInspectionPreview()!.unsupported_item_count },
+                ])}
+                {scholarChatDraftGroundingInspectionPreview()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {scholarChatDraftGroundingInspectionPreview()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No draft grounding blockers.</p>
+                )}
+                {scholarChatDraftGroundingInspectionPreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {scholarChatDraftGroundingInspectionPreview()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No draft grounding warnings.</p>
+                )}
+                {scholarChatDraftGroundingInspectionPreview()!.items.length > 0 ? (
+                  <ul class="final-answer-list-items">
+                    {scholarChatDraftGroundingInspectionPreview()!.items.map((item) => (
+                      <li>
+                        <div class="final-answer-list-item">
+                          <span>
+                            <strong>Item {item.item_index + 1}</strong> {compactTextPreview(item.text_preview, 140)}
+                          </span>
+                          <small>
+                            Status: {formatSnakeCaseLabel(item.support_status)} | matched={item.matched_evidence_count} | sources={item.source_ids.join(", ") || "none"}
+                          </small>
+                        </div>
+                        {item.locator_previews.length > 0 ? (
+                          <small>{item.locator_previews.join(" • ")}</small>
+                        ) : (
+                          <small>No locator previews.</small>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No draft items were inspected yet.</p>
+                )}
+              </>
+            ) : (
+              <p>No draft grounding inspection preview loaded yet.</p>
+            )
+          ) : (
+            <p>No draft grounding inspection preview loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">
