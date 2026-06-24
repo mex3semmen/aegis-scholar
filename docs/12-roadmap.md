@@ -861,6 +861,28 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 66 — Scholar Chat Source Context Selector
+
+Frontend-facing context selector slice.
+
+Phase 66.0 adds a compact Scholar Chat source context selector using the existing `list_sources` command.
+It lets the user choose one or more source IDs for Scholar Chat previews, keeps the UI read-only and deterministic, and falls back to the existing diagnostic source context only when no Scholar Chat selection has been made.
+This phase does not add source import, retrieval execution changes, Evidence Pack building, LLM calls, or answer generation.
+
+Do not implement:
+
+- local model runtime
+- LLM calls
+- retrieval execution changes
+- Evidence Pack generation/building
+- answer generation
+- web search
+- scholarly database integration
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
