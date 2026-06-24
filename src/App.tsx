@@ -10,6 +10,58 @@ type CorpusStatus = {
 
 const RETRIEVAL_SEARCH_DISPLAY_LIMIT = 10;
 
+type ScholarChatMode =
+  | "lecture_learning"
+  | "thesis_writing"
+  | "literature_review"
+  | "flashcards"
+  | "statistics_methods"
+  | "general_scholar";
+
+type GroundingPolicy =
+  | "local_only"
+  | "local_first"
+  | "allow_marked_model_knowledge"
+  | "external_adapters_later";
+
+const SCHOLAR_CHAT_MODES: { value: ScholarChatMode; label: string }[] = [
+  { value: "lecture_learning", label: "Lecture learning" },
+  { value: "thesis_writing", label: "Thesis writing" },
+  { value: "literature_review", label: "Literature review" },
+  { value: "flashcards", label: "Flashcards" },
+  { value: "statistics_methods", label: "Statistics / methods" },
+  { value: "general_scholar", label: "General scholar" },
+];
+
+const GROUNDING_POLICIES: { value: GroundingPolicy; label: string }[] = [
+  { value: "local_only", label: "Local only" },
+  { value: "local_first", label: "Local first" },
+  { value: "allow_marked_model_knowledge", label: "Allow marked model knowledge" },
+  { value: "external_adapters_later", label: "External adapters later" },
+];
+
+type ScholarChatGroundingPlan = {
+  selected_source_count: number;
+  local_corpus_required: boolean;
+  retrieval_would_run: boolean;
+  evidence_pack_would_be_required: boolean;
+  model_knowledge_allowed: boolean;
+  external_adapters_available: boolean;
+  summary: string;
+  steps: string[];
+};
+
+type ScholarChatResponse = {
+  status: "preview_only";
+  normalized_prompt: string;
+  mode: ScholarChatMode;
+  grounding_policy: GroundingPolicy;
+  selected_source_ids: string[];
+  selected_source_count: number;
+  grounding_plan: ScholarChatGroundingPlan;
+  warnings: string[];
+};
+
 type RetrievalIndexEntry = {
   chunk_id: string;
   source_id: string;
@@ -399,6 +451,13 @@ function renderMetricGrid(entries: { label: string; value: string | number }[]) 
 export default function App() {
   const [status, setStatus] = createSignal<CorpusStatus | null>(null);
   const [statusError, setStatusError] = createSignal<string | null>(null);
+  const [scholarChatPrompt, setScholarChatPrompt] = createSignal("");
+  const [scholarChatMode, setScholarChatMode] = createSignal<ScholarChatMode>("lecture_learning");
+  const [scholarChatGroundingPolicy, setScholarChatGroundingPolicy] = createSignal<GroundingPolicy>("local_first");
+  const [scholarChatPreview, setScholarChatPreview] = createSignal<ScholarChatResponse | null>(null);
+  const [scholarChatError, setScholarChatError] = createSignal<string | null>(null);
+  const [scholarChatValidationError, setScholarChatValidationError] = createSignal<string | null>(null);
+  const [scholarChatLoading, setScholarChatLoading] = createSignal(false);
   const [sourceId, setSourceId] = createSignal("");
   const [finalAnswerId, setFinalAnswerId] = createSignal("");
   const [finalAnswer, setFinalAnswer] = createSignal<FinalAnswer | null>(null);
@@ -781,6 +840,11 @@ export default function App() {
     return answerSourceId || "";
   }
 
+  function selectedScholarChatSourceIds() {
+    const selectedSourceId = selectedEvidencePackSourceId();
+    return selectedSourceId ? [selectedSourceId] : [];
+  }
+
   function selectedFinalAnswerDetail() {
     const selectedSourceId = selectedAnswerArtifactSourceId();
     const selectedFinalAnswerId = finalAnswerId().trim();
@@ -881,6 +945,39 @@ export default function App() {
     await loadFinalAnswerByIds(sourceId().trim(), finalAnswerMetadata.final_answer_id);
   }
 
+  async function previewScholarChatRequest() {
+    const trimmedPrompt = scholarChatPrompt().trim();
+    if (!trimmedPrompt) {
+      setScholarChatPreview(null);
+      setScholarChatError(null);
+      setScholarChatValidationError("Prompt is required to preview a Scholar Chat request.");
+      return;
+    }
+    if (scholarChatLoading()) {
+      return;
+    }
+    setScholarChatLoading(true);
+    setScholarChatError(null);
+    setScholarChatValidationError(null);
+    setScholarChatPreview(null);
+    try {
+      const result = await invoke<ScholarChatResponse>("preview_scholar_chat_request", {
+        root: ".",
+        request: {
+          prompt: trimmedPrompt,
+          mode: scholarChatMode(),
+          grounding_policy: scholarChatGroundingPolicy(),
+          selected_source_ids: selectedScholarChatSourceIds(),
+        },
+      });
+      setScholarChatPreview(result);
+    } catch (err) {
+      setScholarChatError(sanitizeBackendError(err));
+    } finally {
+      setScholarChatLoading(false);
+    }
+  }
+
   return (
     <main class="app-shell">
       <section class="hero">
@@ -903,6 +1000,98 @@ export default function App() {
           <p>No status loaded yet.</p>
         )}
         {statusError() && <p class="error">{statusError()}</p>}
+      </section>
+
+      <section class="card">
+        <h2>Scholar Chat</h2>
+        <p class="muted">
+          Preview-only request shell for the future local-first Scholar Chat workflow. No retrieval, Evidence Pack build, model call, or answer generation runs here.
+        </p>
+        <div class="form-row">
+          <label>
+            Mode
+            <select
+              value={scholarChatMode()}
+              onChange={(event) => setScholarChatMode(event.currentTarget.value as ScholarChatMode)}
+            >
+              {SCHOLAR_CHAT_MODES.map((item) => (
+                <option value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Grounding policy
+            <select
+              value={scholarChatGroundingPolicy()}
+              onChange={(event) => setScholarChatGroundingPolicy(event.currentTarget.value as GroundingPolicy)}
+            >
+              {GROUNDING_POLICIES.map((item) => (
+                <option value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label>
+          Prompt
+          <textarea
+            rows={4}
+            value={scholarChatPrompt()}
+            onInput={(event) => {
+              setScholarChatPrompt(event.currentTarget.value);
+              setScholarChatValidationError(null);
+            }}
+            placeholder="Ask about a lecture, paper, method, or thesis task..."
+          />
+        </label>
+        {selectedScholarChatSourceIds().length > 0 ? (
+          <p class="muted">Selected source context: {selectedScholarChatSourceIds().join(", ")}</p>
+        ) : (
+          <p class="muted">No source selected yet; preview will be unscoped.</p>
+        )}
+        {scholarChatValidationError() && <p class="error">{scholarChatValidationError()}</p>}
+        {scholarChatError() && <p class="error">{scholarChatError()}</p>}
+        <div class="hero-actions">
+          <button onClick={previewScholarChatRequest} disabled={scholarChatLoading()}>
+            {scholarChatLoading() ? "Previewing..." : "Preview grounding plan"}
+          </button>
+        </div>
+        {scholarChatPreview() ? (
+          <div class="artifact-overview">
+            <h3>Preview result</h3>
+            {renderMetricGrid([
+              { label: "Status", value: scholarChatPreview()!.status },
+              { label: "Mode", value: scholarChatPreview()!.mode },
+              { label: "Grounding policy", value: scholarChatPreview()!.grounding_policy },
+              { label: "Selected sources", value: scholarChatPreview()!.selected_source_count },
+            ])}
+            <p><strong>Prompt:</strong> {scholarChatPreview()!.normalized_prompt}</p>
+            <p>{scholarChatPreview()!.grounding_plan.summary}</p>
+            <div class="contract-meta">
+              <div><span>Retrieval would run</span><strong>{scholarChatPreview()!.grounding_plan.retrieval_would_run ? "yes" : "no"}</strong></div>
+              <div><span>Evidence Pack required</span><strong>{scholarChatPreview()!.grounding_plan.evidence_pack_would_be_required ? "yes" : "no"}</strong></div>
+              <div><span>Model knowledge allowed</span><strong>{scholarChatPreview()!.grounding_plan.model_knowledge_allowed ? "yes" : "no"}</strong></div>
+              <div><span>External adapters</span><strong>{scholarChatPreview()!.grounding_plan.external_adapters_available ? "available" : "not available"}</strong></div>
+            </div>
+            <h4>Plan steps</h4>
+            <ul>
+              {scholarChatPreview()!.grounding_plan.steps.map((step) => (
+                <li>{step}</li>
+              ))}
+            </ul>
+            {scholarChatPreview()!.warnings.length > 0 ? (
+              <div class="warning-box">
+                <h4>Warnings</h4>
+                <ul>
+                  {scholarChatPreview()!.warnings.map((warning) => (
+                    <li>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <p>No Scholar Chat preview loaded yet.</p>
+        )}
       </section>
 
       <section class="card">
