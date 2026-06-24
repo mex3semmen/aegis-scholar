@@ -601,6 +601,26 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 54 — Answer Artifact Source Index UI Surface
+
+Frontend-only diagnostic surface.
+
+Phase 54.0 adds a compact read-only answer artifact source index card using the already-exposed `list_answer_artifact_sources` command.
+It shows deterministic per-source counts and simple aggregates, keeps the UI path-free, and does not change backend answer-artifact semantics.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
