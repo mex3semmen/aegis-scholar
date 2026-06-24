@@ -32,6 +32,13 @@ type GroundingPolicy =
   | "allow_marked_model_knowledge"
   | "external_adapters_later";
 
+type ScholarChatRequest = {
+  prompt: string;
+  mode: ScholarChatMode;
+  grounding_policy: GroundingPolicy;
+  selected_source_ids: string[];
+};
+
 const SCHOLAR_CHAT_MODES: { value: ScholarChatMode; label: string }[] = [
   { value: "lecture_learning", label: "Lecture learning" },
   { value: "thesis_writing", label: "Thesis writing" },
@@ -170,6 +177,59 @@ type ScholarChatPromptPackPreviewResponse = {
   warnings: string[];
 };
 
+type ScholarChatAnswerReadinessStatus =
+  | "blocked"
+  | "needs_sources"
+  | "needs_retrieval_index"
+  | "needs_evidence_candidates"
+  | "needs_runtime_config"
+  | "needs_execution_consent"
+  | "ready_for_draft_inference_later"
+  | "ready_for_grounded_draft_later";
+
+type ScholarChatAnswerReadinessOutputClassification =
+  | "blocked"
+  | "ungrounded_draft"
+  | "source_context_draft"
+  | "grounded_draft_candidate";
+
+type ScholarChatAnswerReadinessBlocker = {
+  kind: string;
+  message: string;
+};
+
+type ScholarChatAnswerReadinessWarning = {
+  kind: string;
+  message: string;
+};
+
+type ScholarChatAnswerReadinessRequest = {
+  scholar_chat_request: ScholarChatRequest;
+  runtime_config: LocalModelRuntimeConfig;
+  allow_model_execution: boolean;
+};
+
+type ScholarChatAnswerReadinessPreview = {
+  status: ScholarChatAnswerReadinessStatus;
+  normalized_prompt: string;
+  mode: ScholarChatMode;
+  grounding_policy: GroundingPolicy;
+  selected_source_count: number;
+  retrieval_candidate_count: number;
+  evidence_candidate_count: number;
+  prompt_pack_ready: boolean;
+  runtime_health_status: LocalModelRuntimeHealthStatus;
+  invocation_plan_status: LocalRuntimeInvocationPlanStatus;
+  allow_model_execution: boolean;
+  would_generate_answer_now: boolean;
+  would_build_evidence_pack_now: boolean;
+  would_create_final_answer_now: boolean;
+  future_output_classification: ScholarChatAnswerReadinessOutputClassification;
+  blockers: ScholarChatAnswerReadinessBlocker[];
+  warnings: ScholarChatAnswerReadinessWarning[];
+  next_required_actions: string[];
+};
+
 type LocalModelRuntimeKind = "llama_cpp" | "none";
 
 type LocalModelRuntimeHealthStatus =
@@ -280,6 +340,8 @@ type LocalRuntimeSmokeInferenceWarning = {
   message: string;
 };
 
+type LocalRuntimeSmokeInferenceOutputClassification = "runtime_diagnostic";
+
 type LocalRuntimeSmokeInferenceBlocker = {
   kind: string;
   message: string;
@@ -310,8 +372,12 @@ type LocalRuntimeSmokeInferenceResult = {
   duration_ms: number;
   warnings: LocalRuntimeSmokeInferenceWarning[];
   blockers: LocalRuntimeSmokeInferenceBlocker[];
+  diagnostic_only: boolean;
   no_answer_generated: boolean;
+  no_grounding_applied: boolean;
+  no_evidence_pack_used: boolean;
   not_scholar_chat_answer: boolean;
+  output_classification: LocalRuntimeSmokeInferenceOutputClassification;
 };
 
 type LocalRuntimeInvocationPlanRequest = {
@@ -735,6 +801,12 @@ export default function App() {
   const [scholarChatPromptPackError, setScholarChatPromptPackError] = createSignal<string | null>(null);
   const [scholarChatPromptPackLoading, setScholarChatPromptPackLoading] = createSignal(false);
   const [scholarChatPromptPackHasRun, setScholarChatPromptPackHasRun] = createSignal(false);
+  const [scholarChatAnswerReadinessAllowModelExecution, setScholarChatAnswerReadinessAllowModelExecution] = createSignal(false);
+  const [scholarChatAnswerReadinessPreview, setScholarChatAnswerReadinessPreview] = createSignal<ScholarChatAnswerReadinessPreview | null>(null);
+  const [scholarChatAnswerReadinessError, setScholarChatAnswerReadinessError] = createSignal<string | null>(null);
+  const [scholarChatAnswerReadinessValidationError, setScholarChatAnswerReadinessValidationError] = createSignal<string | null>(null);
+  const [scholarChatAnswerReadinessLoading, setScholarChatAnswerReadinessLoading] = createSignal(false);
+  const [scholarChatAnswerReadinessHasRun, setScholarChatAnswerReadinessHasRun] = createSignal(false);
   const [localRuntimeKind, setLocalRuntimeKind] = createSignal<LocalModelRuntimeKind>("none");
   const [localRuntimeModelPath, setLocalRuntimeModelPath] = createSignal("");
   const [localRuntimeExecutablePath, setLocalRuntimeExecutablePath] = createSignal("");
@@ -1239,6 +1311,7 @@ export default function App() {
     setScholarChatPromptPackPreview(null);
     setScholarChatPromptPackError(null);
     setScholarChatPromptPackHasRun(false);
+    clearScholarChatAnswerReadinessPreview();
     clearLocalRuntimeInvocationPreview();
   }
 
@@ -1246,6 +1319,7 @@ export default function App() {
     setScholarChatPromptPackPreview(null);
     setScholarChatPromptPackError(null);
     setScholarChatPromptPackHasRun(false);
+    clearScholarChatAnswerReadinessPreview();
     clearLocalRuntimeInvocationPreview();
   }
 
@@ -1254,6 +1328,7 @@ export default function App() {
     setLocalRuntimeError(null);
     setLocalRuntimeValidationError(null);
     setLocalRuntimeHasRun(false);
+    clearScholarChatAnswerReadinessPreview();
   }
 
   function clearLocalRuntimeInvocationPreview() {
@@ -1275,6 +1350,13 @@ export default function App() {
     setLocalRuntimeSmokeError(null);
     setLocalRuntimeSmokeValidationError(null);
     setLocalRuntimeSmokeHasRun(false);
+  }
+
+  function clearScholarChatAnswerReadinessPreview() {
+    setScholarChatAnswerReadinessPreview(null);
+    setScholarChatAnswerReadinessError(null);
+    setScholarChatAnswerReadinessValidationError(null);
+    setScholarChatAnswerReadinessHasRun(false);
   }
 
   function normalizeOptionalTextInput(value: string) {
@@ -1578,6 +1660,59 @@ export default function App() {
       setScholarChatPromptPackError(sanitizeBackendError(err));
     } finally {
       setScholarChatPromptPackLoading(false);
+    }
+  }
+
+  async function previewScholarChatAnswerReadiness() {
+    const trimmedPrompt = scholarChatPrompt().trim();
+    if (!trimmedPrompt) {
+      setScholarChatAnswerReadinessPreview(null);
+      setScholarChatAnswerReadinessError(null);
+      setScholarChatAnswerReadinessValidationError("Prompt is required to preview answer readiness.");
+      return;
+    }
+    if (scholarChatAnswerReadinessLoading()) {
+      return;
+    }
+    const contextWindow = parseOptionalIntegerInput(localRuntimeContextWindow(), "Context window");
+    const gpuLayers = parseOptionalIntegerInput(localRuntimeGpuLayers(), "GPU layers");
+    const temperature = parseOptionalNumberInput(localRuntimeTemperature(), "Temperature");
+    if (contextWindow === undefined || gpuLayers === undefined || temperature === undefined) {
+      setScholarChatAnswerReadinessPreview(null);
+      setScholarChatAnswerReadinessValidationError("Local runtime inputs must be valid before previewing answer readiness.");
+      return;
+    }
+    setScholarChatAnswerReadinessHasRun(true);
+    setScholarChatAnswerReadinessLoading(true);
+    setScholarChatAnswerReadinessError(null);
+    setScholarChatAnswerReadinessValidationError(null);
+    setScholarChatAnswerReadinessPreview(null);
+    try {
+      const result = await invoke<ScholarChatAnswerReadinessPreview>("preview_scholar_chat_answer_readiness", {
+        root: ".",
+        request: {
+          scholar_chat_request: {
+            prompt: trimmedPrompt,
+            mode: scholarChatMode(),
+            grounding_policy: scholarChatGroundingPolicy(),
+            selected_source_ids: selectedScholarChatSourceIds(),
+          },
+          runtime_config: {
+            runtime_kind: localRuntimeKind(),
+            model_path: normalizeOptionalTextInput(localRuntimeModelPath()),
+            executable_path: normalizeOptionalTextInput(localRuntimeExecutablePath()),
+            context_window: contextWindow,
+            gpu_layers: gpuLayers,
+            temperature: temperature,
+          },
+          allow_model_execution: scholarChatAnswerReadinessAllowModelExecution(),
+        } satisfies ScholarChatAnswerReadinessRequest,
+      });
+      setScholarChatAnswerReadinessPreview(result);
+    } catch (err) {
+      setScholarChatAnswerReadinessError(sanitizeBackendError(err));
+    } finally {
+      setScholarChatAnswerReadinessLoading(false);
     }
   }
 
@@ -2208,6 +2343,105 @@ export default function App() {
           )}
         </div>
         <div class="artifact-overview">
+          <h3>Answer readiness</h3>
+          <p class="muted">
+            Read-only readiness gate for the future Scholar Chat draft path. It uses the current request preview, source context, and local runtime configuration, but it never generates an answer or runs the model.
+          </p>
+          <div class="form-row">
+            <label class="inline-field">
+              Allow future model execution
+              <input
+                type="checkbox"
+                checked={scholarChatAnswerReadinessAllowModelExecution()}
+                onChange={(event) => {
+                  setScholarChatAnswerReadinessAllowModelExecution(event.currentTarget.checked);
+                  clearScholarChatAnswerReadinessPreview();
+                }}
+              />
+            </label>
+          </div>
+          <p class="muted">{scholarChatSelectedSourceIdsSummary()}</p>
+          <div class="hero-actions">
+            <button onClick={previewScholarChatAnswerReadiness} disabled={scholarChatAnswerReadinessLoading()}>
+              {scholarChatAnswerReadinessLoading() ? "Previewing..." : "Preview answer readiness"}
+            </button>
+          </div>
+          <p class="muted">No answer was generated. No model was executed. No Evidence Pack or final answer was created.</p>
+          {scholarChatAnswerReadinessValidationError() && <p class="error">{scholarChatAnswerReadinessValidationError()}</p>}
+          {scholarChatAnswerReadinessError() && <p class="error">{scholarChatAnswerReadinessError()}</p>}
+          {scholarChatAnswerReadinessLoading() ? (
+            <p>Previewing answer readiness...</p>
+          ) : scholarChatAnswerReadinessHasRun() ? (
+            scholarChatAnswerReadinessPreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(scholarChatAnswerReadinessPreview()!.status) },
+                  { label: "Future output classification", value: formatSnakeCaseLabel(scholarChatAnswerReadinessPreview()!.future_output_classification) },
+                  { label: "Mode", value: formatSnakeCaseLabel(scholarChatAnswerReadinessPreview()!.mode) },
+                  { label: "Grounding policy", value: formatSnakeCaseLabel(scholarChatAnswerReadinessPreview()!.grounding_policy) },
+                  { label: "Selected sources", value: scholarChatAnswerReadinessPreview()!.selected_source_count },
+                  { label: "Retrieval candidates", value: scholarChatAnswerReadinessPreview()!.retrieval_candidate_count },
+                  { label: "Evidence candidates", value: scholarChatAnswerReadinessPreview()!.evidence_candidate_count },
+                  { label: "Prompt pack ready", value: scholarChatAnswerReadinessPreview()!.prompt_pack_ready ? "yes" : "no" },
+                  { label: "Runtime health", value: formatSnakeCaseLabel(scholarChatAnswerReadinessPreview()!.runtime_health_status) },
+                  { label: "Invocation plan", value: formatSnakeCaseLabel(scholarChatAnswerReadinessPreview()!.invocation_plan_status) },
+                  { label: "Allow future model execution", value: scholarChatAnswerReadinessPreview()!.allow_model_execution ? "yes" : "no" },
+                  { label: "Would generate answer now", value: scholarChatAnswerReadinessPreview()!.would_generate_answer_now ? "yes" : "no" },
+                  { label: "Would build Evidence Pack now", value: scholarChatAnswerReadinessPreview()!.would_build_evidence_pack_now ? "yes" : "no" },
+                  { label: "Would create final answer now", value: scholarChatAnswerReadinessPreview()!.would_create_final_answer_now ? "yes" : "no" },
+                ])}
+                <p><strong>Prompt:</strong> {scholarChatAnswerReadinessPreview()!.normalized_prompt}</p>
+                {scholarChatAnswerReadinessPreview()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {scholarChatAnswerReadinessPreview()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No readiness blockers.</p>
+                )}
+                {scholarChatAnswerReadinessPreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {scholarChatAnswerReadinessPreview()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No readiness warnings.</p>
+                )}
+                {scholarChatAnswerReadinessPreview()!.next_required_actions.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Next required actions</h4>
+                    <ul>
+                      {scholarChatAnswerReadinessPreview()!.next_required_actions.map((action) => (
+                        <li>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No next required actions.</p>
+                )}
+              </>
+            ) : (
+              <p>No answer readiness preview loaded yet.</p>
+            )
+          ) : (
+            <p>No answer readiness preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
           <h3>Local model runtime</h3>
           <p class="muted">
             Read-only local model runtime readiness preview. It only checks configured paths and preview settings; no model is executed, no answer is generated, and nothing is persisted.
@@ -2630,7 +2864,7 @@ export default function App() {
               />
             </label>
           </div>
-          <p class="muted">No Scholar Chat answer is generated and no smoke result is persisted.</p>
+          <p class="muted">Runtime diagnostic only — not a Scholar Chat answer.</p>
           <div class="hero-actions">
             <button onClick={previewLocalRuntimeSmokeInference} disabled={localRuntimeSmokeLoading()}>
               {localRuntimeSmokeLoading() ? "Previewing..." : "Run smoke inference probe"}
@@ -2645,6 +2879,7 @@ export default function App() {
               <>
                 {renderMetricGrid([
                   { label: "Status", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.status) },
+                  { label: "Output classification", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.output_classification) },
                   { label: "Allow execution", value: localRuntimeSmokeResult()!.allow_execution ? "yes" : "no" },
                   { label: "Execution attempted", value: localRuntimeSmokeResult()!.execution_attempted ? "yes" : "no" },
                   { label: "Runtime kind", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.runtime_kind) },
@@ -2653,9 +2888,13 @@ export default function App() {
                   { label: "Timeout ms", value: localRuntimeSmokeResult()!.timeout_ms },
                   { label: "Duration ms", value: localRuntimeSmokeResult()!.duration_ms },
                   { label: "Exit code", value: localRuntimeSmokeResult()!.exit_code ?? "missing" },
+                  { label: "Diagnostic only", value: localRuntimeSmokeResult()!.diagnostic_only ? "yes" : "no" },
                   { label: "No answer generated", value: localRuntimeSmokeResult()!.no_answer_generated ? "yes" : "no" },
+                  { label: "No grounding applied", value: localRuntimeSmokeResult()!.no_grounding_applied ? "yes" : "no" },
+                  { label: "No Evidence Pack used", value: localRuntimeSmokeResult()!.no_evidence_pack_used ? "yes" : "no" },
                   { label: "Not Scholar Chat answer", value: localRuntimeSmokeResult()!.not_scholar_chat_answer ? "yes" : "no" },
                 ])}
+                <p class="muted">This preview shows runtime diagnostics only; no grounded answer, Evidence Pack, or final answer is produced.</p>
                 {localRuntimeSmokeResult()!.safe_model_file_name ? (
                   <p><strong>Model file name:</strong> {localRuntimeSmokeResult()!.safe_model_file_name}</p>
                 ) : null}
