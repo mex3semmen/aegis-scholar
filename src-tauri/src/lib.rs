@@ -18,7 +18,7 @@ use chunking::{ChunkingReport, ChunkingService};
 use extraction::{ExtractionReport, ExtractionService};
 use errors::to_user_error;
 use answer_draft::{AnswerDraft, AnswerDraftService};
-use evidence::{EvidencePack, EvidenceService};
+use evidence::{EvidencePack, EvidencePackMetadata, EvidenceService};
 use final_answer::{build_final_answer as build_final_answer_impl, export_answer_artifacts as export_answer_artifacts_impl, get_answer_artifact_export_manifest as get_answer_artifact_export_manifest_impl, get_answer_artifact_health as get_answer_artifact_health_impl, inspect_answer_artifact_export_bundle as inspect_answer_artifact_export_bundle_impl, list_answer_artifact_issues as list_answer_artifact_issues_impl, get_answer_artifact_overview as get_answer_artifact_overview_impl, list_answer_artifact_sources as list_answer_artifact_sources_impl, list_final_answers as list_final_answers_impl, read_final_answer as read_final_answer_impl, AnswerArtifactExportBundleInspection, AnswerArtifactExportManifest, AnswerArtifactExportResult, AnswerArtifactHealth, AnswerArtifactIssue, AnswerArtifactOverview, AnswerArtifactSourceMetadata, FinalAnswer, FinalAnswerMetadata};
 use grounded_answer::{build_grounded_answer as build_grounded_answer_impl, read_grounded_answer as read_grounded_answer_impl, GroundedAnswer};
 use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
@@ -138,6 +138,13 @@ fn get_evidence_pack(root: String, source_id: String, evidence_pack_id: String) 
 }
 
 #[tauri::command]
+fn list_evidence_packs(root: String, source_id: String) -> Result<Vec<EvidencePackMetadata>, String> {
+    EvidenceService::new(root)
+        .list_evidence_packs(&source_id)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
 fn build_answer_draft(root: String, source_id: String, evidence_pack_id: String) -> Result<AnswerDraft, String> {
     AnswerDraftService::new(root)
         .build_answer_draft(&source_id, &evidence_pack_id)
@@ -241,6 +248,7 @@ pub fn run() {
             search_source,
             build_evidence_pack,
             get_evidence_pack,
+            list_evidence_packs,
             build_answer_draft,
             get_answer_draft,
             build_grounded_answer,
