@@ -23,7 +23,13 @@ use evidence::{EvidencePack, EvidencePackMetadata, EvidenceService};
 use final_answer::{build_final_answer as build_final_answer_impl, export_answer_artifacts as export_answer_artifacts_impl, get_answer_artifact_export_manifest as get_answer_artifact_export_manifest_impl, get_answer_artifact_health as get_answer_artifact_health_impl, inspect_answer_artifact_export_bundle as inspect_answer_artifact_export_bundle_impl, list_answer_artifact_issues as list_answer_artifact_issues_impl, get_answer_artifact_overview as get_answer_artifact_overview_impl, list_answer_artifact_sources as list_answer_artifact_sources_impl, list_final_answers as list_final_answers_impl, read_final_answer as read_final_answer_impl, AnswerArtifactExportBundleInspection, AnswerArtifactExportManifest, AnswerArtifactExportResult, AnswerArtifactHealth, AnswerArtifactIssue, AnswerArtifactOverview, AnswerArtifactSourceMetadata, FinalAnswer, FinalAnswerMetadata};
 use grounded_answer::{build_grounded_answer as build_grounded_answer_impl, read_grounded_answer as read_grounded_answer_impl, GroundedAnswer};
 use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
-use scholar_chat::{preview_scholar_chat_request as preview_scholar_chat_request_impl, ScholarChatRequest, ScholarChatResponse};
+use scholar_chat::{
+    preview_scholar_chat_request as preview_scholar_chat_request_impl,
+    preview_scholar_chat_retrieval as preview_scholar_chat_retrieval_impl,
+    ScholarChatRequest,
+    ScholarChatResponse,
+    ScholarChatRetrievalPreviewResponse,
+};
 use source_metadata::{CorpusStatus, SourceMetadataInput, SourceMetadataPatch, SourceRecord};
 
 #[tauri::command]
@@ -238,6 +244,12 @@ fn preview_scholar_chat_request(root: String, request: ScholarChatRequest) -> Re
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn preview_scholar_chat_retrieval(root: String, request: ScholarChatRequest) -> Result<ScholarChatRetrievalPreviewResponse, String> {
+    preview_scholar_chat_retrieval_impl(root, request)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -271,7 +283,8 @@ pub fn run() {
             get_answer_artifact_export_manifest,
             inspect_answer_artifact_export_bundle,
             export_answer_artifacts,
-            preview_scholar_chat_request
+            preview_scholar_chat_request,
+            preview_scholar_chat_retrieval
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");

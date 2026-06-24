@@ -840,6 +840,27 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 65 — Scholar Chat Retrieval Preview
+
+Product-facing preview slice.
+
+Phase 65.0 adds a compact Scholar Chat retrieval preview card using the existing read-only `preview_scholar_chat_retrieval` command.
+It searches selected source context in preview-only mode, shows compact candidate metadata and warnings, and does not build retrieval indexes, build Evidence Packs, call an LLM, or generate answers.
+
+Do not implement:
+
+- local model runtime
+- LLM calls
+- answer generation
+- Evidence Pack generation
+- retrieval index building
+- web search
+- scholarly database integration
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
