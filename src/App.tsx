@@ -783,7 +783,7 @@ export default function App() {
             {artifactSourcesLoading() ? "Loading..." : "Load source index"}
           </button>
           <button onClick={loadArtifactHealth} disabled={artifactHealthLoading()}>
-            {artifactHealthLoading() ? "Loading..." : "Load artifact health"}
+            {artifactHealthLoading() ? "Loading..." : "Load answer artifacts"}
           </button>
           <button onClick={loadArtifactIssues} disabled={artifactIssuesLoading()}>
             {artifactIssuesLoading() ? "Loading..." : "Load artifact issues"}
@@ -833,7 +833,8 @@ export default function App() {
           )}
         </div>
         <div class="artifact-overview">
-          <h3>Artifact health</h3>
+          <h3>Answer artifacts</h3>
+          <p class="muted">Read-only health and overview counts for existing answer artifacts.</p>
           {artifactHealth() ? (
             <>
               <div class="contract-meta">
@@ -859,11 +860,11 @@ export default function App() {
                   ))}
                 </ul>
               ) : (
-                <p>No artifact health entries yet.</p>
+                <p>No answer artifact health entries yet.</p>
               )}
             </>
           ) : (
-            <p>No artifact health loaded yet.</p>
+            <p>No answer artifacts loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">

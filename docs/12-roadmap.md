@@ -580,6 +580,27 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 53 — Answer Artifact Health UI Surface
+
+Frontend-only diagnostic surface.
+
+Phase 53.0 adds a compact read-only answer artifact health card using the already-exposed `get_answer_artifact_health` command.
+It shows deterministic summary counts and keeps the UI path-free.
+No backend answer-artifact semantics changed.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
