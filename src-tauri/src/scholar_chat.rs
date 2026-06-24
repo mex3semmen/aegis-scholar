@@ -3144,13 +3144,13 @@ fn main() {
             temp.path(),
             ScholarChatDraftGroundingInspectionRequest {
                 scholar_chat_request: ScholarChatRequest {
-                    prompt: "alpha beta grounded evidence".to_string(),
+                    prompt: "alpha grounded evidence".to_string(),
                     mode: ScholarChatMode::LectureLearning,
                     grounding_policy: GroundingPolicy::LocalFirst,
                     selected_source_ids: vec![source_id],
                 },
                 draft_text: Some(
-                    "Alpha beta support. Gamma delta explain. Alpha beta gamma evidence. Delta alpha beta. More alpha beta. Another alpha beta. Extra alpha beta. Final alpha beta. Clamped alpha beta.".to_string(),
+                    "Alpha beta support. Gamma. Theta. Alpha beta gamma evidence. Delta alpha beta. More alpha beta. Another alpha beta.".to_string(),
                 ),
                 max_items: Some(4),
             },
@@ -3163,9 +3163,42 @@ fn main() {
             result.items.len()
         );
         assert!(result.items.iter().any(|item| item.support_status == ScholarChatDraftGroundingSupportStatus::SupportedByLocalEvidence));
+        assert!(result.items.iter().any(|item| item.support_status == ScholarChatDraftGroundingSupportStatus::WeaklySupported));
+        assert!(result.items.iter().any(|item| item.support_status == ScholarChatDraftGroundingSupportStatus::Unsupported));
         assert!(result.items.iter().all(|item| !item.text_preview.contains("  ")));
         assert!(result.items.iter().all(|item| !item.locator_previews.iter().any(|preview| preview.contains("section_path"))));
         assert!(result.warnings.iter().any(|warning| warning.kind == "inspection_clamped"));
+        assert_draft_grounding_inspection_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_draft_grounding_inspection_local_only_support_needs_clear_overlap() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = preview_scholar_chat_draft_grounding_inspection(
+            temp.path(),
+            ScholarChatDraftGroundingInspectionRequest {
+                scholar_chat_request: ScholarChatRequest {
+                    prompt: "alpha grounded evidence".to_string(),
+                    mode: ScholarChatMode::LectureLearning,
+                    grounding_policy: GroundingPolicy::AllowMarkedModelKnowledge,
+                    selected_source_ids: vec![source_id],
+                },
+                draft_text: Some("Gamma.".to_string()),
+                max_items: Some(4),
+            },
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatDraftGroundingInspectionStatus::Inspected);
+        assert_eq!(result.items.len(), 1);
+        assert_eq!(result.supported_item_count, 0);
+        assert_eq!(result.weakly_supported_item_count, 1);
+        assert_eq!(result.unsupported_item_count, 0);
+        assert_eq!(result.items[0].support_status, ScholarChatDraftGroundingSupportStatus::WeaklySupported);
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.message.contains("Model knowledge is not used in this preview")));
         assert_draft_grounding_inspection_boundary_fields(&result);
     }
 }

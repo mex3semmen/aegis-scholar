@@ -2848,7 +2848,7 @@ export default function App() {
               {scholarChatDraftGroundingInspectionLoading() ? "Inspecting..." : "Inspect draft grounding"}
             </button>
           </div>
-          <p class="muted">Diagnostic only — no answer was generated. No grounded answer was created. No Evidence Pack was built. No final answer was created.</p>
+          <p class="muted">Diagnostic only — no answer was generated. No grounded answer was created. No Evidence Pack was built. No final answer was created. "Supported" means deterministic local lexical overlap, not verified truth. Weak and unsupported items need review.</p>
           {scholarChatDraftGroundingInspectionValidationError() && <p class="error">{scholarChatDraftGroundingInspectionValidationError()}</p>}
           {scholarChatDraftGroundingInspectionError() && <p class="error">{scholarChatDraftGroundingInspectionError()}</p>}
           {scholarChatDraftGroundingInspectionLoading() ? (
@@ -2862,7 +2862,7 @@ export default function App() {
                   { label: "Selected sources", value: scholarChatDraftGroundingInspectionPreview()!.selected_source_count },
                   { label: "Evidence candidates", value: scholarChatDraftGroundingInspectionPreview()!.evidence_candidate_count },
                   { label: "Inspected items", value: scholarChatDraftGroundingInspectionPreview()!.inspected_item_count },
-                  { label: "Supported items", value: scholarChatDraftGroundingInspectionPreview()!.supported_item_count },
+                  { label: "Supported items (local overlap)", value: scholarChatDraftGroundingInspectionPreview()!.supported_item_count },
                   { label: "Weakly supported items", value: scholarChatDraftGroundingInspectionPreview()!.weakly_supported_item_count },
                   { label: "Unsupported items", value: scholarChatDraftGroundingInspectionPreview()!.unsupported_item_count },
                 ])}
