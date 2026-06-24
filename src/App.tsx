@@ -397,6 +397,7 @@ export default function App() {
   const [retrievalIndex, setRetrievalIndex] = createSignal<RetrievalIndex | null>(null);
   const [retrievalIndexError, setRetrievalIndexError] = createSignal<string | null>(null);
   const [retrievalIndexLoading, setRetrievalIndexLoading] = createSignal(false);
+  const [retrievalSearchSourceId, setRetrievalSearchSourceId] = createSignal("");
   const [retrievalSearchQuery, setRetrievalSearchQuery] = createSignal("");
   const [retrievalSearch, setRetrievalSearch] = createSignal<RetrievalSearchResponse | null>(null);
   const [retrievalSearchHasRun, setRetrievalSearchHasRun] = createSignal(false);
@@ -487,7 +488,18 @@ export default function App() {
         source_id: trimmedSourceId,
       });
       setRetrievalIndex(result);
+      const sourceIds = Array.from(new Set(result.entries.map((entry) => entry.source_id))).sort();
+      setRetrievalSearchSourceId(sourceIds[0] ?? "");
+      setRetrievalSearch(null);
+      setRetrievalSearchHasRun(false);
+      setRetrievalSearchError(null);
+      setRetrievalSearchValidationError(null);
     } catch (err) {
+      setRetrievalSearchSourceId("");
+      setRetrievalSearch(null);
+      setRetrievalSearchHasRun(false);
+      setRetrievalSearchError(null);
+      setRetrievalSearchValidationError(null);
       setRetrievalIndex(null);
       setRetrievalIndexError(sanitizeBackendError(err));
     } finally {
@@ -496,12 +508,12 @@ export default function App() {
   }
 
   async function runRetrievalSearch() {
-    const trimmedSourceId = sourceId().trim();
+    const trimmedSourceId = retrievalSearchSourceId().trim();
     const trimmedQuery = retrievalSearchQuery().trim();
-    if (!trimmedSourceId) {
+    if (!retrievalSearchSourceIds().length || !trimmedSourceId) {
       setRetrievalSearchHasRun(true);
       setRetrievalSearch(null);
-      setRetrievalSearchValidationError("Source ID is required to run retrieval search.");
+      setRetrievalSearchValidationError("Select a source ID from the loaded retrieval index.");
       setRetrievalSearchError(null);
       return;
     }
@@ -533,6 +545,18 @@ export default function App() {
     } finally {
       setRetrievalSearchLoading(false);
     }
+  }
+
+  function retrievalSearchSourceIds() {
+    return Array.from(new Set((retrievalIndex()?.entries ?? []).map((entry) => entry.source_id))).sort();
+  }
+
+  function selectRetrievalSearchSourceId(nextSourceId: string) {
+    setRetrievalSearchSourceId(nextSourceId);
+    setRetrievalSearch(null);
+    setRetrievalSearchHasRun(false);
+    setRetrievalSearchError(null);
+    setRetrievalSearchValidationError(null);
   }
 
   async function loadArtifactSources() {
@@ -1279,7 +1303,27 @@ export default function App() {
         </div>
         <div class="artifact-overview">
           <h3>Retrieval search</h3>
-          <p class="muted">Read-only lexical search using the source ID above.</p>
+          <p class="muted">Read-only lexical search using the selected source from the loaded retrieval index.</p>
+          {retrievalIndex() ? (
+            <div class="form-row">
+              <label>
+                Source ID
+                <select
+                  value={retrievalSearchSourceId()}
+                  onChange={(event) => selectRetrievalSearchSourceId(event.currentTarget.value)}
+                  disabled={retrievalSearchSourceIds().length === 0}
+                >
+                  {retrievalSearchSourceIds().length > 0 ? (
+                    retrievalSearchSourceIds().map((item) => <option value={item}>{item}</option>)
+                  ) : (
+                    <option value="">No source IDs available</option>
+                  )}
+                </select>
+              </label>
+            </div>
+          ) : (
+            <p class="muted">Load a retrieval index to choose a source.</p>
+          )}
           <div class="form-row">
             <label>
               Query
@@ -1296,11 +1340,17 @@ export default function App() {
           </div>
           {retrievalSearchValidationError() && <p class="error">{retrievalSearchValidationError()}</p>}
           <div class="hero-actions">
-            <button onClick={runRetrievalSearch} disabled={retrievalSearchLoading()}>
+            <button
+              onClick={runRetrievalSearch}
+              disabled={retrievalSearchLoading() || retrievalSearchSourceIds().length === 0 || !retrievalSearchSourceId().trim()}
+            >
               {retrievalSearchLoading() ? "Loading..." : "Run retrieval search"}
             </button>
           </div>
           {retrievalSearchError() && <p class="error">{retrievalSearchError()}</p>}
+          {retrievalSearchSourceIds().length === 0 && retrievalIndex() ? (
+            <p class="muted">No source IDs are available in the loaded retrieval index.</p>
+          ) : null}
           {retrievalSearchHasRun() ? (
             retrievalSearch() ? (
               <>
@@ -1340,7 +1390,7 @@ export default function App() {
               </>
             ) : null
           ) : (
-            <p>No retrieval search run yet.</p>
+            retrievalSearchSourceIds().length > 0 ? <p>No retrieval search run yet.</p> : null
           )}
         </div>
         {finalAnswer() ? (

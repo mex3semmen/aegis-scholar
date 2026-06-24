@@ -560,6 +560,26 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 52 — Retrieval UI Source Selection
+
+Frontend-only refinement.
+
+Phase 52.0 adds a compact read-only source selector for retrieval search using the loaded retrieval index data.
+It defaults deterministically to the first available source ID, keeps query guardrails, and does not change backend retrieval behavior.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
