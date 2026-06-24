@@ -144,6 +144,61 @@ pub struct LocalRuntimeProbeResult {
     pub warnings: Vec<LocalRuntimeProbeWarning>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LocalRuntimeSmokeInferenceStatus {
+    Blocked,
+    NotConfigured,
+    ModelMissing,
+    ExecutableMissing,
+    InferenceSucceeded,
+    InferenceFailed,
+    TimedOut,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LocalRuntimeSmokeInferenceWarning {
+    pub kind: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LocalRuntimeSmokeInferenceBlocker {
+    pub kind: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeSmokeInferenceRequest {
+    pub runtime_config: LocalModelRuntimeConfig,
+    pub allow_execution: bool,
+    pub prompt: Option<String>,
+    pub timeout_ms: Option<u64>,
+    pub max_output_tokens: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeSmokeInferenceResult {
+    pub status: LocalRuntimeSmokeInferenceStatus,
+    pub allow_execution: bool,
+    pub execution_attempted: bool,
+    pub runtime_kind: LocalModelRuntimeKind,
+    pub safe_model_file_name: Option<String>,
+    pub safe_executable_file_name: Option<String>,
+    pub normalized_prompt: String,
+    pub prompt_char_count: u32,
+    pub max_output_tokens: u32,
+    pub timeout_ms: u64,
+    pub exit_code: Option<i32>,
+    pub stdout_preview: String,
+    pub stderr_preview: String,
+    pub duration_ms: u64,
+    pub warnings: Vec<LocalRuntimeSmokeInferenceWarning>,
+    pub blockers: Vec<LocalRuntimeSmokeInferenceBlocker>,
+    pub no_answer_generated: bool,
+    pub not_scholar_chat_answer: bool,
+}
+
 pub fn preview_local_model_runtime_health(
     root: impl Into<PathBuf>,
     config: LocalModelRuntimeConfig,
@@ -608,6 +663,347 @@ pub fn probe_local_runtime_version(
     }
 }
 
+pub fn smoke_test_local_runtime_inference(
+    root: impl Into<PathBuf>,
+    request: LocalRuntimeSmokeInferenceRequest,
+) -> AegisResult<LocalRuntimeSmokeInferenceResult> {
+    let root = root.into();
+    let runtime_config = request.runtime_config;
+    let trimmed_model_path = normalize_optional_text(runtime_config.model_path.clone());
+    let trimmed_executable_path = normalize_optional_text(runtime_config.executable_path.clone());
+    let timeout_ms = clamp_smoke_timeout_ms(request.timeout_ms);
+    let max_output_tokens = clamp_smoke_max_output_tokens(request.max_output_tokens);
+    let safe_model_file_name = safe_file_name_from_path(trimmed_model_path.as_deref());
+    let safe_executable_file_name = safe_file_name_from_path(trimmed_executable_path.as_deref());
+    let mut warnings = vec![
+        LocalRuntimeSmokeInferenceWarning {
+            kind: "preview_only".to_string(),
+            message: "This is a preview-only smoke probe; no answer is generated.".to_string(),
+        },
+        LocalRuntimeSmokeInferenceWarning {
+            kind: "no_persistence".to_string(),
+            message: "Smoke probe configuration is not persisted.".to_string(),
+        },
+        LocalRuntimeSmokeInferenceWarning {
+            kind: "no_grounding".to_string(),
+            message: "This smoke probe does not use source or evidence grounding.".to_string(),
+        },
+    ];
+    if request.timeout_ms.is_some() && request.timeout_ms != Some(timeout_ms) {
+        push_smoke_warning(
+            &mut warnings,
+            "timeout_clamped",
+            "The smoke probe timeout was clamped to a safe range.",
+        );
+    }
+    if request.max_output_tokens.is_some() && request.max_output_tokens != Some(max_output_tokens) {
+        push_smoke_warning(
+            &mut warnings,
+            "max_output_tokens_clamped",
+            "The smoke probe output token limit was clamped to a safe range.",
+        );
+    }
+    let prompt_text = normalize_smoke_prompt(request.prompt.as_deref(), &mut warnings);
+    let normalized_prompt = prompt_text.clone().unwrap_or_default();
+    let prompt_char_count = normalized_prompt.chars().count() as u32;
+    let mut blockers = Vec::new();
+
+    if !request.allow_execution {
+        push_smoke_blocker(
+            &mut blockers,
+            "execution_disabled",
+            "Execution is disabled for this smoke probe.",
+        );
+        return Ok(build_smoke_result(
+            LocalRuntimeSmokeInferenceStatus::Blocked,
+            request.allow_execution,
+            false,
+            runtime_config.runtime_kind,
+            safe_model_file_name,
+            safe_executable_file_name,
+            normalized_prompt,
+            prompt_char_count,
+            max_output_tokens,
+            timeout_ms,
+            None,
+            String::new(),
+            String::new(),
+            0,
+            warnings,
+            blockers,
+        ));
+    }
+
+    let Some(prompt) = prompt_text else {
+        push_smoke_blocker(
+            &mut blockers,
+            "prompt_empty",
+            "A smoke-test prompt is required.",
+        );
+        return Ok(build_smoke_result(
+            LocalRuntimeSmokeInferenceStatus::Blocked,
+            request.allow_execution,
+            false,
+            runtime_config.runtime_kind,
+            safe_model_file_name,
+            safe_executable_file_name,
+            normalized_prompt,
+            prompt_char_count,
+            max_output_tokens,
+            timeout_ms,
+            None,
+            String::new(),
+            String::new(),
+            0,
+            warnings,
+            blockers,
+        ));
+    };
+
+    let normalized_model_path = normalize_optional_path(trimmed_model_path.clone())?;
+    let normalized_executable_path = normalize_optional_path(trimmed_executable_path.clone())?;
+    let model_lookup = inspect_configured_path(&root, normalized_model_path.as_deref())?;
+    let executable_lookup = inspect_configured_path(&root, normalized_executable_path.as_deref())?;
+    let model_state = model_lookup.state;
+    let executable_state = executable_lookup.state;
+    let model_extension_valid = model_lookup.extension_valid;
+
+    match runtime_config.runtime_kind {
+        LocalModelRuntimeKind::None => {
+            push_smoke_blocker(
+                &mut blockers,
+                "runtime_not_configured",
+                "A local runtime kind is required for smoke inference.",
+            );
+            return Ok(build_smoke_result(
+                LocalRuntimeSmokeInferenceStatus::NotConfigured,
+                request.allow_execution,
+                false,
+                runtime_config.runtime_kind,
+                safe_model_file_name,
+                safe_executable_file_name,
+                normalized_prompt,
+                prompt_char_count,
+                max_output_tokens,
+                timeout_ms,
+                None,
+                String::new(),
+                String::new(),
+                0,
+                warnings,
+                blockers,
+            ));
+        }
+        LocalModelRuntimeKind::LlamaCpp => {}
+    }
+
+    if !matches!(model_state, LocalModelRuntimePathState::Exists) {
+        push_smoke_blocker(
+            &mut blockers,
+            "model_missing",
+            "Configured model file is missing.",
+        );
+        return Ok(build_smoke_result(
+            LocalRuntimeSmokeInferenceStatus::ModelMissing,
+            request.allow_execution,
+            false,
+            runtime_config.runtime_kind,
+            safe_model_file_name,
+            safe_executable_file_name,
+            normalized_prompt,
+            prompt_char_count,
+            max_output_tokens,
+            timeout_ms,
+            None,
+            String::new(),
+            String::new(),
+            0,
+            warnings,
+            blockers,
+        ));
+    }
+
+    if !matches!(executable_state, LocalModelRuntimePathState::Exists) {
+        push_smoke_blocker(
+            &mut blockers,
+            "executable_missing",
+            "Configured executable file is missing.",
+        );
+        return Ok(build_smoke_result(
+            LocalRuntimeSmokeInferenceStatus::ExecutableMissing,
+            request.allow_execution,
+            false,
+            runtime_config.runtime_kind,
+            safe_model_file_name,
+            safe_executable_file_name,
+            normalized_prompt,
+            prompt_char_count,
+            max_output_tokens,
+            timeout_ms,
+            None,
+            String::new(),
+            String::new(),
+            0,
+            warnings,
+            blockers,
+        ));
+    }
+
+    if !model_extension_valid {
+        push_smoke_blocker(
+            &mut blockers,
+            "model_extension_invalid",
+            "Configured model file does not use a .gguf extension.",
+        );
+        return Ok(build_smoke_result(
+            LocalRuntimeSmokeInferenceStatus::Blocked,
+            request.allow_execution,
+            false,
+            runtime_config.runtime_kind,
+            safe_model_file_name,
+            safe_executable_file_name,
+            normalized_prompt,
+            prompt_char_count,
+            max_output_tokens,
+            timeout_ms,
+            None,
+            String::new(),
+            String::new(),
+            0,
+            warnings,
+            blockers,
+        ));
+    }
+
+    let resolved_model_path = resolve_runtime_path(&root, normalized_model_path.as_deref().unwrap());
+    let resolved_executable_path = resolve_runtime_path(&root, normalized_executable_path.as_deref().unwrap());
+
+    match run_smoke_inference_probe(
+        &resolved_executable_path,
+        &resolved_model_path,
+        &prompt,
+        max_output_tokens,
+        timeout_ms,
+        runtime_config.context_window,
+        runtime_config.gpu_layers,
+        runtime_config.temperature,
+    ) {
+        Ok(execution) => {
+            let redactions = [
+                (
+                    root.to_string_lossy().to_string(),
+                    "<root>".to_string(),
+                ),
+                (
+                    resolved_model_path.to_string_lossy().to_string(),
+                    safe_model_file_name.clone().unwrap_or_else(|| "<model>".to_string()),
+                ),
+                (
+                    resolved_executable_path.to_string_lossy().to_string(),
+                    safe_executable_file_name
+                        .clone()
+                        .unwrap_or_else(|| "<executable>".to_string()),
+                ),
+            ];
+            let (stdout_preview, stdout_truncated) = preview_probe_output_with_redactions(
+                &execution.stdout,
+                LOCAL_RUNTIME_SMOKE_PREVIEW_LIMIT,
+                &redactions,
+            );
+            let (stderr_preview, stderr_truncated) = preview_probe_output_with_redactions(
+                &execution.stderr,
+                LOCAL_RUNTIME_SMOKE_PREVIEW_LIMIT,
+                &redactions,
+            );
+            if stdout_truncated {
+                push_smoke_warning(
+                    &mut warnings,
+                    "stdout_truncated",
+                    "Standard output was truncated to keep the preview compact.",
+                );
+            }
+            if stderr_truncated {
+                push_smoke_warning(
+                    &mut warnings,
+                    "stderr_truncated",
+                    "Standard error was truncated to keep the preview compact.",
+                );
+            }
+            if execution.timed_out {
+                push_smoke_warning(
+                    &mut warnings,
+                    "timed_out",
+                    "The smoke probe reached its timeout and was stopped.",
+                );
+            }
+            if let Some(exit_code) = execution.exit_code {
+                if exit_code != 0 {
+                    push_smoke_warning(
+                        &mut warnings,
+                        "non_zero_exit",
+                        "The smoke probe exited with a non-zero status.",
+                    );
+                }
+            } else {
+                push_smoke_warning(
+                    &mut warnings,
+                    "no_exit_code",
+                    "The smoke probe did not report an exit code.",
+                );
+            }
+            Ok(build_smoke_result(
+                if execution.timed_out {
+                    LocalRuntimeSmokeInferenceStatus::TimedOut
+                } else if execution.exit_code.unwrap_or(1) == 0 {
+                    LocalRuntimeSmokeInferenceStatus::InferenceSucceeded
+                } else {
+                    LocalRuntimeSmokeInferenceStatus::InferenceFailed
+                },
+                request.allow_execution,
+                true,
+                runtime_config.runtime_kind,
+                safe_model_file_name,
+                safe_executable_file_name,
+                normalized_prompt,
+                prompt_char_count,
+                max_output_tokens,
+                timeout_ms,
+                execution.exit_code,
+                stdout_preview,
+                stderr_preview,
+                execution.duration_ms,
+                warnings,
+                blockers,
+            ))
+        }
+        Err(_) => {
+            push_smoke_blocker(
+                &mut blockers,
+                "probe_start_failed",
+                "The smoke probe could not start.",
+            );
+            Ok(build_smoke_result(
+                LocalRuntimeSmokeInferenceStatus::InferenceFailed,
+                request.allow_execution,
+                true,
+                runtime_config.runtime_kind,
+                safe_model_file_name,
+                safe_executable_file_name,
+                normalized_prompt,
+                prompt_char_count,
+                max_output_tokens,
+                timeout_ms,
+                None,
+                String::new(),
+                String::new(),
+                0,
+                warnings,
+                blockers,
+            ))
+        }
+    }
+}
+
 struct PathInspection {
     state: LocalModelRuntimePathState,
     extension_valid: bool,
@@ -834,8 +1230,72 @@ fn bucket_probe_duration_ms(value: u64) -> u64 {
     (value / 100) * 100
 }
 
+const LOCAL_RUNTIME_SMOKE_PREVIEW_LIMIT: usize = 2048;
+const LOCAL_RUNTIME_SMOKE_PROMPT_LIMIT: usize = 256;
+const LOCAL_RUNTIME_SMOKE_DEFAULT_TIMEOUT_MS: u64 = 3_000;
+const LOCAL_RUNTIME_SMOKE_MIN_TIMEOUT_MS: u64 = 250;
+const LOCAL_RUNTIME_SMOKE_MAX_TIMEOUT_MS: u64 = 10_000;
+const LOCAL_RUNTIME_SMOKE_DEFAULT_MAX_OUTPUT_TOKENS: u32 = 8;
+const LOCAL_RUNTIME_SMOKE_MIN_MAX_OUTPUT_TOKENS: u32 = 1;
+const LOCAL_RUNTIME_SMOKE_MAX_MAX_OUTPUT_TOKENS: u32 = 32;
+
+fn clamp_smoke_timeout_ms(timeout_ms: Option<u64>) -> u64 {
+    timeout_ms
+        .unwrap_or(LOCAL_RUNTIME_SMOKE_DEFAULT_TIMEOUT_MS)
+        .clamp(LOCAL_RUNTIME_SMOKE_MIN_TIMEOUT_MS, LOCAL_RUNTIME_SMOKE_MAX_TIMEOUT_MS)
+}
+
+fn clamp_smoke_max_output_tokens(max_output_tokens: Option<u32>) -> u32 {
+    max_output_tokens
+        .unwrap_or(LOCAL_RUNTIME_SMOKE_DEFAULT_MAX_OUTPUT_TOKENS)
+        .clamp(
+            LOCAL_RUNTIME_SMOKE_MIN_MAX_OUTPUT_TOKENS,
+            LOCAL_RUNTIME_SMOKE_MAX_MAX_OUTPUT_TOKENS,
+        )
+}
+
+fn normalize_smoke_prompt(prompt: Option<&str>, warnings: &mut Vec<LocalRuntimeSmokeInferenceWarning>) -> Option<String> {
+    let prompt = normalize_optional_text(prompt.map(|value| value.to_string()));
+    let Some(prompt) = prompt else {
+        return None;
+    };
+    if prompt.chars().count() > LOCAL_RUNTIME_SMOKE_PROMPT_LIMIT {
+        push_smoke_warning(
+            warnings,
+            "prompt_truncated",
+            "The smoke-test prompt was truncated to keep the preview compact.",
+        );
+        Some(prompt.chars().take(LOCAL_RUNTIME_SMOKE_PROMPT_LIMIT).collect::<String>())
+    } else {
+        Some(prompt)
+    }
+}
+
 fn preview_probe_output(value: &str, preview_limit: usize) -> (String, bool) {
     let normalized = clean_probe_capture(value.to_string());
+    let mut chars = normalized.chars();
+    let preview = chars.by_ref().take(preview_limit).collect::<String>();
+    let truncated = chars.next().is_some();
+    if truncated {
+        (format!("{preview}…"), true)
+    } else {
+        (preview, false)
+    }
+}
+
+fn preview_probe_output_with_redactions(
+    value: &str,
+    preview_limit: usize,
+    redactions: &[(String, String)],
+) -> (String, bool) {
+    let mut normalized = clean_probe_capture(value.to_string());
+    let mut redactions = redactions.to_vec();
+    redactions.sort_by(|left, right| right.0.len().cmp(&left.0.len()).then_with(|| left.0.cmp(&right.0)));
+    for (search, replacement) in redactions {
+        if !search.is_empty() {
+            normalized = normalized.replace(&search, &replacement);
+        }
+    }
     let mut chars = normalized.chars();
     let preview = chars.by_ref().take(preview_limit).collect::<String>();
     let truncated = chars.next().is_some();
@@ -876,6 +1336,69 @@ fn build_probe_result(
     }
 }
 
+fn run_smoke_inference_probe(
+    executable_path: &Path,
+    model_path: &Path,
+    prompt: &str,
+    max_output_tokens: u32,
+    timeout_ms: u64,
+    context_window: Option<u32>,
+    gpu_layers: Option<i32>,
+    temperature: Option<f64>,
+) -> AegisResult<LocalRuntimeSmokeInferenceExecution> {
+    let mut command = Command::new(executable_path);
+    command
+        .arg("-m")
+        .arg(model_path)
+        .arg("-p")
+        .arg(prompt)
+        .arg("-n")
+        .arg(max_output_tokens.to_string())
+        .arg("--temp")
+        .arg(temperature.unwrap_or(0.0).to_string())
+        .arg("--no-display-prompt")
+        .arg("--log-disable");
+    if let Some(context_window) = context_window {
+        command.arg("--ctx-size").arg(context_window.to_string());
+    }
+    if let Some(gpu_layers) = gpu_layers {
+        command.arg("-ngl").arg(gpu_layers.to_string());
+    }
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let mut child = command.spawn()?;
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let stdout_handle = stdout.map(spawn_pipe_reader);
+    let stderr_handle = stderr.map(spawn_pipe_reader);
+    let started_at = Instant::now();
+    let deadline = Duration::from_millis(timeout_ms);
+    let mut timed_out = false;
+
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if started_at.elapsed() >= deadline {
+            timed_out = true;
+            let _ = child.kill();
+            break child.wait()?;
+        }
+        thread::sleep(Duration::from_millis(10));
+    };
+
+    let stdout = join_pipe_reader(stdout_handle);
+    let stderr = join_pipe_reader(stderr_handle);
+
+    Ok(LocalRuntimeSmokeInferenceExecution {
+        exit_code: status.code(),
+        duration_ms: bucket_probe_duration_ms(started_at.elapsed().as_millis() as u64),
+        stdout: clean_probe_capture(stdout),
+        stderr: clean_probe_capture(stderr),
+        timed_out,
+    })
+}
+
 fn push_probe_warning(warnings: &mut Vec<LocalRuntimeProbeWarning>, kind: &str, message: &str) {
     if !warnings.iter().any(|warning| warning.kind == kind && warning.message == message) {
         warnings.push(LocalRuntimeProbeWarning {
@@ -894,7 +1417,73 @@ fn push_probe_blocker(blockers: &mut Vec<LocalRuntimeProbeWarning>, kind: &str, 
     }
 }
 
+fn build_smoke_result(
+    status: LocalRuntimeSmokeInferenceStatus,
+    allow_execution: bool,
+    execution_attempted: bool,
+    runtime_kind: LocalModelRuntimeKind,
+    safe_model_file_name: Option<String>,
+    safe_executable_file_name: Option<String>,
+    normalized_prompt: String,
+    prompt_char_count: u32,
+    max_output_tokens: u32,
+    timeout_ms: u64,
+    exit_code: Option<i32>,
+    stdout_preview: String,
+    stderr_preview: String,
+    duration_ms: u64,
+    warnings: Vec<LocalRuntimeSmokeInferenceWarning>,
+    blockers: Vec<LocalRuntimeSmokeInferenceBlocker>,
+) -> LocalRuntimeSmokeInferenceResult {
+    LocalRuntimeSmokeInferenceResult {
+        status,
+        allow_execution,
+        execution_attempted,
+        runtime_kind,
+        safe_model_file_name,
+        safe_executable_file_name,
+        normalized_prompt,
+        prompt_char_count,
+        max_output_tokens,
+        timeout_ms,
+        exit_code,
+        stdout_preview,
+        stderr_preview,
+        duration_ms,
+        warnings,
+        blockers,
+        no_answer_generated: true,
+        not_scholar_chat_answer: true,
+    }
+}
+
+fn push_smoke_warning(warnings: &mut Vec<LocalRuntimeSmokeInferenceWarning>, kind: &str, message: &str) {
+    if !warnings.iter().any(|warning| warning.kind == kind && warning.message == message) {
+        warnings.push(LocalRuntimeSmokeInferenceWarning {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        });
+    }
+}
+
+fn push_smoke_blocker(blockers: &mut Vec<LocalRuntimeSmokeInferenceBlocker>, kind: &str, message: &str) {
+    if !blockers.iter().any(|blocker| blocker.kind == kind && blocker.message == message) {
+        blockers.push(LocalRuntimeSmokeInferenceBlocker {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        });
+    }
+}
+
 struct LocalRuntimeProbeExecution {
+    exit_code: Option<i32>,
+    duration_ms: u64,
+    stdout: String,
+    stderr: String,
+    timed_out: bool,
+}
+
+struct LocalRuntimeSmokeInferenceExecution {
     exit_code: Option<i32>,
     duration_ms: u64,
     stdout: String,
@@ -925,6 +1514,78 @@ mod tests {
             allow_execution,
             timeout_ms,
         }
+    }
+
+    fn smoke_request(
+        model_path: Option<&str>,
+        executable_path: Option<&str>,
+        allow_execution: bool,
+        prompt: Option<&str>,
+        timeout_ms: Option<u64>,
+        max_output_tokens: Option<u32>,
+    ) -> LocalRuntimeSmokeInferenceRequest {
+        LocalRuntimeSmokeInferenceRequest {
+            runtime_config: LocalModelRuntimeConfig {
+                runtime_kind: LocalModelRuntimeKind::LlamaCpp,
+                model_path: model_path.map(|value| value.to_string()),
+                executable_path: executable_path.map(|value| value.to_string()),
+                context_window: Some(512),
+                gpu_layers: Some(0),
+                temperature: Some(0.0),
+            },
+            allow_execution,
+            prompt: prompt.map(|value| value.to_string()),
+            timeout_ms,
+            max_output_tokens,
+        }
+    }
+
+    fn smoke_helper_executable(temp: &tempfile::TempDir) -> PathBuf {
+        let source_path = temp.path().join("smoke_helper.rs");
+        let executable_path = temp.path().join(if cfg!(windows) { "smoke_helper.exe" } else { "smoke_helper" });
+        let source = r#"
+use std::{env, thread, time::Duration};
+
+fn prompt_argument(args: &[String]) -> String {
+    args.windows(2)
+        .find(|pair| pair[0] == "-p" || pair[0] == "--prompt")
+        .map(|pair| pair[1].clone())
+        .unwrap_or_default()
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let prompt = prompt_argument(&args);
+    println!("stdout marker");
+    println!("args={}", args.join(" | "));
+    println!("{}", "S".repeat(5000));
+    eprintln!("stderr marker");
+    eprintln!("args={}", args.join(" | "));
+    eprintln!("{}", "E".repeat(5000));
+    if prompt.contains("SLEEP") {
+        thread::sleep(Duration::from_millis(700));
+    }
+    if prompt.contains("FAIL") {
+        std::process::exit(7);
+    }
+}
+"#;
+        fs::write(&source_path, source).unwrap();
+        let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+        let status = Command::new(rustc)
+            .arg("--edition=2021")
+            .arg(&source_path)
+            .arg("-o")
+            .arg(&executable_path)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        executable_path
+    }
+
+    fn assert_root_clean(root: &tempfile::TempDir, expected_entries: usize) {
+        assert!(!root.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), expected_entries);
     }
 
     #[test]
@@ -1383,5 +2044,210 @@ mod tests {
         assert_eq!(clamp_probe_timeout_ms(None), LOCAL_RUNTIME_PROBE_DEFAULT_TIMEOUT_MS);
         assert_eq!(clamp_probe_timeout_ms(Some(0)), LOCAL_RUNTIME_PROBE_MIN_TIMEOUT_MS);
         assert_eq!(clamp_probe_timeout_ms(Some(100_000)), LOCAL_RUNTIME_PROBE_MAX_TIMEOUT_MS);
+    }
+
+    #[test]
+    fn local_runtime_smoke_inference_is_blocked_when_execution_is_disabled() {
+        let root = tempfile::tempdir().unwrap();
+        let result = smoke_test_local_runtime_inference(
+            root.path(),
+            smoke_request(None, None, false, Some("Say READY in one short sentence."), Some(0), Some(0)),
+        )
+        .unwrap();
+        assert_eq!(result.status, LocalRuntimeSmokeInferenceStatus::Blocked);
+        assert_eq!(result.allow_execution, false);
+        assert!(!result.execution_attempted);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "execution_disabled"));
+        assert!(result.warnings.iter().any(|warning| warning.kind == "preview_only"));
+        assert!(result.no_answer_generated);
+        assert!(result.not_scholar_chat_answer);
+        assert_root_clean(&root, 0);
+    }
+
+    #[test]
+    fn local_runtime_smoke_inference_reports_missing_model_without_paths() {
+        let root = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let executable_path = smoke_helper_executable(&helper);
+        let result = smoke_test_local_runtime_inference(
+            root.path(),
+            smoke_request(
+                Some("missing-model.gguf"),
+                Some(executable_path.to_string_lossy().as_ref()),
+                true,
+                Some("Say READY in one short sentence."),
+                Some(2_500),
+                Some(8),
+            ),
+        )
+        .unwrap();
+        assert_eq!(result.status, LocalRuntimeSmokeInferenceStatus::ModelMissing);
+        assert!(!result.execution_attempted);
+        assert_eq!(result.safe_model_file_name.as_deref(), Some("missing-model.gguf"));
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "model_missing"));
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = root.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert_root_clean(&root, 0);
+    }
+
+    #[test]
+    fn local_runtime_smoke_inference_reports_missing_executable_without_paths() {
+        let root = tempfile::tempdir().unwrap();
+        let model_path = root.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = smoke_test_local_runtime_inference(
+            root.path(),
+            smoke_request(
+                Some(model_path.to_string_lossy().as_ref()),
+                Some("missing-smoke-helper.exe"),
+                true,
+                Some("Say READY in one short sentence."),
+                Some(2_500),
+                Some(8),
+            ),
+        )
+        .unwrap();
+        assert_eq!(result.status, LocalRuntimeSmokeInferenceStatus::ExecutableMissing);
+        assert!(!result.execution_attempted);
+        assert_eq!(result.safe_executable_file_name.as_deref(), Some("missing-smoke-helper.exe"));
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "executable_missing"));
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = root.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert_root_clean(&root, 1);
+    }
+
+    #[test]
+    fn local_runtime_smoke_inference_rejects_traversal_like_paths_before_filesystem_access() {
+        let root = tempfile::tempdir().unwrap();
+        for invalid in ["..", "../model.gguf", "nested/../model.gguf", "nested\\..\\model.gguf"] {
+            let result = smoke_test_local_runtime_inference(
+                root.path(),
+                smoke_request(Some(invalid), Some("smoke-helper.exe"), true, Some("Say READY in one short sentence."), Some(2_500), Some(8)),
+            );
+            assert!(matches!(result, Err(AegisError::LocalModelRuntimeInvalidPath)));
+            assert_root_clean(&root, 0);
+        }
+    }
+
+    #[test]
+    fn local_runtime_smoke_inference_blocks_non_gguf_models_before_execution() {
+        let root = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let executable_path = smoke_helper_executable(&helper);
+        let model_path = root.path().join("smoke-model.txt");
+        fs::write(&model_path, "not a gguf model").unwrap();
+        let result = smoke_test_local_runtime_inference(
+            root.path(),
+            smoke_request(
+                Some(model_path.to_string_lossy().as_ref()),
+                Some(executable_path.to_string_lossy().as_ref()),
+                true,
+                Some("Say READY in one short sentence."),
+                Some(2_500),
+                Some(8),
+            ),
+        )
+        .unwrap();
+        assert_eq!(result.status, LocalRuntimeSmokeInferenceStatus::Blocked);
+        assert!(!result.execution_attempted);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "model_extension_invalid"));
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = root.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert_root_clean(&root, 1);
+    }
+
+    #[test]
+    fn local_runtime_smoke_inference_is_deterministic_and_path_free() {
+        let root = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let executable_path = smoke_helper_executable(&helper);
+        let model_path = root.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let request = smoke_request(
+            Some(model_path.to_string_lossy().as_ref()),
+            Some(executable_path.to_string_lossy().as_ref()),
+            true,
+            Some("Say READY in one short sentence."),
+            Some(2_500),
+            Some(8),
+        );
+        let first = smoke_test_local_runtime_inference(root.path(), request.clone()).unwrap();
+        let second = smoke_test_local_runtime_inference(root.path(), request).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(first.status, LocalRuntimeSmokeInferenceStatus::InferenceSucceeded);
+        assert!(first.execution_attempted);
+        assert_eq!(first.allow_execution, true);
+        assert_eq!(first.normalized_prompt, "Say READY in one short sentence.");
+        assert_eq!(first.prompt_char_count, "Say READY in one short sentence.".chars().count() as u32);
+        assert_eq!(first.max_output_tokens, 8);
+        assert_eq!(first.timeout_ms, 2_500);
+        assert_eq!(first.safe_model_file_name.as_deref(), Some("ready-model.gguf"));
+        assert_eq!(first.safe_executable_file_name.as_deref(), executable_path.file_name().and_then(|value| value.to_str()));
+        assert!(first.no_answer_generated);
+        assert!(first.not_scholar_chat_answer);
+        assert!(first.stdout_preview.chars().count() <= LOCAL_RUNTIME_SMOKE_PREVIEW_LIMIT + 1);
+        assert!(first.stderr_preview.chars().count() <= LOCAL_RUNTIME_SMOKE_PREVIEW_LIMIT + 1);
+        assert!(first.stdout_preview.ends_with('…'));
+        assert!(first.stderr_preview.ends_with('…'));
+        assert!(first.blockers.is_empty());
+        assert!(first.warnings.iter().any(|warning| warning.kind == "stdout_truncated"));
+        assert!(first.warnings.iter().any(|warning| warning.kind == "stderr_truncated"));
+        let debug = format!("{first:?}");
+        let json = serde_json::to_string(&first).unwrap();
+        let temp_path = root.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert_root_clean(&root, 1);
+    }
+
+    #[test]
+    fn local_runtime_smoke_inference_clamps_prompt_timeout_and_output_limits() {
+        let root = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let executable_path = smoke_helper_executable(&helper);
+        let model_path = root.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let long_prompt = format!(
+            "SLEEP and say READY in one short sentence. {}",
+            "x".repeat(LOCAL_RUNTIME_SMOKE_PROMPT_LIMIT + 64)
+        );
+        let result = smoke_test_local_runtime_inference(
+            root.path(),
+            smoke_request(
+                Some(model_path.to_string_lossy().as_ref()),
+                Some(executable_path.to_string_lossy().as_ref()),
+                true,
+                Some(&long_prompt),
+                Some(0),
+                Some(1000),
+            ),
+        )
+        .unwrap();
+        assert_eq!(result.status, LocalRuntimeSmokeInferenceStatus::TimedOut);
+        assert!(result.execution_attempted);
+        assert_eq!(result.timeout_ms, LOCAL_RUNTIME_SMOKE_MIN_TIMEOUT_MS);
+        assert_eq!(result.max_output_tokens, LOCAL_RUNTIME_SMOKE_MAX_MAX_OUTPUT_TOKENS);
+        assert_eq!(result.normalized_prompt.chars().count(), LOCAL_RUNTIME_SMOKE_PROMPT_LIMIT);
+        assert!(result.warnings.iter().any(|warning| warning.kind == "timeout_clamped"));
+        assert!(result.warnings.iter().any(|warning| warning.kind == "max_output_tokens_clamped"));
+        assert!(result.warnings.iter().any(|warning| warning.kind == "prompt_truncated"));
+        assert!(result.warnings.iter().any(|warning| warning.kind == "timed_out"));
+        assert!(result.stdout_preview.chars().count() <= LOCAL_RUNTIME_SMOKE_PREVIEW_LIMIT + 1);
+        assert!(result.stderr_preview.chars().count() <= LOCAL_RUNTIME_SMOKE_PREVIEW_LIMIT + 1);
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = root.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert_root_clean(&root, 1);
     }
 }

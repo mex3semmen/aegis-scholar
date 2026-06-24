@@ -26,6 +26,7 @@ use grounded_answer::{build_grounded_answer as build_grounded_answer_impl, read_
 use local_runtime::{
     preview_local_model_runtime_health as preview_local_model_runtime_health_impl,
     preview_local_runtime_invocation_plan as preview_local_runtime_invocation_plan_impl,
+    smoke_test_local_runtime_inference as smoke_test_local_runtime_inference_impl,
     probe_local_runtime_version as probe_local_runtime_version_impl,
     LocalModelRuntimeConfig,
     LocalModelRuntimeHealthPreview,
@@ -33,6 +34,8 @@ use local_runtime::{
     LocalRuntimeInvocationPlanRequest,
     LocalRuntimeProbeRequest,
     LocalRuntimeProbeResult,
+    LocalRuntimeSmokeInferenceRequest,
+    LocalRuntimeSmokeInferenceResult,
 };
 use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
 use scholar_chat::{
@@ -299,6 +302,15 @@ fn probe_local_runtime_version(root: String, request: LocalRuntimeProbeRequest) 
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn smoke_test_local_runtime_inference(
+    root: String,
+    request: LocalRuntimeSmokeInferenceRequest,
+) -> Result<LocalRuntimeSmokeInferenceResult, String> {
+    smoke_test_local_runtime_inference_impl(root, request)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -338,7 +350,8 @@ pub fn run() {
             preview_scholar_chat_prompt_pack,
             preview_local_model_runtime_health,
             preview_local_runtime_invocation_plan,
-            probe_local_runtime_version
+            probe_local_runtime_version,
+            smoke_test_local_runtime_inference
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");

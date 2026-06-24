@@ -266,6 +266,54 @@ type LocalRuntimeProbeResult = {
   warnings: LocalRuntimeProbeWarning[];
 };
 
+type LocalRuntimeSmokeInferenceStatus =
+  | "blocked"
+  | "not_configured"
+  | "model_missing"
+  | "executable_missing"
+  | "inference_succeeded"
+  | "inference_failed"
+  | "timed_out";
+
+type LocalRuntimeSmokeInferenceWarning = {
+  kind: string;
+  message: string;
+};
+
+type LocalRuntimeSmokeInferenceBlocker = {
+  kind: string;
+  message: string;
+};
+
+type LocalRuntimeSmokeInferenceRequest = {
+  runtime_config: LocalModelRuntimeConfig;
+  allow_execution: boolean;
+  prompt: string | null;
+  timeout_ms: number | null;
+  max_output_tokens: number | null;
+};
+
+type LocalRuntimeSmokeInferenceResult = {
+  status: LocalRuntimeSmokeInferenceStatus;
+  allow_execution: boolean;
+  execution_attempted: boolean;
+  runtime_kind: LocalModelRuntimeKind;
+  safe_model_file_name?: string | null;
+  safe_executable_file_name?: string | null;
+  normalized_prompt: string;
+  prompt_char_count: number;
+  max_output_tokens: number;
+  timeout_ms: number;
+  exit_code?: number | null;
+  stdout_preview: string;
+  stderr_preview: string;
+  duration_ms: number;
+  warnings: LocalRuntimeSmokeInferenceWarning[];
+  blockers: LocalRuntimeSmokeInferenceBlocker[];
+  no_answer_generated: boolean;
+  not_scholar_chat_answer: boolean;
+};
+
 type LocalRuntimeInvocationPlanRequest = {
   runtime_config: LocalModelRuntimeConfig;
   prompt_text: string | null;
@@ -712,6 +760,15 @@ export default function App() {
   const [localRuntimeProbeValidationError, setLocalRuntimeProbeValidationError] = createSignal<string | null>(null);
   const [localRuntimeProbeLoading, setLocalRuntimeProbeLoading] = createSignal(false);
   const [localRuntimeProbeHasRun, setLocalRuntimeProbeHasRun] = createSignal(false);
+  const [localRuntimeSmokePrompt, setLocalRuntimeSmokePrompt] = createSignal("Say READY in one short sentence.");
+  const [localRuntimeSmokeAllowExecution, setLocalRuntimeSmokeAllowExecution] = createSignal(false);
+  const [localRuntimeSmokeTimeoutMs, setLocalRuntimeSmokeTimeoutMs] = createSignal("3000");
+  const [localRuntimeSmokeMaxOutputTokens, setLocalRuntimeSmokeMaxOutputTokens] = createSignal("8");
+  const [localRuntimeSmokeResult, setLocalRuntimeSmokeResult] = createSignal<LocalRuntimeSmokeInferenceResult | null>(null);
+  const [localRuntimeSmokeError, setLocalRuntimeSmokeError] = createSignal<string | null>(null);
+  const [localRuntimeSmokeValidationError, setLocalRuntimeSmokeValidationError] = createSignal<string | null>(null);
+  const [localRuntimeSmokeLoading, setLocalRuntimeSmokeLoading] = createSignal(false);
+  const [localRuntimeSmokeHasRun, setLocalRuntimeSmokeHasRun] = createSignal(false);
   const [sourceId, setSourceId] = createSignal("");
   const [finalAnswerId, setFinalAnswerId] = createSignal("");
   const [finalAnswer, setFinalAnswer] = createSignal<FinalAnswer | null>(null);
@@ -1213,6 +1270,13 @@ export default function App() {
     setLocalRuntimeProbeHasRun(false);
   }
 
+  function clearLocalRuntimeSmokePreview() {
+    setLocalRuntimeSmokeResult(null);
+    setLocalRuntimeSmokeError(null);
+    setLocalRuntimeSmokeValidationError(null);
+    setLocalRuntimeSmokeHasRun(false);
+  }
+
   function normalizeOptionalTextInput(value: string) {
     const trimmed = value.trim();
     return trimmed ? trimmed : null;
@@ -1676,6 +1740,89 @@ export default function App() {
     }
   }
 
+  async function previewLocalRuntimeSmokeInference() {
+    if (localRuntimeSmokeLoading()) {
+      return;
+    }
+
+    const contextWindow = parseOptionalIntegerInput(
+      localRuntimeContextWindow(),
+      "Context window",
+      setLocalRuntimeSmokeValidationError,
+    );
+    const gpuLayers = parseOptionalIntegerInput(
+      localRuntimeGpuLayers(),
+      "GPU layers",
+      setLocalRuntimeSmokeValidationError,
+    );
+    const temperature = parseOptionalNumberInput(
+      localRuntimeTemperature(),
+      "Temperature",
+      setLocalRuntimeSmokeValidationError,
+    );
+    const timeoutMs = parseOptionalIntegerInput(
+      localRuntimeSmokeTimeoutMs(),
+      "Smoke timeout",
+      setLocalRuntimeSmokeValidationError,
+    );
+    const maxOutputTokens = parseOptionalIntegerInput(
+      localRuntimeSmokeMaxOutputTokens(),
+      "Max output tokens",
+      setLocalRuntimeSmokeValidationError,
+    );
+    if (
+      contextWindow === undefined ||
+      gpuLayers === undefined ||
+      temperature === undefined ||
+      timeoutMs === undefined ||
+      maxOutputTokens === undefined
+    ) {
+      setLocalRuntimeSmokeHasRun(true);
+      setLocalRuntimeSmokeResult(null);
+      setLocalRuntimeSmokeError(null);
+      return;
+    }
+
+    const trimmedPrompt = localRuntimeSmokePrompt().trim();
+    if (!trimmedPrompt) {
+      setLocalRuntimeSmokeHasRun(true);
+      setLocalRuntimeSmokeResult(null);
+      setLocalRuntimeSmokeError(null);
+      setLocalRuntimeSmokeValidationError("Prompt is required to run a smoke inference probe.");
+      return;
+    }
+
+    setLocalRuntimeSmokeHasRun(true);
+    setLocalRuntimeSmokeLoading(true);
+    setLocalRuntimeSmokeError(null);
+    setLocalRuntimeSmokeValidationError(null);
+    setLocalRuntimeSmokeResult(null);
+    try {
+      const result = await invoke<LocalRuntimeSmokeInferenceResult>("smoke_test_local_runtime_inference", {
+        root: ".",
+        request: {
+          runtime_config: {
+            runtime_kind: localRuntimeKind(),
+            model_path: normalizeOptionalTextInput(localRuntimeModelPath()),
+            executable_path: normalizeOptionalTextInput(localRuntimeExecutablePath()),
+            context_window: contextWindow,
+            gpu_layers: gpuLayers,
+            temperature,
+          },
+          allow_execution: localRuntimeSmokeAllowExecution(),
+          prompt: trimmedPrompt,
+          timeout_ms: timeoutMs,
+          max_output_tokens: maxOutputTokens,
+        } satisfies LocalRuntimeSmokeInferenceRequest,
+      });
+      setLocalRuntimeSmokeResult(result);
+    } catch (err) {
+      setLocalRuntimeSmokeError(sanitizeBackendError(err));
+    } finally {
+      setLocalRuntimeSmokeLoading(false);
+    }
+  }
+
   onMount(() => {
     void loadScholarChatSourceContext();
   });
@@ -2074,6 +2221,7 @@ export default function App() {
                   setLocalRuntimeKind(event.currentTarget.value as LocalModelRuntimeKind);
                   clearLocalRuntimePreview();
                   clearLocalRuntimeInvocationPreview();
+                  clearLocalRuntimeSmokePreview();
                 }}
               >
                 <option value="none">None</option>
@@ -2089,6 +2237,7 @@ export default function App() {
                   setLocalRuntimeContextWindow(event.currentTarget.value);
                   clearLocalRuntimePreview();
                   clearLocalRuntimeInvocationPreview();
+                  clearLocalRuntimeSmokePreview();
                 }}
                 placeholder="4096"
               />
@@ -2102,6 +2251,7 @@ export default function App() {
                   setLocalRuntimeGpuLayers(event.currentTarget.value);
                   clearLocalRuntimePreview();
                   clearLocalRuntimeInvocationPreview();
+                  clearLocalRuntimeSmokePreview();
                 }}
                 placeholder="0"
               />
@@ -2116,6 +2266,7 @@ export default function App() {
                   setLocalRuntimeTemperature(event.currentTarget.value);
                   clearLocalRuntimePreview();
                   clearLocalRuntimeInvocationPreview();
+                  clearLocalRuntimeSmokePreview();
                 }}
                 placeholder="0.7"
               />
@@ -2131,6 +2282,7 @@ export default function App() {
                   setLocalRuntimeModelPath(event.currentTarget.value);
                   clearLocalRuntimePreview();
                   clearLocalRuntimeInvocationPreview();
+                  clearLocalRuntimeSmokePreview();
                 }}
                 placeholder="E:\\models\\scholar.gguf"
               />
@@ -2145,6 +2297,7 @@ export default function App() {
                   clearLocalRuntimePreview();
                   clearLocalRuntimeInvocationPreview();
                   clearLocalRuntimeProbePreview();
+                  clearLocalRuntimeSmokePreview();
                 }}
                 placeholder="E:\\bin\\llama-server.exe"
               />
@@ -2421,6 +2574,143 @@ export default function App() {
             )
           ) : (
             <p>No runtime version probe preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Local runtime smoke test</h3>
+          <p class="muted">
+            Read-only smoke probe for the configured local runtime. It uses a tiny prompt only when execution is allowed, and it never persists a result, generates a Scholar Chat answer, or builds an Evidence Pack.
+          </p>
+          <label>
+            Prompt
+            <textarea
+              rows={3}
+              value={localRuntimeSmokePrompt()}
+              onInput={(event) => {
+                setLocalRuntimeSmokePrompt(event.currentTarget.value);
+                clearLocalRuntimeSmokePreview();
+              }}
+              placeholder="Say READY in one short sentence."
+            />
+          </label>
+          <div class="form-row">
+            <label class="inline-field">
+              Allow execution
+              <input
+                type="checkbox"
+                checked={localRuntimeSmokeAllowExecution()}
+                onChange={(event) => {
+                  setLocalRuntimeSmokeAllowExecution(event.currentTarget.checked);
+                  clearLocalRuntimeSmokePreview();
+                }}
+              />
+            </label>
+            <label>
+              Timeout ms
+              <input
+                type="number"
+                value={localRuntimeSmokeTimeoutMs()}
+                onInput={(event) => {
+                  setLocalRuntimeSmokeTimeoutMs(event.currentTarget.value);
+                  clearLocalRuntimeSmokePreview();
+                }}
+                placeholder="3000"
+              />
+            </label>
+            <label>
+              Max output tokens
+              <input
+                type="number"
+                value={localRuntimeSmokeMaxOutputTokens()}
+                onInput={(event) => {
+                  setLocalRuntimeSmokeMaxOutputTokens(event.currentTarget.value);
+                  clearLocalRuntimeSmokePreview();
+                }}
+                placeholder="8"
+              />
+            </label>
+          </div>
+          <p class="muted">No Scholar Chat answer is generated and no smoke result is persisted.</p>
+          <div class="hero-actions">
+            <button onClick={previewLocalRuntimeSmokeInference} disabled={localRuntimeSmokeLoading()}>
+              {localRuntimeSmokeLoading() ? "Previewing..." : "Run smoke inference probe"}
+            </button>
+          </div>
+          {localRuntimeSmokeValidationError() && <p class="error">{localRuntimeSmokeValidationError()}</p>}
+          {localRuntimeSmokeError() && <p class="error">{localRuntimeSmokeError()}</p>}
+          {localRuntimeSmokeLoading() ? (
+            <p>Running smoke inference probe...</p>
+          ) : localRuntimeSmokeHasRun() ? (
+            localRuntimeSmokeResult() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.status) },
+                  { label: "Allow execution", value: localRuntimeSmokeResult()!.allow_execution ? "yes" : "no" },
+                  { label: "Execution attempted", value: localRuntimeSmokeResult()!.execution_attempted ? "yes" : "no" },
+                  { label: "Runtime kind", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.runtime_kind) },
+                  { label: "Prompt chars", value: localRuntimeSmokeResult()!.prompt_char_count },
+                  { label: "Max output tokens", value: localRuntimeSmokeResult()!.max_output_tokens },
+                  { label: "Timeout ms", value: localRuntimeSmokeResult()!.timeout_ms },
+                  { label: "Duration ms", value: localRuntimeSmokeResult()!.duration_ms },
+                  { label: "Exit code", value: localRuntimeSmokeResult()!.exit_code ?? "missing" },
+                  { label: "No answer generated", value: localRuntimeSmokeResult()!.no_answer_generated ? "yes" : "no" },
+                  { label: "Not Scholar Chat answer", value: localRuntimeSmokeResult()!.not_scholar_chat_answer ? "yes" : "no" },
+                ])}
+                {localRuntimeSmokeResult()!.safe_model_file_name ? (
+                  <p><strong>Model file name:</strong> {localRuntimeSmokeResult()!.safe_model_file_name}</p>
+                ) : null}
+                {localRuntimeSmokeResult()!.safe_executable_file_name ? (
+                  <p><strong>Executable file name:</strong> {localRuntimeSmokeResult()!.safe_executable_file_name}</p>
+                ) : null}
+                <p><strong>Normalized prompt:</strong> {localRuntimeSmokeResult()!.normalized_prompt}</p>
+                <h4>Stdout preview</h4>
+                {localRuntimeSmokeResult()!.stdout_preview ? (
+                  <pre>{localRuntimeSmokeResult()!.stdout_preview}</pre>
+                ) : (
+                  <p>No stdout captured.</p>
+                )}
+                <h4>Stderr preview</h4>
+                {localRuntimeSmokeResult()!.stderr_preview ? (
+                  <pre>{localRuntimeSmokeResult()!.stderr_preview}</pre>
+                ) : (
+                  <p>No stderr captured.</p>
+                )}
+                {localRuntimeSmokeResult()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {localRuntimeSmokeResult()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No smoke probe blockers.</p>
+                )}
+                {localRuntimeSmokeResult()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {localRuntimeSmokeResult()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No smoke probe warnings.</p>
+                )}
+              </>
+            ) : (
+              <p>No smoke inference preview loaded yet.</p>
+            )
+          ) : (
+            <p>No smoke inference preview loaded yet.</p>
           )}
         </div>
       </section>

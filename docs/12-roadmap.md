@@ -979,6 +979,25 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 72 — Local Runtime Smoke Inference Probe
+
+Guarded smoke-inference slice.
+
+Phase 72.0 adds the preview-only `smoke_test_local_runtime_inference` command and a compact local runtime smoke test card. It validates configured runtime paths, clamps timeout and output-token limits, and can launch a tiny direct executable probe only when execution is allowed. It does not call an LLM, run retrieval, build Evidence Packs, generate answers, or persist results.
+
+Do not implement:
+
+- LLM calls
+- retrieval execution
+- Evidence Pack building
+- answer generation
+- config persistence
+- model download/install behavior
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
