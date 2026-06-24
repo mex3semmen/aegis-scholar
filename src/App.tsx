@@ -125,6 +125,51 @@ type ScholarChatEvidencePlanResponse = {
   warnings: string[];
 };
 
+type ScholarChatPromptPackStatus = "prompt_pack_preview";
+
+type ScholarChatPromptPackSectionKind =
+  | "system_or_policy_instructions"
+  | "mode_instructions"
+  | "grounding_instructions"
+  | "source_context"
+  | "user_prompt";
+
+type ScholarChatPromptPackSection = {
+  kind: ScholarChatPromptPackSectionKind;
+  title: string;
+  lines: string[];
+};
+
+type ScholarChatPromptContextItem = {
+  source_id: string;
+  version_id: string;
+  chunk_id: string;
+  score: number;
+  matched_terms: string[];
+  preview: string;
+  locator: CitationLocator;
+};
+
+type ScholarChatPromptPack = {
+  section_count: number;
+  context_item_count: number;
+  estimated_input_char_count: number;
+  sections: ScholarChatPromptPackSection[];
+};
+
+type ScholarChatPromptPackPreviewResponse = {
+  status: ScholarChatPromptPackStatus;
+  normalized_prompt: string;
+  mode: ScholarChatMode;
+  grounding_policy: GroundingPolicy;
+  selected_source_ids: string[];
+  selected_source_count: number;
+  evidence_candidate_count: number;
+  prompt_pack: ScholarChatPromptPack;
+  context_items: ScholarChatPromptContextItem[];
+  warnings: string[];
+};
+
 type RetrievalIndexEntry = {
   chunk_id: string;
   source_id: string;
@@ -534,6 +579,10 @@ export default function App() {
   const [scholarChatEvidencePlanError, setScholarChatEvidencePlanError] = createSignal<string | null>(null);
   const [scholarChatEvidencePlanLoading, setScholarChatEvidencePlanLoading] = createSignal(false);
   const [scholarChatEvidencePlanHasRun, setScholarChatEvidencePlanHasRun] = createSignal(false);
+  const [scholarChatPromptPackPreview, setScholarChatPromptPackPreview] = createSignal<ScholarChatPromptPackPreviewResponse | null>(null);
+  const [scholarChatPromptPackError, setScholarChatPromptPackError] = createSignal<string | null>(null);
+  const [scholarChatPromptPackLoading, setScholarChatPromptPackLoading] = createSignal(false);
+  const [scholarChatPromptPackHasRun, setScholarChatPromptPackHasRun] = createSignal(false);
   const [sourceId, setSourceId] = createSignal("");
   const [finalAnswerId, setFinalAnswerId] = createSignal("");
   const [finalAnswer, setFinalAnswer] = createSignal<FinalAnswer | null>(null);
@@ -1001,6 +1050,15 @@ export default function App() {
     setScholarChatEvidencePlanPreview(null);
     setScholarChatEvidencePlanError(null);
     setScholarChatEvidencePlanHasRun(false);
+    setScholarChatPromptPackPreview(null);
+    setScholarChatPromptPackError(null);
+    setScholarChatPromptPackHasRun(false);
+  }
+
+  function clearScholarChatPromptPackPreview() {
+    setScholarChatPromptPackPreview(null);
+    setScholarChatPromptPackError(null);
+    setScholarChatPromptPackHasRun(false);
   }
 
   function selectedFinalAnswerDetail() {
@@ -1205,6 +1263,39 @@ export default function App() {
     }
   }
 
+  async function previewScholarChatPromptPack() {
+    const trimmedPrompt = scholarChatPrompt().trim();
+    if (!trimmedPrompt) {
+      setScholarChatPromptPackPreview(null);
+      setScholarChatPromptPackError("Prompt is required to preview a Scholar Chat prompt pack.");
+      setScholarChatPromptPackHasRun(true);
+      return;
+    }
+    if (scholarChatPromptPackLoading()) {
+      return;
+    }
+    setScholarChatPromptPackHasRun(true);
+    setScholarChatPromptPackLoading(true);
+    setScholarChatPromptPackError(null);
+    setScholarChatPromptPackPreview(null);
+    try {
+      const result = await invoke<ScholarChatPromptPackPreviewResponse>("preview_scholar_chat_prompt_pack", {
+        root: ".",
+        request: {
+          prompt: trimmedPrompt,
+          mode: scholarChatMode(),
+          grounding_policy: scholarChatGroundingPolicy(),
+          selected_source_ids: selectedScholarChatSourceIds(),
+        },
+      });
+      setScholarChatPromptPackPreview(result);
+    } catch (err) {
+      setScholarChatPromptPackError(sanitizeBackendError(err));
+    } finally {
+      setScholarChatPromptPackLoading(false);
+    }
+  }
+
   onMount(() => {
     void loadScholarChatSourceContext();
   });
@@ -1243,7 +1334,10 @@ export default function App() {
             Mode
             <select
               value={scholarChatMode()}
-              onChange={(event) => setScholarChatMode(event.currentTarget.value as ScholarChatMode)}
+              onChange={(event) => {
+                setScholarChatMode(event.currentTarget.value as ScholarChatMode);
+                clearScholarChatPromptPackPreview();
+              }}
             >
               {SCHOLAR_CHAT_MODES.map((item) => (
                 <option value={item.value}>{item.label}</option>
@@ -1254,7 +1348,10 @@ export default function App() {
             Grounding policy
             <select
               value={scholarChatGroundingPolicy()}
-              onChange={(event) => setScholarChatGroundingPolicy(event.currentTarget.value as GroundingPolicy)}
+              onChange={(event) => {
+                setScholarChatGroundingPolicy(event.currentTarget.value as GroundingPolicy);
+                clearScholarChatPromptPackPreview();
+              }}
             >
               {GROUNDING_POLICIES.map((item) => (
                 <option value={item.value}>{item.label}</option>
@@ -1307,6 +1404,7 @@ export default function App() {
             onInput={(event) => {
               setScholarChatPrompt(event.currentTarget.value);
               setScholarChatValidationError(null);
+              clearScholarChatPromptPackPreview();
             }}
             placeholder="Ask about a lecture, paper, method, or thesis task..."
           />
@@ -1493,6 +1591,93 @@ export default function App() {
             )
           ) : (
             <p>No Scholar Chat evidence plan preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Prompt pack preview</h3>
+          <p class="muted">
+            Read-only prompt-pack preview for the current Scholar Chat request. It shows the prompt assembly that would be sent later, but it does not call a model or generate an answer.
+          </p>
+          <p class="muted">{scholarChatSelectedSourceIdsSummary()}</p>
+          <div class="hero-actions">
+            <button onClick={previewScholarChatPromptPack} disabled={scholarChatPromptPackLoading()}>
+              {scholarChatPromptPackLoading() ? "Previewing..." : "Preview prompt pack"}
+            </button>
+          </div>
+          {scholarChatPromptPackError() && <p class="error">{scholarChatPromptPackError()}</p>}
+          {scholarChatPromptPackLoading() ? (
+            <p>Previewing prompt pack...</p>
+          ) : scholarChatPromptPackHasRun() ? (
+            scholarChatPromptPackPreview() ? (
+              <>
+                <div class="contract-meta">
+                  <div><span>Status</span><strong>{scholarChatPromptPackPreview()!.status}</strong></div>
+                  <div><span>Mode</span><strong>{scholarChatPromptPackPreview()!.mode}</strong></div>
+                  <div><span>Grounding policy</span><strong>{scholarChatPromptPackPreview()!.grounding_policy}</strong></div>
+                  <div><span>Selected sources</span><strong>{scholarChatPromptPackPreview()!.selected_source_count}</strong></div>
+                  <div><span>Evidence candidates</span><strong>{scholarChatPromptPackPreview()!.evidence_candidate_count}</strong></div>
+                  <div><span>Sections</span><strong>{scholarChatPromptPackPreview()!.prompt_pack.section_count}</strong></div>
+                  <div><span>Context items</span><strong>{scholarChatPromptPackPreview()!.prompt_pack.context_item_count}</strong></div>
+                  <div><span>Estimated chars</span><strong>{scholarChatPromptPackPreview()!.prompt_pack.estimated_input_char_count}</strong></div>
+                </div>
+                <p><strong>Prompt:</strong> {scholarChatPromptPackPreview()!.normalized_prompt}</p>
+                {scholarChatPromptPackPreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {scholarChatPromptPackPreview()!.warnings.map((warning) => (
+                        <li>{warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {scholarChatPromptPackPreview()!.prompt_pack.sections.length > 0 ? (
+                  scholarChatPromptPackPreview()!.prompt_pack.sections.map((section) => (
+                    <div class="artifact-overview">
+                      <h4>{section.title}</h4>
+                      <p class="muted">Kind: {section.kind}</p>
+                      {section.lines.length > 0 ? (
+                        <ul class="final-answer-list-items">
+                          {section.lines.map((line) => (
+                            <li>
+                              <div class="final-answer-list-item">
+                                <span>{line}</span>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>No lines available.</p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p>No prompt-pack sections available.</p>
+                )}
+                {scholarChatPromptPackPreview()!.context_items.length > 0 ? (
+                  <ul class="final-answer-list-items">
+                    {scholarChatPromptPackPreview()!.context_items.map((item) => (
+                      <li>
+                        <div class="final-answer-list-item">
+                          <span>{item.chunk_id}</span>
+                          <small>
+                            source={item.source_id} | version={item.version_id} | score={item.score.toFixed(3)} | matched={item.matched_terms.join(", ") || "none"}
+                          </small>
+                          <small>{locatorSummary(item.locator)}</small>
+                          <p>{item.preview}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No context items available for this prompt pack.</p>
+                )}
+              </>
+            ) : (
+              <p>No Scholar Chat prompt pack preview loaded yet.</p>
+            )
+          ) : (
+            <p>No Scholar Chat prompt pack preview loaded yet.</p>
           )}
         </div>
       </section>
