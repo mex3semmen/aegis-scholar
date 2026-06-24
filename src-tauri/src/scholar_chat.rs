@@ -1373,16 +1373,31 @@ fn compact_text_preview(text: &str, max_chars: usize) -> String {
 }
 
 fn inspection_terms(text: &str) -> BTreeSet<String> {
+    const MIN_MEANINGFUL_TERM_LEN: usize = 3;
+
     text.split(|ch: char| !ch.is_alphanumeric())
         .filter_map(|term| {
             let normalized = term.trim().to_lowercase();
             if normalized.is_empty() {
+                None
+            } else if is_stopword_for_draft_grounding_inspection(&normalized) {
+                None
+            } else if normalized.chars().all(|ch| ch.is_numeric()) {
+                Some(normalized)
+            } else if normalized.chars().count() < MIN_MEANINGFUL_TERM_LEN {
                 None
             } else {
                 Some(normalized)
             }
         })
         .collect()
+}
+
+fn is_stopword_for_draft_grounding_inspection(term: &str) -> bool {
+    matches!(
+        term,
+        "the" | "and" | "or" | "of" | "to" | "in" | "a" | "an" | "is" | "are" | "was" | "were" | "with" | "for" | "on" | "by" | "as" | "at" | "from" | "this" | "that"
+    )
 }
 
 fn locator_preview(locator: &CitationLocator) -> String {
@@ -2237,6 +2252,17 @@ fn main() {
         assert!(preview.no_persistence);
         assert!(preview.no_llm_call);
         assert!(preview.no_runtime_execution);
+    }
+
+    #[test]
+    fn scholar_chat_draft_grounding_inspection_drops_stopwords_and_short_noise_terms() {
+        let terms = inspection_terms("the and of to in a an is are was were with for on by as at from this that 12 alpha 2024 x y");
+        assert!(!terms.contains("the"));
+        assert!(!terms.contains("and"));
+        assert!(!terms.contains("x"));
+        assert!(terms.contains("12"));
+        assert!(terms.contains("2024"));
+        assert!(terms.contains("alpha"));
     }
 
     #[test]
@@ -3199,6 +3225,90 @@ fn main() {
             .warnings
             .iter()
             .any(|warning| warning.message.contains("Model knowledge is not used in this preview")));
+        assert_draft_grounding_inspection_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_draft_grounding_inspection_marks_single_meaningful_overlap_as_weakly_supported() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = preview_scholar_chat_draft_grounding_inspection(
+            temp.path(),
+            ScholarChatDraftGroundingInspectionRequest {
+                scholar_chat_request: ScholarChatRequest {
+                    prompt: "alpha beta grounded evidence".to_string(),
+                    mode: ScholarChatMode::LectureLearning,
+                    grounding_policy: GroundingPolicy::LocalFirst,
+                    selected_source_ids: vec![source_id],
+                },
+                draft_text: Some("The alpha.".to_string()),
+                max_items: Some(4),
+            },
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatDraftGroundingInspectionStatus::Inspected);
+        assert_eq!(result.items.len(), 1);
+        assert_eq!(result.supported_item_count, 0);
+        assert_eq!(result.weakly_supported_item_count, 1);
+        assert_eq!(result.unsupported_item_count, 0);
+        assert_eq!(result.items[0].support_status, ScholarChatDraftGroundingSupportStatus::WeaklySupported);
+        assert_eq!(result.items[0].matched_evidence_count, 1);
+        assert_draft_grounding_inspection_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_draft_grounding_inspection_requires_two_meaningful_terms_for_supported_overlap() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = preview_scholar_chat_draft_grounding_inspection(
+            temp.path(),
+            ScholarChatDraftGroundingInspectionRequest {
+                scholar_chat_request: ScholarChatRequest {
+                    prompt: "alpha beta grounded evidence".to_string(),
+                    mode: ScholarChatMode::LectureLearning,
+                    grounding_policy: GroundingPolicy::LocalFirst,
+                    selected_source_ids: vec![source_id],
+                },
+                draft_text: Some("The alpha beta.".to_string()),
+                max_items: Some(4),
+            },
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatDraftGroundingInspectionStatus::Inspected);
+        assert_eq!(result.items.len(), 1);
+        assert_eq!(result.supported_item_count, 1);
+        assert_eq!(result.weakly_supported_item_count, 0);
+        assert_eq!(result.unsupported_item_count, 0);
+        assert_eq!(result.items[0].support_status, ScholarChatDraftGroundingSupportStatus::SupportedByLocalEvidence);
+        assert!(result.items[0].matched_evidence_count >= 1);
+        assert_draft_grounding_inspection_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_draft_grounding_inspection_leaves_unrelated_items_unsupported() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = preview_scholar_chat_draft_grounding_inspection(
+            temp.path(),
+            ScholarChatDraftGroundingInspectionRequest {
+                scholar_chat_request: ScholarChatRequest {
+                    prompt: "alpha beta grounded evidence".to_string(),
+                    mode: ScholarChatMode::LectureLearning,
+                    grounding_policy: GroundingPolicy::LocalFirst,
+                    selected_source_ids: vec![source_id],
+                },
+                draft_text: Some("Zeta kappa.".to_string()),
+                max_items: Some(4),
+            },
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatDraftGroundingInspectionStatus::Inspected);
+        assert_eq!(result.items.len(), 1);
+        assert_eq!(result.supported_item_count, 0);
+        assert_eq!(result.weakly_supported_item_count, 0);
+        assert_eq!(result.unsupported_item_count, 1);
+        assert_eq!(result.items[0].support_status, ScholarChatDraftGroundingSupportStatus::Unsupported);
+        assert_eq!(result.items[0].matched_evidence_count, 0);
         assert_draft_grounding_inspection_boundary_fields(&result);
     }
 }

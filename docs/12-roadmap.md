@@ -1104,6 +1104,24 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 76.2 — Draft Grounding Inspection Term Filter
+
+Phase 76.2 tightens the lexical term filter used only by draft grounding inspection so short noise terms and common stopwords do not overstate support.
+This is inspection-only lexical hardening and does not add truth verification, grounded-answer generation, final-answer generation, or any other broader product behavior.
+
+Do not implement:
+
+- grounded answer generation
+- final answer generation
+- Evidence Pack building
+- runtime execution changes
+- LLM calls outside preview
+- chat history persistence
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
