@@ -356,6 +356,35 @@ type ScholarChatDraftGroundingInspectionPreview = {
   warnings: ScholarChatDraftGroundingInspectionWarning[];
 };
 
+type ScholarChatGroundedDraftReadinessStatus =
+  | "blocked"
+  | "needs_review"
+  | "ready_for_grounded_draft_later";
+
+type ScholarChatGroundedDraftReadinessPreview = {
+  status: ScholarChatGroundedDraftReadinessStatus;
+  inspection_status: ScholarChatDraftGroundingInspectionStatus;
+  normalized_prompt: string;
+  selected_source_count: number;
+  evidence_candidate_count: number;
+  inspected_item_count: number;
+  supported_item_count: number;
+  weakly_supported_item_count: number;
+  unsupported_item_count: number;
+  summary: string;
+  preview_only: boolean;
+  not_grounded_answer: boolean;
+  not_final_answer: boolean;
+  no_answer_artifact_created: boolean;
+  no_evidence_pack_built: boolean;
+  no_persistence: boolean;
+  no_llm_call: boolean;
+  no_runtime_execution: boolean;
+  blockers: ScholarChatDraftGroundingInspectionBlocker[];
+  warnings: ScholarChatDraftGroundingInspectionWarning[];
+  next_required_actions: string[];
+};
+
 type LocalModelRuntimeKind = "llama_cpp" | "none";
 
 type LocalModelRuntimeHealthStatus =
@@ -952,6 +981,11 @@ export default function App() {
   const [scholarChatDraftGroundingInspectionValidationError, setScholarChatDraftGroundingInspectionValidationError] = createSignal<string | null>(null);
   const [scholarChatDraftGroundingInspectionLoading, setScholarChatDraftGroundingInspectionLoading] = createSignal(false);
   const [scholarChatDraftGroundingInspectionHasRun, setScholarChatDraftGroundingInspectionHasRun] = createSignal(false);
+  const [scholarChatGroundedDraftReadinessPreview, setScholarChatGroundedDraftReadinessPreview] = createSignal<ScholarChatGroundedDraftReadinessPreview | null>(null);
+  const [scholarChatGroundedDraftReadinessError, setScholarChatGroundedDraftReadinessError] = createSignal<string | null>(null);
+  const [scholarChatGroundedDraftReadinessValidationError, setScholarChatGroundedDraftReadinessValidationError] = createSignal<string | null>(null);
+  const [scholarChatGroundedDraftReadinessLoading, setScholarChatGroundedDraftReadinessLoading] = createSignal(false);
+  const [scholarChatGroundedDraftReadinessHasRun, setScholarChatGroundedDraftReadinessHasRun] = createSignal(false);
   const [localRuntimeKind, setLocalRuntimeKind] = createSignal<LocalModelRuntimeKind>("none");
   const [localRuntimeModelPath, setLocalRuntimeModelPath] = createSignal("");
   const [localRuntimeExecutablePath, setLocalRuntimeExecutablePath] = createSignal("");
@@ -1528,6 +1562,10 @@ export default function App() {
     setScholarChatDraftGroundingInspectionError(null);
     setScholarChatDraftGroundingInspectionValidationError(null);
     setScholarChatDraftGroundingInspectionHasRun(false);
+    setScholarChatGroundedDraftReadinessPreview(null);
+    setScholarChatGroundedDraftReadinessError(null);
+    setScholarChatGroundedDraftReadinessValidationError(null);
+    setScholarChatGroundedDraftReadinessHasRun(false);
   }
 
   function normalizeOptionalTextInput(value: string) {
@@ -1990,6 +2028,45 @@ export default function App() {
       setScholarChatDraftGroundingInspectionError(sanitizeBackendError(err));
     } finally {
       setScholarChatDraftGroundingInspectionLoading(false);
+    }
+  }
+
+  async function previewScholarChatGroundedDraftReadiness() {
+    const trimmedPrompt = scholarChatPrompt().trim();
+    if (!trimmedPrompt) {
+      setScholarChatGroundedDraftReadinessPreview(null);
+      setScholarChatGroundedDraftReadinessError(null);
+      setScholarChatGroundedDraftReadinessValidationError("Prompt is required to preview grounded draft readiness.");
+      return;
+    }
+    if (scholarChatGroundedDraftReadinessLoading()) {
+      return;
+    }
+
+    setScholarChatGroundedDraftReadinessHasRun(true);
+    setScholarChatGroundedDraftReadinessLoading(true);
+    setScholarChatGroundedDraftReadinessError(null);
+    setScholarChatGroundedDraftReadinessValidationError(null);
+    setScholarChatGroundedDraftReadinessPreview(null);
+    try {
+      const result = await invoke<ScholarChatGroundedDraftReadinessPreview>("preview_scholar_chat_grounded_draft_readiness", {
+        root: ".",
+        request: {
+          scholar_chat_request: {
+            prompt: trimmedPrompt,
+            mode: scholarChatMode(),
+            grounding_policy: scholarChatGroundingPolicy(),
+            selected_source_ids: selectedScholarChatSourceIds(),
+          },
+          draft_text: scholarChatDraftGroundingInspectionDraftText().trim() ? scholarChatDraftGroundingInspectionDraftText().trim() : null,
+          max_items: 8,
+        } satisfies ScholarChatDraftGroundingInspectionRequest,
+      });
+      setScholarChatGroundedDraftReadinessPreview(result);
+    } catch (err) {
+      setScholarChatGroundedDraftReadinessError(sanitizeBackendError(err));
+    } finally {
+      setScholarChatGroundedDraftReadinessLoading(false);
     }
   }
 
@@ -2936,6 +3013,98 @@ export default function App() {
             )
           ) : (
             <p>No draft grounding inspection preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Grounded draft readiness</h3>
+          <p class="muted">
+            Read-only readiness preview for the current draft grounding inspection text. It summarizes whether the draft looks ready for a future grounded-answer path, but it is not a verified grounded answer, final answer, or Evidence Pack.
+          </p>
+          <p class="muted">{scholarChatSelectedSourceIdsSummary()}</p>
+          <p class="muted">Uses the current Scholar Chat request and the draft text from the inspection card above.</p>
+          <div class="hero-actions">
+            <button onClick={previewScholarChatGroundedDraftReadiness} disabled={scholarChatGroundedDraftReadinessLoading()}>
+              {scholarChatGroundedDraftReadinessLoading() ? "Previewing..." : "Preview grounded draft readiness"}
+            </button>
+          </div>
+          <p class="muted">Readiness only — not a verified grounded answer. No Evidence Pack, grounded answer, or final answer was created.</p>
+          {scholarChatGroundedDraftReadinessValidationError() && <p class="error">{scholarChatGroundedDraftReadinessValidationError()}</p>}
+          {scholarChatGroundedDraftReadinessError() && <p class="error">{scholarChatGroundedDraftReadinessError()}</p>}
+          {scholarChatGroundedDraftReadinessLoading() ? (
+            <p>Previewing grounded draft readiness...</p>
+          ) : scholarChatGroundedDraftReadinessHasRun() ? (
+            scholarChatGroundedDraftReadinessPreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(scholarChatGroundedDraftReadinessPreview()!.status) },
+                  { label: "Inspection status", value: formatSnakeCaseLabel(scholarChatGroundedDraftReadinessPreview()!.inspection_status) },
+                  { label: "Selected sources", value: scholarChatGroundedDraftReadinessPreview()!.selected_source_count },
+                  { label: "Evidence candidates", value: scholarChatGroundedDraftReadinessPreview()!.evidence_candidate_count },
+                  { label: "Inspected items", value: scholarChatGroundedDraftReadinessPreview()!.inspected_item_count },
+                  { label: "Supported items", value: scholarChatGroundedDraftReadinessPreview()!.supported_item_count },
+                  { label: "Weakly supported items", value: scholarChatGroundedDraftReadinessPreview()!.weakly_supported_item_count },
+                  { label: "Unsupported items", value: scholarChatGroundedDraftReadinessPreview()!.unsupported_item_count },
+                ])}
+                <p><strong>Prompt:</strong> {scholarChatGroundedDraftReadinessPreview()!.normalized_prompt}</p>
+                <p>{scholarChatGroundedDraftReadinessPreview()!.summary}</p>
+                <div class="contract-meta">
+                  <div><span>Preview only</span><strong>{scholarChatGroundedDraftReadinessPreview()!.preview_only ? "yes" : "no"}</strong></div>
+                  <div><span>Not grounded answer</span><strong>{scholarChatGroundedDraftReadinessPreview()!.not_grounded_answer ? "yes" : "no"}</strong></div>
+                  <div><span>Not final answer</span><strong>{scholarChatGroundedDraftReadinessPreview()!.not_final_answer ? "yes" : "no"}</strong></div>
+                  <div><span>No answer artifact created</span><strong>{scholarChatGroundedDraftReadinessPreview()!.no_answer_artifact_created ? "yes" : "no"}</strong></div>
+                  <div><span>No Evidence Pack built</span><strong>{scholarChatGroundedDraftReadinessPreview()!.no_evidence_pack_built ? "yes" : "no"}</strong></div>
+                  <div><span>No persistence</span><strong>{scholarChatGroundedDraftReadinessPreview()!.no_persistence ? "yes" : "no"}</strong></div>
+                  <div><span>No LLM call</span><strong>{scholarChatGroundedDraftReadinessPreview()!.no_llm_call ? "yes" : "no"}</strong></div>
+                  <div><span>No runtime execution</span><strong>{scholarChatGroundedDraftReadinessPreview()!.no_runtime_execution ? "yes" : "no"}</strong></div>
+                </div>
+                {scholarChatGroundedDraftReadinessPreview()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {scholarChatGroundedDraftReadinessPreview()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No grounded draft readiness blockers.</p>
+                )}
+                {scholarChatGroundedDraftReadinessPreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {scholarChatGroundedDraftReadinessPreview()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No grounded draft readiness warnings.</p>
+                )}
+                {scholarChatGroundedDraftReadinessPreview()!.next_required_actions.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Next required actions</h4>
+                    <ul>
+                      {scholarChatGroundedDraftReadinessPreview()!.next_required_actions.map((action) => (
+                        <li>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No next required actions.</p>
+                )}
+              </>
+            ) : (
+              <p>No grounded draft readiness preview loaded yet.</p>
+            )
+          ) : (
+            <p>No grounded draft readiness preview loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">
