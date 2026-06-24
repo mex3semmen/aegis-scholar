@@ -2775,6 +2775,17 @@ export default function App() {
                   <div class="artifact-overview">
                     <h4>Runtime stdout diagnostic</h4>
                     <pre>{scholarChatDraftInferencePreview()!.stdout_preview}</pre>
+                    <div class="hero-actions">
+                      <button
+                        onClick={() => {
+                          setScholarChatDraftGroundingInspectionDraftText(scholarChatDraftInferencePreview()!.stdout_preview);
+                          clearScholarChatDraftGroundingInspectionPreview();
+                        }}
+                      >
+                        Use stdout for grounding inspection
+                      </button>
+                    </div>
+                    <p class="muted">Runtime stdout remains diagnostic draft text, not a verified answer.</p>
                   </div>
                 ) : (
                   <p>No runtime stdout preview.</p>
