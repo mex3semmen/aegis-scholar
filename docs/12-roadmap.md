@@ -723,6 +723,26 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 60 — Evidence Pack Listing Command
+
+Backend read-only listing surface.
+
+Phase 60.0 adds `list_evidence_packs` for an existing source and returns compact metadata only.
+It is deterministic, path-free, non-mutating, and does not add generation, editing, import, repair, share/upload/download, or report-writing/export-writing workflows.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
