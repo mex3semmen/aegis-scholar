@@ -230,6 +230,72 @@ type ScholarChatAnswerReadinessPreview = {
   next_required_actions: string[];
 };
 
+type ScholarChatDraftInferenceStatus =
+  | "blocked"
+  | "needs_sources"
+  | "needs_evidence"
+  | "needs_runtime_config"
+  | "needs_execution_consent"
+  | "inference_succeeded"
+  | "inference_failed"
+  | "timed_out";
+
+type ScholarChatDraftOutputClassification =
+  | "blocked"
+  | "ungrounded_model_draft"
+  | "source_context_draft"
+  | "grounded_draft_candidate";
+
+type ScholarChatDraftInferenceBlocker = {
+  kind: string;
+  message: string;
+};
+
+type ScholarChatDraftInferenceWarning = {
+  kind: string;
+  message: string;
+};
+
+type ScholarChatDraftInferenceRequest = {
+  scholar_chat_request: ScholarChatRequest;
+  runtime_config: LocalModelRuntimeConfig;
+  allow_model_execution: boolean;
+  timeout_ms: number | null;
+  max_output_tokens: number | null;
+};
+
+type ScholarChatDraftInferencePreview = {
+  status: ScholarChatDraftInferenceStatus;
+  output_classification: ScholarChatDraftOutputClassification;
+  normalized_prompt: string;
+  mode: ScholarChatMode;
+  grounding_policy: GroundingPolicy;
+  selected_source_count: number;
+  retrieval_candidate_count: number;
+  evidence_candidate_count: number;
+  prompt_pack_section_count: number;
+  prompt_char_count: number;
+  runtime_health_status: LocalModelRuntimeHealthStatus;
+  invocation_plan_status: LocalRuntimeInvocationPlanStatus;
+  allow_model_execution: boolean;
+  execution_attempted: boolean;
+  safe_model_file_name: string | null;
+  safe_executable_file_name: string | null;
+  stdout_preview: string;
+  stderr_preview: string;
+  duration_ms: number;
+  exit_code: number | null;
+  draft_only: boolean;
+  preview_only: boolean;
+  not_final_answer: boolean;
+  not_grounded_answer: boolean;
+  no_answer_artifact_created: boolean;
+  no_evidence_pack_built: boolean;
+  no_persistence: boolean;
+  blockers: ScholarChatDraftInferenceBlocker[];
+  warnings: ScholarChatDraftInferenceWarning[];
+};
+
 type LocalModelRuntimeKind = "llama_cpp" | "none";
 
 type LocalModelRuntimeHealthStatus =
@@ -807,6 +873,11 @@ export default function App() {
   const [scholarChatAnswerReadinessValidationError, setScholarChatAnswerReadinessValidationError] = createSignal<string | null>(null);
   const [scholarChatAnswerReadinessLoading, setScholarChatAnswerReadinessLoading] = createSignal(false);
   const [scholarChatAnswerReadinessHasRun, setScholarChatAnswerReadinessHasRun] = createSignal(false);
+  const [scholarChatDraftInferencePreview, setScholarChatDraftInferencePreview] = createSignal<ScholarChatDraftInferencePreview | null>(null);
+  const [scholarChatDraftInferenceError, setScholarChatDraftInferenceError] = createSignal<string | null>(null);
+  const [scholarChatDraftInferenceValidationError, setScholarChatDraftInferenceValidationError] = createSignal<string | null>(null);
+  const [scholarChatDraftInferenceLoading, setScholarChatDraftInferenceLoading] = createSignal(false);
+  const [scholarChatDraftInferenceHasRun, setScholarChatDraftInferenceHasRun] = createSignal(false);
   const [localRuntimeKind, setLocalRuntimeKind] = createSignal<LocalModelRuntimeKind>("none");
   const [localRuntimeModelPath, setLocalRuntimeModelPath] = createSignal("");
   const [localRuntimeExecutablePath, setLocalRuntimeExecutablePath] = createSignal("");
@@ -963,6 +1034,7 @@ export default function App() {
       setRetrievalSearchHasRun(false);
       setRetrievalSearchError(null);
       setRetrievalSearchValidationError(null);
+      clearScholarChatDraftInferencePreview();
     } catch (err) {
       if (!preserveSelection) {
         setRetrievalSearchSourceId("");
@@ -999,6 +1071,7 @@ export default function App() {
       if (!preserveSelection) {
         setScholarChatSourceContextTouched(false);
       }
+      clearScholarChatDraftInferencePreview();
     } catch (err) {
       if (!preserveSelection) {
         setScholarChatSourceContext([]);
@@ -1061,6 +1134,7 @@ export default function App() {
     setRetrievalSearchHasRun(false);
     setRetrievalSearchError(null);
     setRetrievalSearchValidationError(null);
+    clearScholarChatDraftInferencePreview();
   }
 
   async function loadArtifactSources(preserveExisting = false) {
@@ -1074,6 +1148,7 @@ export default function App() {
         root: ".",
       });
       setArtifactSources(result);
+      clearScholarChatDraftInferencePreview();
     } catch (err) {
       if (!preserveExisting) {
         setArtifactSources([]);
@@ -1235,6 +1310,7 @@ export default function App() {
     setFinalAnswerId("");
     setFinalAnswer(null);
     setFinalAnswerError(null);
+    clearScholarChatDraftInferencePreview();
     await loadArtifactOverviewBySourceId(item.source_id);
   }
 
@@ -1312,6 +1388,7 @@ export default function App() {
     setScholarChatPromptPackError(null);
     setScholarChatPromptPackHasRun(false);
     clearScholarChatAnswerReadinessPreview();
+    clearScholarChatDraftInferencePreview();
     clearLocalRuntimeInvocationPreview();
   }
 
@@ -1320,6 +1397,7 @@ export default function App() {
     setScholarChatPromptPackError(null);
     setScholarChatPromptPackHasRun(false);
     clearScholarChatAnswerReadinessPreview();
+    clearScholarChatDraftInferencePreview();
     clearLocalRuntimeInvocationPreview();
   }
 
@@ -1329,6 +1407,7 @@ export default function App() {
     setLocalRuntimeValidationError(null);
     setLocalRuntimeHasRun(false);
     clearScholarChatAnswerReadinessPreview();
+    clearScholarChatDraftInferencePreview();
   }
 
   function clearLocalRuntimeInvocationPreview() {
@@ -1336,6 +1415,7 @@ export default function App() {
     setLocalRuntimeInvocationError(null);
     setLocalRuntimeInvocationValidationError(null);
     setLocalRuntimeInvocationHasRun(false);
+    clearScholarChatDraftInferencePreview();
   }
 
   function clearLocalRuntimeProbePreview() {
@@ -1343,6 +1423,7 @@ export default function App() {
     setLocalRuntimeProbeError(null);
     setLocalRuntimeProbeValidationError(null);
     setLocalRuntimeProbeHasRun(false);
+    clearScholarChatDraftInferencePreview();
   }
 
   function clearLocalRuntimeSmokePreview() {
@@ -1357,6 +1438,14 @@ export default function App() {
     setScholarChatAnswerReadinessError(null);
     setScholarChatAnswerReadinessValidationError(null);
     setScholarChatAnswerReadinessHasRun(false);
+    clearScholarChatDraftInferencePreview();
+  }
+
+  function clearScholarChatDraftInferencePreview() {
+    setScholarChatDraftInferencePreview(null);
+    setScholarChatDraftInferenceError(null);
+    setScholarChatDraftInferenceValidationError(null);
+    setScholarChatDraftInferenceHasRun(false);
   }
 
   function normalizeOptionalTextInput(value: string) {
@@ -1716,6 +1805,69 @@ export default function App() {
     }
   }
 
+  async function previewScholarChatDraftInference() {
+    const trimmedPrompt = scholarChatPrompt().trim();
+    if (!trimmedPrompt) {
+      setScholarChatDraftInferencePreview(null);
+      setScholarChatDraftInferenceError(null);
+      setScholarChatDraftInferenceValidationError("Prompt is required to preview Scholar Chat draft inference.");
+      return;
+    }
+    if (scholarChatDraftInferenceLoading()) {
+      return;
+    }
+    const contextWindow = parseOptionalIntegerInput(localRuntimeContextWindow(), "Context window", setScholarChatDraftInferenceValidationError);
+    const gpuLayers = parseOptionalIntegerInput(localRuntimeGpuLayers(), "GPU layers", setScholarChatDraftInferenceValidationError);
+    const temperature = parseOptionalNumberInput(localRuntimeTemperature(), "Temperature", setScholarChatDraftInferenceValidationError);
+    const timeoutMs = parseOptionalIntegerInput(localRuntimeProbeTimeoutMs(), "Draft inference timeout", setScholarChatDraftInferenceValidationError);
+    const maxOutputTokens = parseOptionalIntegerInput(localRuntimeInvocationMaxOutputTokens(), "Max output tokens", setScholarChatDraftInferenceValidationError);
+    if (
+      contextWindow === undefined ||
+      gpuLayers === undefined ||
+      temperature === undefined ||
+      timeoutMs === undefined ||
+      maxOutputTokens === undefined
+    ) {
+      setScholarChatDraftInferencePreview(null);
+      return;
+    }
+
+    setScholarChatDraftInferenceHasRun(true);
+    setScholarChatDraftInferenceLoading(true);
+    setScholarChatDraftInferenceError(null);
+    setScholarChatDraftInferenceValidationError(null);
+    setScholarChatDraftInferencePreview(null);
+    try {
+      const result = await invoke<ScholarChatDraftInferencePreview>("preview_scholar_chat_draft_inference", {
+        root: ".",
+        request: {
+          scholar_chat_request: {
+            prompt: trimmedPrompt,
+            mode: scholarChatMode(),
+            grounding_policy: scholarChatGroundingPolicy(),
+            selected_source_ids: selectedScholarChatSourceIds(),
+          },
+          runtime_config: {
+            runtime_kind: localRuntimeKind(),
+            model_path: normalizeOptionalTextInput(localRuntimeModelPath()),
+            executable_path: normalizeOptionalTextInput(localRuntimeExecutablePath()),
+            context_window: contextWindow,
+            gpu_layers: gpuLayers,
+            temperature: temperature,
+          },
+          allow_model_execution: scholarChatAnswerReadinessAllowModelExecution(),
+          timeout_ms: timeoutMs,
+          max_output_tokens: maxOutputTokens,
+        } satisfies ScholarChatDraftInferenceRequest,
+      });
+      setScholarChatDraftInferencePreview(result);
+    } catch (err) {
+      setScholarChatDraftInferenceError(sanitizeBackendError(err));
+    } finally {
+      setScholarChatDraftInferenceLoading(false);
+    }
+  }
+
   async function previewLocalRuntimeHealth() {
     if (localRuntimeLoading()) {
       return;
@@ -1999,6 +2151,7 @@ export default function App() {
               onChange={(event) => {
                 setScholarChatMode(event.currentTarget.value as ScholarChatMode);
                 clearScholarChatPromptPackPreview();
+                clearScholarChatDraftInferencePreview();
               }}
             >
               {SCHOLAR_CHAT_MODES.map((item) => (
@@ -2013,6 +2166,7 @@ export default function App() {
               onChange={(event) => {
                 setScholarChatGroundingPolicy(event.currentTarget.value as GroundingPolicy);
                 clearScholarChatPromptPackPreview();
+                clearScholarChatDraftInferencePreview();
               }}
             >
               {GROUNDING_POLICIES.map((item) => (
@@ -2067,6 +2221,7 @@ export default function App() {
               setScholarChatPrompt(event.currentTarget.value);
               setScholarChatValidationError(null);
               clearScholarChatPromptPackPreview();
+              clearScholarChatDraftInferencePreview();
             }}
             placeholder="Ask about a lecture, paper, method, or thesis task..."
           />
@@ -2356,6 +2511,7 @@ export default function App() {
                 onChange={(event) => {
                   setScholarChatAnswerReadinessAllowModelExecution(event.currentTarget.checked);
                   clearScholarChatAnswerReadinessPreview();
+                  clearScholarChatDraftInferencePreview();
                 }}
               />
             </label>
@@ -2442,6 +2598,109 @@ export default function App() {
           )}
         </div>
         <div class="artifact-overview">
+          <h3>Draft inference preview</h3>
+          <p class="muted">
+            Read-only preview of the future Scholar Chat draft path. It may run the local model, but it is not a Scholar Chat answer and nothing is persisted.
+          </p>
+          <p class="muted">Uses the same execution consent toggle shown in Answer readiness.</p>
+          <p class="muted">{scholarChatSelectedSourceIdsSummary()}</p>
+          <div class="hero-actions">
+            <button onClick={previewScholarChatDraftInference} disabled={scholarChatDraftInferenceLoading()}>
+              {scholarChatDraftInferenceLoading() ? "Previewing..." : "Run draft inference preview"}
+            </button>
+          </div>
+          <p class="muted">No Scholar Chat answer is generated. No Evidence Pack is built. No final answer is created.</p>
+          {scholarChatDraftInferenceValidationError() && <p class="error">{scholarChatDraftInferenceValidationError()}</p>}
+          {scholarChatDraftInferenceError() && <p class="error">{scholarChatDraftInferenceError()}</p>}
+          {scholarChatDraftInferenceLoading() ? (
+            <p>Running draft inference preview...</p>
+          ) : scholarChatDraftInferenceHasRun() ? (
+            scholarChatDraftInferencePreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(scholarChatDraftInferencePreview()!.status) },
+                  { label: "Output classification", value: formatSnakeCaseLabel(scholarChatDraftInferencePreview()!.output_classification) },
+                  { label: "Mode", value: formatSnakeCaseLabel(scholarChatDraftInferencePreview()!.mode) },
+                  { label: "Grounding policy", value: formatSnakeCaseLabel(scholarChatDraftInferencePreview()!.grounding_policy) },
+                  { label: "Selected sources", value: scholarChatDraftInferencePreview()!.selected_source_count },
+                  { label: "Retrieval candidates", value: scholarChatDraftInferencePreview()!.retrieval_candidate_count },
+                  { label: "Evidence candidates", value: scholarChatDraftInferencePreview()!.evidence_candidate_count },
+                  { label: "Prompt sections", value: scholarChatDraftInferencePreview()!.prompt_pack_section_count },
+                  { label: "Prompt chars", value: scholarChatDraftInferencePreview()!.prompt_char_count },
+                  { label: "Runtime health", value: formatSnakeCaseLabel(scholarChatDraftInferencePreview()!.runtime_health_status) },
+                  { label: "Invocation plan", value: formatSnakeCaseLabel(scholarChatDraftInferencePreview()!.invocation_plan_status) },
+                  { label: "Allow future model execution", value: scholarChatDraftInferencePreview()!.allow_model_execution ? "yes" : "no" },
+                  { label: "Execution attempted", value: scholarChatDraftInferencePreview()!.execution_attempted ? "yes" : "no" },
+                  { label: "Duration ms", value: scholarChatDraftInferencePreview()!.duration_ms },
+                  { label: "Exit code", value: scholarChatDraftInferencePreview()!.exit_code ?? "missing" },
+                  { label: "Draft only", value: scholarChatDraftInferencePreview()!.draft_only ? "yes" : "no" },
+                  { label: "Preview only", value: scholarChatDraftInferencePreview()!.preview_only ? "yes" : "no" },
+                  { label: "Not final answer", value: scholarChatDraftInferencePreview()!.not_final_answer ? "yes" : "no" },
+                  { label: "Not grounded answer", value: scholarChatDraftInferencePreview()!.not_grounded_answer ? "yes" : "no" },
+                  { label: "No answer artifact created", value: scholarChatDraftInferencePreview()!.no_answer_artifact_created ? "yes" : "no" },
+                  { label: "No Evidence Pack built", value: scholarChatDraftInferencePreview()!.no_evidence_pack_built ? "yes" : "no" },
+                  { label: "No persistence", value: scholarChatDraftInferencePreview()!.no_persistence ? "yes" : "no" },
+                ])}
+                <p><strong>Prompt:</strong> {scholarChatDraftInferencePreview()!.normalized_prompt}</p>
+                <div class="contract-meta">
+                  <div><span>Model file</span><strong>{scholarChatDraftInferencePreview()!.safe_model_file_name ?? "not configured"}</strong></div>
+                  <div><span>Executable file</span><strong>{scholarChatDraftInferencePreview()!.safe_executable_file_name ?? "not configured"}</strong></div>
+                </div>
+                {scholarChatDraftInferencePreview()!.stdout_preview ? (
+                  <div class="artifact-overview">
+                    <h4>Runtime stdout</h4>
+                    <pre>{scholarChatDraftInferencePreview()!.stdout_preview}</pre>
+                  </div>
+                ) : (
+                  <p>No runtime stdout preview.</p>
+                )}
+                {scholarChatDraftInferencePreview()!.stderr_preview ? (
+                  <div class="artifact-overview">
+                    <h4>Runtime stderr</h4>
+                    <pre>{scholarChatDraftInferencePreview()!.stderr_preview}</pre>
+                  </div>
+                ) : (
+                  <p>No runtime stderr preview.</p>
+                )}
+                {scholarChatDraftInferencePreview()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {scholarChatDraftInferencePreview()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No draft inference blockers.</p>
+                )}
+                {scholarChatDraftInferencePreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {scholarChatDraftInferencePreview()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No draft inference warnings.</p>
+                )}
+              </>
+            ) : (
+              <p>No Scholar Chat draft inference preview loaded yet.</p>
+            )
+          ) : (
+            <p>No Scholar Chat draft inference preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
           <h3>Local model runtime</h3>
           <p class="muted">
             Read-only local model runtime readiness preview. It only checks configured paths and preview settings; no model is executed, no answer is generated, and nothing is persisted.
@@ -2451,12 +2710,13 @@ export default function App() {
               Runtime kind
               <select
                 value={localRuntimeKind()}
-                onChange={(event) => {
-                  setLocalRuntimeKind(event.currentTarget.value as LocalModelRuntimeKind);
-                  clearLocalRuntimePreview();
-                  clearLocalRuntimeInvocationPreview();
-                  clearLocalRuntimeSmokePreview();
-                }}
+              onChange={(event) => {
+                setLocalRuntimeKind(event.currentTarget.value as LocalModelRuntimeKind);
+                clearLocalRuntimePreview();
+                clearLocalRuntimeInvocationPreview();
+                clearLocalRuntimeSmokePreview();
+                clearScholarChatDraftInferencePreview();
+              }}
               >
                 <option value="none">None</option>
                 <option value="llama_cpp">llama_cpp</option>
@@ -2472,6 +2732,7 @@ export default function App() {
                   clearLocalRuntimePreview();
                   clearLocalRuntimeInvocationPreview();
                   clearLocalRuntimeSmokePreview();
+                  clearScholarChatDraftInferencePreview();
                 }}
                 placeholder="4096"
               />
@@ -2486,6 +2747,7 @@ export default function App() {
                   clearLocalRuntimePreview();
                   clearLocalRuntimeInvocationPreview();
                   clearLocalRuntimeSmokePreview();
+                  clearScholarChatDraftInferencePreview();
                 }}
                 placeholder="0"
               />
@@ -2501,6 +2763,7 @@ export default function App() {
                   clearLocalRuntimePreview();
                   clearLocalRuntimeInvocationPreview();
                   clearLocalRuntimeSmokePreview();
+                  clearScholarChatDraftInferencePreview();
                 }}
                 placeholder="0.7"
               />
@@ -2517,6 +2780,7 @@ export default function App() {
                   clearLocalRuntimePreview();
                   clearLocalRuntimeInvocationPreview();
                   clearLocalRuntimeSmokePreview();
+                  clearScholarChatDraftInferencePreview();
                 }}
                 placeholder="E:\\models\\scholar.gguf"
               />
@@ -2532,6 +2796,7 @@ export default function App() {
                   clearLocalRuntimeInvocationPreview();
                   clearLocalRuntimeProbePreview();
                   clearLocalRuntimeSmokePreview();
+                  clearScholarChatDraftInferencePreview();
                 }}
                 placeholder="E:\\bin\\llama-server.exe"
               />
@@ -2600,6 +2865,7 @@ export default function App() {
                 onInput={(event) => {
                   setLocalRuntimeInvocationMaxOutputTokens(event.currentTarget.value);
                   clearLocalRuntimeInvocationPreview();
+                  clearScholarChatDraftInferencePreview();
                 }}
                 placeholder="1024"
               />
@@ -2729,6 +2995,7 @@ export default function App() {
                 onInput={(event) => {
                   setLocalRuntimeProbeTimeoutMs(event.currentTarget.value);
                   clearLocalRuntimeProbePreview();
+                  clearScholarChatDraftInferencePreview();
                 }}
                 placeholder="1500"
               />
@@ -2962,12 +3229,15 @@ export default function App() {
         <div class="form-row">
           <label>
             Source ID
-            <input
-              type="text"
-              value={sourceId()}
-              onInput={(event) => setSourceId(event.currentTarget.value)}
-              placeholder="src_..."
-            />
+              <input
+                type="text"
+                value={sourceId()}
+                onInput={(event) => {
+                  setSourceId(event.currentTarget.value);
+                  clearScholarChatDraftInferencePreview();
+                }}
+                placeholder="src_..."
+              />
           </label>
           <label>
             Final answer ID

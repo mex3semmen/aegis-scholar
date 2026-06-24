@@ -4,10 +4,13 @@ use crate::retrieval::{RetrievalResponse, RetrievalService};
 use crate::local_runtime::{
     preview_local_model_runtime_health,
     preview_local_runtime_invocation_plan,
+    smoke_test_local_runtime_inference,
     LocalModelRuntimeConfig,
     LocalModelRuntimeHealthStatus,
     LocalRuntimeInvocationPlanRequest,
     LocalRuntimeInvocationPlanStatus,
+    LocalRuntimeSmokeInferenceRequest,
+    LocalRuntimeSmokeInferenceStatus,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -256,6 +259,82 @@ pub struct ScholarChatAnswerReadinessPreview {
     pub blockers: Vec<ScholarChatAnswerReadinessBlocker>,
     pub warnings: Vec<ScholarChatAnswerReadinessWarning>,
     pub next_required_actions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatDraftInferenceStatus {
+    Blocked,
+    NeedsSources,
+    NeedsEvidence,
+    NeedsRuntimeConfig,
+    NeedsExecutionConsent,
+    InferenceSucceeded,
+    InferenceFailed,
+    TimedOut,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatDraftOutputClassification {
+    Blocked,
+    UngroundedModelDraft,
+    SourceContextDraft,
+    GroundedDraftCandidate,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatDraftInferenceBlocker {
+    pub kind: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatDraftInferenceWarning {
+    pub kind: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ScholarChatDraftInferenceRequest {
+    pub scholar_chat_request: ScholarChatRequest,
+    pub runtime_config: LocalModelRuntimeConfig,
+    pub allow_model_execution: bool,
+    pub timeout_ms: Option<u64>,
+    pub max_output_tokens: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ScholarChatDraftInferencePreview {
+    pub status: ScholarChatDraftInferenceStatus,
+    pub output_classification: ScholarChatDraftOutputClassification,
+    pub normalized_prompt: String,
+    pub mode: ScholarChatMode,
+    pub grounding_policy: GroundingPolicy,
+    pub selected_source_count: usize,
+    pub retrieval_candidate_count: usize,
+    pub evidence_candidate_count: usize,
+    pub prompt_pack_section_count: usize,
+    pub prompt_char_count: usize,
+    pub runtime_health_status: LocalModelRuntimeHealthStatus,
+    pub invocation_plan_status: LocalRuntimeInvocationPlanStatus,
+    pub allow_model_execution: bool,
+    pub execution_attempted: bool,
+    pub safe_model_file_name: Option<String>,
+    pub safe_executable_file_name: Option<String>,
+    pub stdout_preview: String,
+    pub stderr_preview: String,
+    pub duration_ms: u64,
+    pub exit_code: Option<i32>,
+    pub draft_only: bool,
+    pub preview_only: bool,
+    pub not_final_answer: bool,
+    pub not_grounded_answer: bool,
+    pub no_answer_artifact_created: bool,
+    pub no_evidence_pack_built: bool,
+    pub no_persistence: bool,
+    pub blockers: Vec<ScholarChatDraftInferenceBlocker>,
+    pub warnings: Vec<ScholarChatDraftInferenceWarning>,
 }
 
 enum ScholarChatPreviewKind {
@@ -605,6 +684,299 @@ pub fn preview_scholar_chat_answer_readiness(
         warnings,
         next_required_actions,
     })
+}
+
+pub fn preview_scholar_chat_draft_inference(
+    root: impl Into<PathBuf>,
+    request: ScholarChatDraftInferenceRequest,
+) -> AegisResult<ScholarChatDraftInferencePreview> {
+    let root = root.into();
+    let scholar_chat_request = request.scholar_chat_request;
+    let readiness_preview = preview_scholar_chat_answer_readiness(
+        &root,
+        ScholarChatAnswerReadinessRequest {
+            scholar_chat_request: scholar_chat_request.clone(),
+            runtime_config: request.runtime_config.clone(),
+            allow_model_execution: request.allow_model_execution,
+        },
+    )?;
+    let prompt_pack_preview = preview_scholar_chat_prompt_pack(&root, scholar_chat_request.clone())?;
+    let prompt_pack_text = render_prompt_pack_for_runtime(&prompt_pack_preview.prompt_pack);
+    let invocation_plan_preview = preview_local_runtime_invocation_plan(
+        &root,
+        LocalRuntimeInvocationPlanRequest {
+            runtime_config: request.runtime_config.clone(),
+            prompt_text: Some(prompt_pack_text.clone()),
+            estimated_input_char_count: Some(prompt_pack_text.chars().count() as u32),
+            max_output_tokens: request.max_output_tokens,
+            stop_sequences: None,
+        },
+    )?;
+
+    let evidence_candidate_count = readiness_preview.evidence_candidate_count;
+    let runtime_health_status = invocation_plan_preview.plan.runtime_health_status.clone();
+    let invocation_plan_status = invocation_plan_preview.status.clone();
+    let runtime_ready = matches!(runtime_health_status, LocalModelRuntimeHealthStatus::ReadyToTestLater);
+    let invocation_ready = matches!(invocation_plan_status, LocalRuntimeInvocationPlanStatus::ReadyToInvokeLater | LocalRuntimeInvocationPlanStatus::PreviewOnly);
+
+    let mut blockers = Vec::new();
+    let mut warnings = Vec::new();
+
+    for warning in &readiness_preview.warnings {
+        push_draft_warning(
+            &mut warnings,
+            &warning.kind,
+            &warning.message,
+        );
+    }
+    for warning in &prompt_pack_preview.warnings {
+        push_draft_warning(&mut warnings, "prompt_pack_preview", &warning);
+    }
+    for warning in &invocation_plan_preview.plan.warnings {
+        push_draft_warning(&mut warnings, &warning.kind, &warning.message);
+    }
+    for blocker in &invocation_plan_preview.plan.blockers {
+        push_draft_blocker(&mut blockers, &blocker.kind, &blocker.message);
+    }
+
+    if matches!(readiness_preview.grounding_policy, GroundingPolicy::ExternalAdaptersLater) {
+        push_draft_warning(
+            &mut warnings,
+            "external_adapters_unavailable",
+            "External adapters are not implemented yet and are unused in this preview.",
+        );
+    }
+
+    let prompt_ready = readiness_preview.selected_source_count > 0
+        || matches!(readiness_preview.grounding_policy, GroundingPolicy::AllowMarkedModelKnowledge);
+    let can_run_draft = request.allow_model_execution
+        && runtime_ready
+        && invocation_ready
+        && prompt_ready
+        && !(matches!(readiness_preview.grounding_policy, GroundingPolicy::LocalOnly) && evidence_candidate_count == 0);
+
+    if !request.allow_model_execution {
+        push_draft_blocker(
+            &mut blockers,
+            "needs_execution_consent",
+            "Future model execution is not allowed yet.",
+        );
+        push_draft_warning(
+            &mut warnings,
+            "execution_consent_required",
+            "Draft inference preview will not run the local model until execution consent is granted.",
+        );
+    } else if !runtime_ready {
+        push_draft_blocker(
+            &mut blockers,
+            "needs_runtime_config",
+            "The local runtime configuration is not ready yet.",
+        );
+    } else if !prompt_ready {
+        push_draft_blocker(
+            &mut blockers,
+            "needs_sources",
+            "Selected sources are required before a local draft can be prepared.",
+        );
+    } else if matches!(readiness_preview.grounding_policy, GroundingPolicy::LocalOnly) && evidence_candidate_count == 0 {
+        push_draft_blocker(
+            &mut blockers,
+            "needs_evidence",
+            "local_only requires local evidence candidates before draft inference can proceed.",
+        );
+        push_draft_warning(
+            &mut warnings,
+            "evidence_required",
+            "No local evidence candidates are available for a local_only draft preview.",
+        );
+    }
+
+    let output_classification = draft_output_classification(&readiness_preview.grounding_policy, !can_run_draft);
+
+    if !can_run_draft {
+        let status = if !request.allow_model_execution {
+            ScholarChatDraftInferenceStatus::NeedsExecutionConsent
+        } else if !runtime_ready {
+            ScholarChatDraftInferenceStatus::NeedsRuntimeConfig
+        } else if !prompt_ready {
+            ScholarChatDraftInferenceStatus::NeedsSources
+        } else if matches!(readiness_preview.grounding_policy, GroundingPolicy::LocalOnly) && evidence_candidate_count == 0 {
+            ScholarChatDraftInferenceStatus::NeedsEvidence
+        } else {
+            ScholarChatDraftInferenceStatus::Blocked
+        };
+        return Ok(build_draft_inference_preview(
+            readiness_preview,
+            prompt_pack_preview.prompt_pack.section_count,
+            prompt_pack_text,
+            runtime_health_status,
+            invocation_plan_status,
+            status,
+            output_classification,
+            request.allow_model_execution,
+            false,
+            invocation_plan_preview.plan.safe_model_file_name,
+            invocation_plan_preview.plan.safe_executable_file_name,
+            String::new(),
+            String::new(),
+            0,
+            None,
+            blockers,
+            warnings,
+        ));
+    }
+
+    let smoke_result = smoke_test_local_runtime_inference(
+        &root,
+        LocalRuntimeSmokeInferenceRequest {
+            runtime_config: request.runtime_config,
+            allow_execution: true,
+            prompt: Some(prompt_pack_text.clone()),
+            timeout_ms: request.timeout_ms,
+            max_output_tokens: request.max_output_tokens,
+        },
+    )?;
+    for warning in smoke_result.warnings.iter() {
+        push_draft_warning(&mut warnings, &warning.kind, &warning.message);
+    }
+    for blocker in smoke_result.blockers.iter() {
+        push_draft_blocker(&mut blockers, &blocker.kind, &blocker.message);
+    }
+
+    let status = match smoke_result.status {
+        LocalRuntimeSmokeInferenceStatus::InferenceSucceeded => ScholarChatDraftInferenceStatus::InferenceSucceeded,
+        LocalRuntimeSmokeInferenceStatus::InferenceFailed => ScholarChatDraftInferenceStatus::InferenceFailed,
+        LocalRuntimeSmokeInferenceStatus::TimedOut => ScholarChatDraftInferenceStatus::TimedOut,
+        LocalRuntimeSmokeInferenceStatus::Blocked => ScholarChatDraftInferenceStatus::Blocked,
+        LocalRuntimeSmokeInferenceStatus::NotConfigured
+        | LocalRuntimeSmokeInferenceStatus::ModelMissing
+        | LocalRuntimeSmokeInferenceStatus::ExecutableMissing => ScholarChatDraftInferenceStatus::NeedsRuntimeConfig,
+    };
+
+    Ok(build_draft_inference_preview(
+        readiness_preview,
+        prompt_pack_preview.prompt_pack.section_count,
+        prompt_pack_text,
+        runtime_health_status,
+        invocation_plan_status,
+        status,
+        output_classification,
+        request.allow_model_execution,
+        smoke_result.execution_attempted,
+        smoke_result.safe_model_file_name,
+        smoke_result.safe_executable_file_name,
+        smoke_result.stdout_preview,
+        smoke_result.stderr_preview,
+        smoke_result.duration_ms,
+        smoke_result.exit_code,
+        blockers,
+        warnings,
+    ))
+}
+
+fn render_prompt_pack_for_runtime(prompt_pack: &ScholarChatPromptPack) -> String {
+    let mut lines = Vec::new();
+    for section in &prompt_pack.sections {
+        lines.push(format!("## {}", section.title));
+        lines.extend(section.lines.iter().cloned());
+        lines.push(String::new());
+    }
+    lines.join("\n").trim().to_string()
+}
+
+fn draft_output_classification(
+    grounding_policy: &GroundingPolicy,
+    blocked: bool,
+) -> ScholarChatDraftOutputClassification {
+    if blocked {
+        return ScholarChatDraftOutputClassification::Blocked;
+    }
+    match grounding_policy {
+        GroundingPolicy::AllowMarkedModelKnowledge => ScholarChatDraftOutputClassification::UngroundedModelDraft,
+        GroundingPolicy::LocalOnly => ScholarChatDraftOutputClassification::GroundedDraftCandidate,
+        GroundingPolicy::LocalFirst | GroundingPolicy::ExternalAdaptersLater => {
+            ScholarChatDraftOutputClassification::SourceContextDraft
+        }
+    }
+}
+
+fn push_draft_warning(
+    warnings: &mut Vec<ScholarChatDraftInferenceWarning>,
+    kind: &str,
+    message: &str,
+) {
+    if !warnings.iter().any(|warning| warning.kind == kind && warning.message == message) {
+        warnings.push(ScholarChatDraftInferenceWarning {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        });
+    }
+}
+
+fn push_draft_blocker(
+    blockers: &mut Vec<ScholarChatDraftInferenceBlocker>,
+    kind: &str,
+    message: &str,
+) {
+    if !blockers.iter().any(|blocker| blocker.kind == kind && blocker.message == message) {
+        blockers.push(ScholarChatDraftInferenceBlocker {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        });
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_draft_inference_preview(
+    readiness_preview: ScholarChatAnswerReadinessPreview,
+    prompt_pack_section_count: usize,
+    prompt_pack_text: String,
+    runtime_health_status: LocalModelRuntimeHealthStatus,
+    invocation_plan_status: LocalRuntimeInvocationPlanStatus,
+    status: ScholarChatDraftInferenceStatus,
+    output_classification: ScholarChatDraftOutputClassification,
+    allow_model_execution: bool,
+    execution_attempted: bool,
+    safe_model_file_name: Option<String>,
+    safe_executable_file_name: Option<String>,
+    stdout_preview: String,
+    stderr_preview: String,
+    duration_ms: u64,
+    exit_code: Option<i32>,
+    blockers: Vec<ScholarChatDraftInferenceBlocker>,
+    warnings: Vec<ScholarChatDraftInferenceWarning>,
+) -> ScholarChatDraftInferencePreview {
+    ScholarChatDraftInferencePreview {
+        status,
+        output_classification,
+        normalized_prompt: readiness_preview.normalized_prompt,
+        mode: readiness_preview.mode,
+        grounding_policy: readiness_preview.grounding_policy,
+        selected_source_count: readiness_preview.selected_source_count,
+        retrieval_candidate_count: readiness_preview.retrieval_candidate_count,
+        evidence_candidate_count: readiness_preview.evidence_candidate_count,
+        prompt_pack_section_count,
+        prompt_char_count: prompt_pack_text.chars().count(),
+        runtime_health_status,
+        invocation_plan_status,
+        allow_model_execution,
+        execution_attempted,
+        safe_model_file_name,
+        safe_executable_file_name,
+        stdout_preview,
+        stderr_preview,
+        duration_ms,
+        exit_code,
+        draft_only: true,
+        preview_only: true,
+        not_final_answer: true,
+        not_grounded_answer: true,
+        no_answer_artifact_created: true,
+        no_evidence_pack_built: true,
+        no_persistence: true,
+        blockers,
+        warnings,
+    }
 }
 
 fn normalized_prompt_or_err(prompt: String) -> AegisResult<String> {
@@ -1038,7 +1410,7 @@ fn validate_source_id(source_id: &str) -> AegisResult<()> {
 mod tests {
     use super::*;
     use crate::local_runtime::LocalModelRuntimeKind;
-    use std::fs;
+    use std::{env, fs, path::PathBuf, process::Command};
 
     fn request(prompt: &str) -> ScholarChatRequest {
         ScholarChatRequest {
@@ -1207,11 +1579,100 @@ mod tests {
         )
     }
 
+    fn smoke_helper_executable(temp: &tempfile::TempDir) -> PathBuf {
+        let source_path = temp.path().join("smoke_helper.rs");
+        let executable_path = temp.path().join(if cfg!(windows) { "smoke_helper.exe" } else { "smoke_helper" });
+        let source = r#"
+use std::{env, thread, time::Duration};
+
+fn prompt_argument(args: &[String]) -> String {
+    args.windows(2)
+        .find(|pair| pair[0] == "-p" || pair[0] == "--prompt")
+        .map(|pair| pair[1].clone())
+        .unwrap_or_default()
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let prompt = prompt_argument(&args);
+    println!("stdout marker");
+    println!("args={}", args.join(" | "));
+    println!("{}", "S".repeat(5000));
+    eprintln!("stderr marker");
+    eprintln!("args={}", args.join(" | "));
+    eprintln!("{}", "E".repeat(5000));
+    if prompt.contains("SLEEP") {
+        thread::sleep(Duration::from_millis(700));
+    }
+    if prompt.contains("FAIL") {
+        std::process::exit(7);
+    }
+}
+"#;
+        fs::write(&source_path, source).unwrap();
+        let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+        let status = Command::new(rustc)
+            .arg("--crate-type")
+            .arg("bin")
+            .arg("--edition")
+            .arg("2021")
+            .arg(&source_path)
+            .arg("-o")
+            .arg(&executable_path)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        executable_path
+    }
+
+    fn build_draft_runtime_fixture(temp: &tempfile::TempDir) -> LocalModelRuntimeConfig {
+        let model_path = temp.path().join("draft-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let executable_path = smoke_helper_executable(temp);
+        runtime_config(
+            Some(model_path.to_string_lossy().as_ref()),
+            Some(executable_path.to_string_lossy().as_ref()),
+        )
+    }
+
+    fn draft_inference_request(
+        prompt: &str,
+        grounding_policy: GroundingPolicy,
+        selected_source_ids: Vec<String>,
+        runtime_config: LocalModelRuntimeConfig,
+        allow_model_execution: bool,
+        timeout_ms: Option<u64>,
+        max_output_tokens: Option<u32>,
+    ) -> ScholarChatDraftInferenceRequest {
+        ScholarChatDraftInferenceRequest {
+            scholar_chat_request: ScholarChatRequest {
+                prompt: prompt.to_string(),
+                mode: ScholarChatMode::ThesisWriting,
+                grounding_policy,
+                selected_source_ids,
+            },
+            runtime_config,
+            allow_model_execution,
+            timeout_ms,
+            max_output_tokens,
+        }
+    }
+
     fn assert_readiness_boundary_fields(preview: &ScholarChatAnswerReadinessPreview) {
         assert!(!preview.would_generate_answer_now);
         assert!(!preview.would_build_evidence_pack_now);
         assert!(!preview.would_create_final_answer_now);
         assert!(preview.prompt_pack_ready);
+    }
+
+    fn assert_draft_boundary_fields(preview: &ScholarChatDraftInferencePreview) {
+        assert!(preview.draft_only);
+        assert!(preview.preview_only);
+        assert!(preview.not_final_answer);
+        assert!(preview.not_grounded_answer);
+        assert!(preview.no_answer_artifact_created);
+        assert!(preview.no_evidence_pack_built);
+        assert!(preview.no_persistence);
     }
 
     #[test]
@@ -1677,6 +2138,257 @@ mod tests {
         assert!(first.next_required_actions.iter().any(|action| action.contains("prompt pack")));
         assert_eq!(before_entries, after_entries);
         assert_readiness_boundary_fields(&first);
+        let debug = format!("{first:?}");
+        let json = serde_json::to_string(&first).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+    }
+
+    #[test]
+    fn scholar_chat_draft_inference_rejects_empty_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let runtime_config = build_draft_runtime_fixture(&temp);
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let result = preview_scholar_chat_draft_inference(
+            temp.path(),
+            draft_inference_request(
+                "   ",
+                GroundingPolicy::AllowMarkedModelKnowledge,
+                vec![],
+                runtime_config,
+                true,
+                None,
+                None,
+            ),
+        );
+        assert!(matches!(result, Err(AegisError::ScholarChatPromptEmpty)));
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(before_entries, after_entries);
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_draft_inference_rejects_invalid_source_ids_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        let runtime_config = build_draft_runtime_fixture(&temp);
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        for invalid in ["", " ", "..", "../evil", "evil/source", "evil\\source"] {
+            let result = preview_scholar_chat_draft_inference(
+                temp.path(),
+                draft_inference_request(
+                    "Explain alpha",
+                    GroundingPolicy::AllowMarkedModelKnowledge,
+                    vec![invalid.to_string()],
+                    runtime_config.clone(),
+                    true,
+                    None,
+                    None,
+                ),
+            );
+            assert!(matches!(result, Err(AegisError::ScholarChatInvalidSourceId)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(before_entries, after_entries);
+    }
+
+    #[test]
+    fn scholar_chat_draft_inference_blocks_when_execution_is_disabled() {
+        let temp = tempfile::tempdir().unwrap();
+        let runtime_config = build_draft_runtime_fixture(&temp);
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let response = preview_scholar_chat_draft_inference(
+            temp.path(),
+            draft_inference_request(
+                "Explain alpha",
+                GroundingPolicy::AllowMarkedModelKnowledge,
+                vec![],
+                runtime_config,
+                false,
+                None,
+                None,
+            ),
+        )
+        .unwrap();
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(response.status, ScholarChatDraftInferenceStatus::NeedsExecutionConsent);
+        assert_eq!(response.output_classification, ScholarChatDraftOutputClassification::Blocked);
+        assert!(!response.execution_attempted);
+        assert!(response.blockers.iter().any(|blocker| blocker.kind == "needs_execution_consent"));
+        assert_eq!(before_entries, after_entries);
+        assert_draft_boundary_fields(&response);
+        let debug = format!("{response:?}");
+        let json = serde_json::to_string(&response).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+    }
+
+    #[test]
+    fn scholar_chat_draft_inference_blocks_local_only_without_evidence_candidates() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("note-no-index.md");
+        fs::write(&source_path, "alpha beta\n").unwrap();
+        let authority = crate::corpus_authority::CorpusAuthority::new(temp.path());
+        let source = authority
+            .register_source(
+                &source_path,
+                crate::source_metadata::SourceMetadataInput {
+                    title: "Notes".to_string(),
+                    source_type: crate::source_metadata::SourceType::MarkdownNote,
+                    discipline: "psychology".to_string(),
+                    subdiscipline: Some("statistics".to_string()),
+                    language: "en".to_string(),
+                    tags: vec!["study".to_string()],
+                    reliability_notes: None,
+                },
+            )
+            .unwrap();
+        crate::extraction::ExtractionService::new(temp.path())
+            .extract_source(&source.source_id)
+            .unwrap();
+        crate::chunking::ChunkingService::new(temp.path())
+            .chunk_source(&source.source_id)
+            .unwrap();
+        let runtime_config = build_draft_runtime_fixture(&temp);
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let response = preview_scholar_chat_draft_inference(
+            temp.path(),
+            draft_inference_request(
+                "Explain alpha",
+                GroundingPolicy::LocalOnly,
+                vec![source.source_id.clone()],
+                runtime_config,
+                true,
+                None,
+                None,
+            ),
+        )
+        .unwrap();
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(response.status, ScholarChatDraftInferenceStatus::NeedsEvidence);
+        assert_eq!(response.output_classification, ScholarChatDraftOutputClassification::Blocked);
+        assert!(!response.execution_attempted);
+        assert!(response.blockers.iter().any(|blocker| blocker.kind == "needs_evidence"));
+        assert!(response.warnings.iter().any(|warning| warning.kind == "evidence_required"));
+        assert_eq!(before_entries, after_entries);
+        assert_draft_boundary_fields(&response);
+        let debug = format!("{response:?}");
+        let json = serde_json::to_string(&response).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+    }
+
+    #[test]
+    fn scholar_chat_draft_inference_needs_runtime_config_when_runtime_is_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta\n\nalpha gamma\n");
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let response = preview_scholar_chat_draft_inference(
+            temp.path(),
+            draft_inference_request(
+                "Explain alpha",
+                GroundingPolicy::LocalFirst,
+                vec![source_id.clone()],
+                LocalModelRuntimeConfig {
+                    runtime_kind: LocalModelRuntimeKind::None,
+                    model_path: None,
+                    executable_path: None,
+                    context_window: Some(512),
+                    gpu_layers: Some(0),
+                    temperature: Some(0.0),
+                },
+                true,
+                None,
+                None,
+            ),
+        )
+        .unwrap();
+        assert_eq!(response.status, ScholarChatDraftInferenceStatus::NeedsRuntimeConfig);
+        assert_eq!(response.output_classification, ScholarChatDraftOutputClassification::Blocked);
+        assert!(!response.execution_attempted);
+        assert!(response.blockers.iter().any(|blocker| blocker.kind == "needs_runtime_config"));
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(before_entries, after_entries);
+        assert_draft_boundary_fields(&response);
+        let debug = format!("{response:?}");
+        let json = serde_json::to_string(&response).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+    }
+
+    #[test]
+    fn scholar_chat_draft_inference_reports_missing_model_and_executable_without_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta\n\nalpha gamma\n");
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let response = preview_scholar_chat_draft_inference(
+            temp.path(),
+            draft_inference_request(
+                "Explain alpha",
+                GroundingPolicy::LocalFirst,
+                vec![source_id.clone()],
+                runtime_config(
+                    Some(temp.path().join("missing-model.gguf").to_string_lossy().as_ref()),
+                    Some(temp.path().join("missing-draft-helper.exe").to_string_lossy().as_ref()),
+                ),
+                true,
+                None,
+                None,
+            ),
+        )
+        .unwrap();
+        assert_eq!(response.status, ScholarChatDraftInferenceStatus::NeedsRuntimeConfig);
+        assert_eq!(response.output_classification, ScholarChatDraftOutputClassification::Blocked);
+        assert!(!response.execution_attempted);
+        assert_eq!(response.safe_model_file_name.as_deref(), Some("missing-model.gguf"));
+        assert_eq!(response.safe_executable_file_name.as_deref(), Some("missing-draft-helper.exe"));
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(before_entries, after_entries);
+        assert_draft_boundary_fields(&response);
+        let debug = format!("{response:?}");
+        let json = serde_json::to_string(&response).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+    }
+
+    #[test]
+    fn scholar_chat_draft_inference_is_deterministic_and_path_free() {
+        let temp = tempfile::tempdir().unwrap();
+        let runtime_config = build_draft_runtime_fixture(&temp);
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let request = draft_inference_request(
+            "  Explain alpha  ",
+            GroundingPolicy::AllowMarkedModelKnowledge,
+            vec![],
+            runtime_config,
+            true,
+            None,
+            None,
+        );
+        let first = preview_scholar_chat_draft_inference(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_draft_inference(temp.path(), request).unwrap();
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(first, second);
+        assert_eq!(first.status, ScholarChatDraftInferenceStatus::InferenceSucceeded);
+        assert_eq!(first.output_classification, ScholarChatDraftOutputClassification::UngroundedModelDraft);
+        assert_eq!(first.normalized_prompt, "Explain alpha");
+        assert_eq!(first.mode, ScholarChatMode::ThesisWriting);
+        assert_eq!(first.grounding_policy, GroundingPolicy::AllowMarkedModelKnowledge);
+        assert_eq!(first.selected_source_count, 0);
+        assert_eq!(first.retrieval_candidate_count, 0);
+        assert_eq!(first.evidence_candidate_count, 0);
+        assert!(first.prompt_pack_section_count > 0);
+        assert!(first.execution_attempted);
+        assert_eq!(first.allow_model_execution, true);
+        assert!(first.stdout_preview.contains("stdout marker"));
+        assert!(first.stderr_preview.contains("stderr marker"));
+        assert_draft_boundary_fields(&first);
+        assert_eq!(before_entries, after_entries);
         let debug = format!("{first:?}");
         let json = serde_json::to_string(&first).unwrap();
         let temp_path = temp.path().to_string_lossy();

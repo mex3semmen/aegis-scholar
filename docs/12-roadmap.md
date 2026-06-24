@@ -1034,6 +1034,24 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 75 — Scholar Chat Draft Inference Preview
+
+Phase 75.0 adds a guarded Scholar Chat draft-inference preview using the existing `preview_scholar_chat_draft_inference` command and the Scholar Chat shell UI.
+It may run the local model as a preview, but it remains preview-only and does not create Scholar Chat answers, grounded answers, Evidence Packs, final answers, or persisted artifacts.
+
+Do not implement:
+
+- real Scholar Chat answer generation
+- grounded answer generation
+- Evidence Pack building
+- retrieval execution changes
+- LLM calls outside preview
+- config persistence
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
