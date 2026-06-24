@@ -689,6 +689,23 @@ export default function App() {
     await loadArtifactOverviewBySourceId(item.source_id);
   }
 
+  function answerArtifactSourceTotals() {
+    return artifactSources().reduce(
+      (totals, item) => ({
+        source_count: totals.source_count + 1,
+        draft_count: totals.draft_count + item.draft_count,
+        grounded_answer_count: totals.grounded_answer_count + item.grounded_answer_count,
+        final_answer_count: totals.final_answer_count + item.final_answer_count,
+      }),
+      {
+        source_count: 0,
+        draft_count: 0,
+        grounded_answer_count: 0,
+        final_answer_count: 0,
+      },
+    );
+  }
+
   async function selectArtifactSourceId(source_id: string) {
     setSourceId(source_id);
     await loadArtifactOverviewBySourceId(source_id);
@@ -814,7 +831,16 @@ export default function App() {
         {artifactExportError() && <p class="error">{artifactExportError()}</p>}
         {artifactBundleInspectionError() && <p class="error">{artifactBundleInspectionError()}</p>}
         <div class="artifact-overview">
-          <h3>Sources with artifacts</h3>
+          <h3>Answer artifact sources</h3>
+          <p class="muted">Read-only source index for existing answer artifacts.</p>
+          {artifactSources().length > 0 ? (
+            <div class="contract-meta">
+              <div><span>Sources</span><strong>{answerArtifactSourceTotals().source_count}</strong></div>
+              <div><span>Drafts</span><strong>{answerArtifactSourceTotals().draft_count}</strong></div>
+              <div><span>Grounded answers</span><strong>{answerArtifactSourceTotals().grounded_answer_count}</strong></div>
+              <div><span>Final answers</span><strong>{answerArtifactSourceTotals().final_answer_count}</strong></div>
+            </div>
+          ) : null}
           {artifactSources().length > 0 ? (
             <ul class="final-answer-list-items">
               {artifactSources().map((item) => (
@@ -829,7 +855,7 @@ export default function App() {
               ))}
             </ul>
           ) : (
-            <p>No sources with artifacts listed yet.</p>
+            <p>No answer artifact sources loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">
