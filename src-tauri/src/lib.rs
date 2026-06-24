@@ -23,7 +23,14 @@ use answer_draft::{AnswerDraft, AnswerDraftService};
 use evidence::{EvidencePack, EvidencePackMetadata, EvidenceService};
 use final_answer::{build_final_answer as build_final_answer_impl, export_answer_artifacts as export_answer_artifacts_impl, get_answer_artifact_export_manifest as get_answer_artifact_export_manifest_impl, get_answer_artifact_health as get_answer_artifact_health_impl, inspect_answer_artifact_export_bundle as inspect_answer_artifact_export_bundle_impl, list_answer_artifact_issues as list_answer_artifact_issues_impl, get_answer_artifact_overview as get_answer_artifact_overview_impl, list_answer_artifact_sources as list_answer_artifact_sources_impl, list_final_answers as list_final_answers_impl, read_final_answer as read_final_answer_impl, AnswerArtifactExportBundleInspection, AnswerArtifactExportManifest, AnswerArtifactExportResult, AnswerArtifactHealth, AnswerArtifactIssue, AnswerArtifactOverview, AnswerArtifactSourceMetadata, FinalAnswer, FinalAnswerMetadata};
 use grounded_answer::{build_grounded_answer as build_grounded_answer_impl, read_grounded_answer as read_grounded_answer_impl, GroundedAnswer};
-use local_runtime::{preview_local_model_runtime_health as preview_local_model_runtime_health_impl, LocalModelRuntimeConfig, LocalModelRuntimeHealthPreview};
+use local_runtime::{
+    preview_local_model_runtime_health as preview_local_model_runtime_health_impl,
+    preview_local_runtime_invocation_plan as preview_local_runtime_invocation_plan_impl,
+    LocalModelRuntimeConfig,
+    LocalModelRuntimeHealthPreview,
+    LocalRuntimeInvocationPlanPreview,
+    LocalRuntimeInvocationPlanRequest,
+};
 use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
 use scholar_chat::{
     preview_scholar_chat_request as preview_scholar_chat_request_impl,
@@ -274,6 +281,15 @@ fn preview_local_model_runtime_health(root: String, config: LocalModelRuntimeCon
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn preview_local_runtime_invocation_plan(
+    root: String,
+    request: LocalRuntimeInvocationPlanRequest,
+) -> Result<LocalRuntimeInvocationPlanPreview, String> {
+    preview_local_runtime_invocation_plan_impl(root, request)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -311,7 +327,8 @@ pub fn run() {
             preview_scholar_chat_retrieval,
             preview_scholar_chat_evidence_plan,
             preview_scholar_chat_prompt_pack,
-            preview_local_model_runtime_health
+            preview_local_model_runtime_health,
+            preview_local_runtime_invocation_plan
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");

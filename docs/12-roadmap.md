@@ -939,6 +939,26 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 70 — Local Runtime Invocation Plan Preview
+
+Preview-bound local runtime invocation slice.
+
+Phase 70.0 adds the preview-only `preview_local_runtime_invocation_plan` command and a compact runtime invocation plan card.
+It uses the existing local runtime config and optional Scholar Chat prompt/text estimates to describe a future invocation without executing a process, calling an LLM, streaming tokens, generating answers, persisting config, or downloading/installing models.
+
+Do not implement:
+
+- local model inference/runtime execution
+- LLM calls
+- streaming tokens
+- answer generation
+- config persistence
+- model download/install behavior
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
