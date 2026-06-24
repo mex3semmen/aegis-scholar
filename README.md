@@ -91,6 +91,7 @@ git diff --check
 
 You can run the same checks with `scripts/verify.ps1`.
 Modes: `scripts/verify.ps1 -Fast` or `scripts/verify.ps1 -BackendOnly`.
+GitHub Actions runs the same runner on push and pull_request.
 
 Closed contract areas:
 
