@@ -469,7 +469,12 @@ export default function App() {
   }
 
   async function loadArtifactOverview() {
-    await loadArtifactOverviewBySourceId(sourceId().trim());
+    const selectedSourceId = selectedAnswerArtifactSourceId();
+    if (!selectedSourceId) {
+      setArtifactOverview(null);
+      return;
+    }
+    await loadArtifactOverviewBySourceId(selectedSourceId);
   }
 
   async function loadRetrievalIndex(preserveSelection = false, sourceIdOverride?: string) {
@@ -707,6 +712,11 @@ export default function App() {
     return retrievalIndexLoading() || artifactSourcesLoading() || artifactHealthLoading() || artifactIssuesLoading();
   }
 
+  function selectedAnswerArtifactSourceId() {
+    const trimmedSourceId = sourceId().trim();
+    return artifactSources().some((item) => item.source_id === trimmedSourceId) ? trimmedSourceId : "";
+  }
+
   function answerArtifactSourceTotals() {
     return artifactSources().reduce(
       (totals, item) => ({
@@ -842,8 +852,8 @@ export default function App() {
           <button onClick={loadFinalAnswer} disabled={finalAnswerLoading()}>
             {finalAnswerLoading() ? "Loading..." : "Load final answer"}
           </button>
-          <button onClick={loadArtifactOverview} disabled={artifactOverviewLoading()}>
-            {artifactOverviewLoading() ? "Loading..." : "Load artifact overview"}
+          <button onClick={loadArtifactOverview} disabled={artifactOverviewLoading() || !selectedAnswerArtifactSourceId()}>
+            {artifactOverviewLoading() ? "Loading..." : "Load final answers"}
           </button>
           <button onClick={() => loadArtifactSources()} disabled={artifactSourcesLoading()}>
             {artifactSourcesLoading() ? "Loading..." : "Load source index"}
@@ -1329,33 +1339,40 @@ export default function App() {
           )}
         </div>
         <div class="artifact-overview">
-          <h3>Artifact overview</h3>
-          {artifactOverview() ? (
-            <div class="contract-meta">
-              <div><span>Source ID</span><strong>{artifactOverview()!.source_id}</strong></div>
-              <div><span>Answer drafts</span><strong>{artifactOverview()!.draft_count}</strong></div>
-              <div><span>Grounded answers</span><strong>{artifactOverview()!.grounded_answer_count}</strong></div>
-              <div><span>Final answers</span><strong>{artifactOverview()!.final_answer_count}</strong></div>
-            </div>
+          <h3>Final answers</h3>
+          <p class="muted">Read-only final-answer metadata for the selected answer artifact source.</p>
+          {selectedAnswerArtifactSourceId() ? (
+            artifactOverview() ? (
+              <>
+                <div class="contract-meta">
+                  <div><span>Source ID</span><strong>{artifactOverview()!.source_id}</strong></div>
+                  <div><span>Answer drafts</span><strong>{artifactOverview()!.draft_count}</strong></div>
+                  <div><span>Grounded answers</span><strong>{artifactOverview()!.grounded_answer_count}</strong></div>
+                  <div><span>Final answers</span><strong>{artifactOverview()!.final_answer_count}</strong></div>
+                </div>
+                {artifactOverview()!.final_answers.length > 0 ? (
+                  <ul class="final-answer-list-items">
+                    {artifactOverview()!.final_answers.map((item) => (
+                      <li>
+                        <button class="final-answer-list-item" onClick={() => selectFinalAnswer(item)}>
+                          <span>{item.final_answer_id}</span>
+                          <small>
+                            {item.grounded_answer_id} | statements={item.statement_count} | needs_evidence={item.needs_evidence_count} | unsupported={item.unsupported_count}
+                          </small>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No final answers listed yet for this source.</p>
+                )}
+              </>
+            ) : (
+              <p>Loading final answers for the selected source...</p>
+            )
           ) : (
-            <p>No artifact overview loaded yet.</p>
+            <p>Select an answer artifact source to load final answers.</p>
           )}
-          {artifactOverview() && artifactOverview()!.final_answers.length > 0 ? (
-            <ul class="final-answer-list-items">
-              {artifactOverview()!.final_answers.map((item) => (
-                <li>
-                  <button class="final-answer-list-item" onClick={() => selectFinalAnswer(item)}>
-                    <span>{item.final_answer_id}</span>
-                    <small>
-                      {item.grounded_answer_id} | statements={item.statement_count} | needs_evidence={item.needs_evidence_count} | unsupported={item.unsupported_count}
-                    </small>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : artifactOverview() ? (
-            <p>No final answers listed yet.</p>
-          ) : null}
         </div>
         <div class="artifact-overview">
           <h3>Retrieval index</h3>

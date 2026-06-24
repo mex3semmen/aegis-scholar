@@ -661,6 +661,27 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 57 — Final Answer List UI Surface
+
+Frontend-only diagnostic surface.
+
+Phase 57.0 adds a compact read-only final answer list card using the already-exposed `get_answer_artifact_overview` command and the existing selected answer artifact source flow.
+It shows deterministic final-answer metadata and keeps the UI path-free.
+No backend answer-artifact semantics changed.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
