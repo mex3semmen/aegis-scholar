@@ -818,6 +818,28 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 64 — Scholar Chat Shell UI
+
+Frontend-only product shell.
+
+Phase 64.0 adds a compact Scholar Chat card that uses the existing `preview_scholar_chat_request` command.
+The shell lets the user choose mode and grounding policy, enter a prompt, pass existing selected source context when available, and preview the deterministic grounding plan and warnings.
+It does not run retrieval, build Evidence Packs, call an LLM, require a local model, generate answers, write files, or create directories.
+
+Do not implement:
+
+- local model runtime
+- LLM calls
+- retrieval execution
+- Evidence Pack generation
+- answer generation
+- web search
+- scholarly database integration
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
