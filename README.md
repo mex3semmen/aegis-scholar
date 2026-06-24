@@ -89,6 +89,8 @@ cargo check --manifest-path .\src-tauri\Cargo.toml
 git diff --check
 ```
 
+You can run the same checks with `scripts/verify.ps1`.
+
 Closed contract areas:
 
 - export bundle inspector stack
