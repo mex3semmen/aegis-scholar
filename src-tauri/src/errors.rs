@@ -172,6 +172,12 @@ pub enum AegisError {
     #[error("Export destination cannot be inside the corpus workspace")]
     ExportDestinationInsideCorpus,
 
+    #[error("Scholar chat prompt empty")]
+    ScholarChatPromptEmpty,
+
+    #[error("Scholar chat invalid source id")]
+    ScholarChatInvalidSourceId,
+
 }
 
 pub type AegisResult<T> = Result<T, AegisError>;

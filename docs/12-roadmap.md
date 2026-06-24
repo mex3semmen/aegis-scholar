@@ -795,6 +795,29 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 63 — Scholar Chat Request Contract
+
+Backend contract boundary only.
+
+Phase 63.0 adds a serializable Scholar Chat request/response contract and the read-only `preview_scholar_chat_request` command.
+The preview validates and normalizes prompts and selected source IDs, returns a deterministic grounding plan, and marks the response as `preview_only`.
+It does not run retrieval, build Evidence Packs, call an LLM, require a local model, generate answers, write files, or create directories.
+
+Do not implement:
+
+- chat UI
+- local model runtime
+- LLM calls
+- retrieval execution
+- Evidence Pack generation
+- answer generation
+- web search
+- scholarly database integration
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
