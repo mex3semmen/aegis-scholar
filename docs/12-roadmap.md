@@ -703,6 +703,26 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 59 — Evidence Pack UI Surface
+
+Planning boundary only.
+
+The backend has evidence-pack build/read logic, but no exposed read-only list surface yet, so Phase 59.0 defers the UI card until a narrow evidence-pack listing/read adapter exists.
+The next backend slice is read-only evidence-pack listing exposure for an existing source; it should stay deterministic, path-free, and non-mutating.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
