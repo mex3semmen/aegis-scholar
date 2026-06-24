@@ -692,14 +692,185 @@ pub fn preview_scholar_chat_draft_inference(
 ) -> AegisResult<ScholarChatDraftInferencePreview> {
     let root = root.into();
     let scholar_chat_request = request.scholar_chat_request;
-    let readiness_preview = preview_scholar_chat_answer_readiness(
-        &root,
-        ScholarChatAnswerReadinessRequest {
-            scholar_chat_request: scholar_chat_request.clone(),
-            runtime_config: request.runtime_config.clone(),
-            allow_model_execution: request.allow_model_execution,
-        },
-    )?;
+    let request_preview = preview_scholar_chat_request(&root, scholar_chat_request.clone())?;
+    let mut blockers = Vec::new();
+    let mut warnings = Vec::new();
+
+    for warning in &request_preview.warnings {
+        push_draft_warning(&mut warnings, "request_preview", warning);
+    }
+
+    if matches!(request_preview.grounding_policy, GroundingPolicy::ExternalAdaptersLater) {
+        push_draft_warning(
+            &mut warnings,
+            "external_adapters_unavailable",
+            "External adapters are not implemented yet and are unused in this preview.",
+        );
+    }
+
+    if !request.allow_model_execution {
+        push_draft_blocker(
+            &mut blockers,
+            "needs_execution_consent",
+            "Future model execution is not allowed yet.",
+        );
+        push_draft_warning(
+            &mut warnings,
+            "execution_consent_required",
+            "Draft inference preview will not consult the local runtime until execution consent is granted.",
+        );
+        return Ok(build_draft_inference_preview(
+            request_preview.normalized_prompt,
+            request_preview.mode,
+            request_preview.grounding_policy,
+            request_preview.selected_source_count,
+            0,
+            0,
+            0,
+            String::new(),
+            LocalModelRuntimeHealthStatus::NotConfigured,
+            LocalRuntimeInvocationPlanStatus::PreviewOnly,
+            ScholarChatDraftInferenceStatus::NeedsExecutionConsent,
+            ScholarChatDraftOutputClassification::Blocked,
+            request.allow_model_execution,
+            false,
+            None,
+            None,
+            String::new(),
+            String::new(),
+            0,
+            None,
+            blockers,
+            warnings,
+        ));
+    }
+
+    let prompt_ready = request_preview.selected_source_count > 0
+        || matches!(request_preview.grounding_policy, GroundingPolicy::AllowMarkedModelKnowledge);
+    if !prompt_ready {
+        push_draft_blocker(
+            &mut blockers,
+            "needs_sources",
+            "Selected sources are required before a local draft can be prepared.",
+        );
+        return Ok(build_draft_inference_preview(
+            request_preview.normalized_prompt,
+            request_preview.mode,
+            request_preview.grounding_policy,
+            request_preview.selected_source_count,
+            0,
+            0,
+            0,
+            String::new(),
+            LocalModelRuntimeHealthStatus::NotConfigured,
+            LocalRuntimeInvocationPlanStatus::PreviewOnly,
+            ScholarChatDraftInferenceStatus::NeedsSources,
+            ScholarChatDraftOutputClassification::Blocked,
+            request.allow_model_execution,
+            false,
+            None,
+            None,
+            String::new(),
+            String::new(),
+            0,
+            None,
+            blockers,
+            warnings,
+        ));
+    }
+
+    let runtime_health_preview = preview_local_model_runtime_health(&root, request.runtime_config.clone())?;
+    let runtime_health_status = runtime_health_preview.status.clone();
+    for warning in &runtime_health_preview.warnings {
+        push_draft_warning(&mut warnings, &warning.kind, &warning.message);
+    }
+    if !matches!(runtime_health_status, LocalModelRuntimeHealthStatus::ReadyToTestLater) {
+        push_draft_blocker(
+            &mut blockers,
+            "needs_runtime_config",
+            "The local runtime configuration is not ready yet.",
+        );
+        return Ok(build_draft_inference_preview(
+            request_preview.normalized_prompt,
+            request_preview.mode,
+            request_preview.grounding_policy,
+            request_preview.selected_source_count,
+            0,
+            0,
+            0,
+            String::new(),
+            runtime_health_status,
+            LocalRuntimeInvocationPlanStatus::NotConfigured,
+            ScholarChatDraftInferenceStatus::NeedsRuntimeConfig,
+            ScholarChatDraftOutputClassification::Blocked,
+            request.allow_model_execution,
+            false,
+            runtime_health_preview.model_file_name,
+            None,
+            String::new(),
+            String::new(),
+            0,
+            None,
+            blockers,
+            warnings,
+        ));
+    }
+
+    let evidence_plan_preview = if matches!(request_preview.grounding_policy, GroundingPolicy::LocalOnly) {
+        Some(preview_scholar_chat_evidence_plan(&root, scholar_chat_request.clone())?)
+    } else {
+        None
+    };
+    let retrieval_candidate_count = evidence_plan_preview
+        .as_ref()
+        .map_or(0, |preview| preview.retrieval_candidate_count);
+    let evidence_candidate_count = evidence_plan_preview
+        .as_ref()
+        .map_or(0, |preview| preview.evidence_candidate_count);
+
+    if let Some(evidence_plan_preview) = &evidence_plan_preview {
+        for warning in &evidence_plan_preview.warnings {
+            push_draft_warning(&mut warnings, "evidence_plan_preview", warning);
+        }
+    }
+
+    if matches!(request_preview.grounding_policy, GroundingPolicy::LocalOnly) && evidence_candidate_count == 0 {
+        push_draft_blocker(
+            &mut blockers,
+            "needs_evidence",
+            "local_only requires local evidence candidates before draft inference can proceed.",
+        );
+        push_draft_warning(
+            &mut warnings,
+            "evidence_required",
+            "No local evidence candidates are available for a local_only draft preview.",
+        );
+        return Ok(build_draft_inference_preview(
+            request_preview.normalized_prompt,
+            request_preview.mode,
+            request_preview.grounding_policy,
+            request_preview.selected_source_count,
+            retrieval_candidate_count,
+            evidence_candidate_count,
+            0,
+            String::new(),
+            runtime_health_status,
+            LocalRuntimeInvocationPlanStatus::PreviewOnly,
+            ScholarChatDraftInferenceStatus::NeedsEvidence,
+            ScholarChatDraftOutputClassification::Blocked,
+            request.allow_model_execution,
+            false,
+            runtime_health_preview.model_file_name,
+            None,
+            String::new(),
+            String::new(),
+            0,
+            None,
+            blockers,
+            warnings,
+        ));
+    }
+
     let prompt_pack_preview = preview_scholar_chat_prompt_pack(&root, scholar_chat_request.clone())?;
     let prompt_pack_text = render_prompt_pack_for_runtime(&prompt_pack_preview.prompt_pack);
     let invocation_plan_preview = preview_local_runtime_invocation_plan(
@@ -712,25 +883,9 @@ pub fn preview_scholar_chat_draft_inference(
             stop_sequences: None,
         },
     )?;
-
-    let evidence_candidate_count = readiness_preview.evidence_candidate_count;
-    let runtime_health_status = invocation_plan_preview.plan.runtime_health_status.clone();
     let invocation_plan_status = invocation_plan_preview.status.clone();
-    let runtime_ready = matches!(runtime_health_status, LocalModelRuntimeHealthStatus::ReadyToTestLater);
-    let invocation_ready = matches!(invocation_plan_status, LocalRuntimeInvocationPlanStatus::ReadyToInvokeLater | LocalRuntimeInvocationPlanStatus::PreviewOnly);
-
-    let mut blockers = Vec::new();
-    let mut warnings = Vec::new();
-
-    for warning in &readiness_preview.warnings {
-        push_draft_warning(
-            &mut warnings,
-            &warning.kind,
-            &warning.message,
-        );
-    }
     for warning in &prompt_pack_preview.warnings {
-        push_draft_warning(&mut warnings, "prompt_pack_preview", &warning);
+        push_draft_warning(&mut warnings, "prompt_pack_preview", warning);
     }
     for warning in &invocation_plan_preview.plan.warnings {
         push_draft_warning(&mut warnings, &warning.kind, &warning.message);
@@ -739,92 +894,7 @@ pub fn preview_scholar_chat_draft_inference(
         push_draft_blocker(&mut blockers, &blocker.kind, &blocker.message);
     }
 
-    if matches!(readiness_preview.grounding_policy, GroundingPolicy::ExternalAdaptersLater) {
-        push_draft_warning(
-            &mut warnings,
-            "external_adapters_unavailable",
-            "External adapters are not implemented yet and are unused in this preview.",
-        );
-    }
-
-    let prompt_ready = readiness_preview.selected_source_count > 0
-        || matches!(readiness_preview.grounding_policy, GroundingPolicy::AllowMarkedModelKnowledge);
-    let can_run_draft = request.allow_model_execution
-        && runtime_ready
-        && invocation_ready
-        && prompt_ready
-        && !(matches!(readiness_preview.grounding_policy, GroundingPolicy::LocalOnly) && evidence_candidate_count == 0);
-
-    if !request.allow_model_execution {
-        push_draft_blocker(
-            &mut blockers,
-            "needs_execution_consent",
-            "Future model execution is not allowed yet.",
-        );
-        push_draft_warning(
-            &mut warnings,
-            "execution_consent_required",
-            "Draft inference preview will not run the local model until execution consent is granted.",
-        );
-    } else if !runtime_ready {
-        push_draft_blocker(
-            &mut blockers,
-            "needs_runtime_config",
-            "The local runtime configuration is not ready yet.",
-        );
-    } else if !prompt_ready {
-        push_draft_blocker(
-            &mut blockers,
-            "needs_sources",
-            "Selected sources are required before a local draft can be prepared.",
-        );
-    } else if matches!(readiness_preview.grounding_policy, GroundingPolicy::LocalOnly) && evidence_candidate_count == 0 {
-        push_draft_blocker(
-            &mut blockers,
-            "needs_evidence",
-            "local_only requires local evidence candidates before draft inference can proceed.",
-        );
-        push_draft_warning(
-            &mut warnings,
-            "evidence_required",
-            "No local evidence candidates are available for a local_only draft preview.",
-        );
-    }
-
-    let output_classification = draft_output_classification(&readiness_preview.grounding_policy, !can_run_draft);
-
-    if !can_run_draft {
-        let status = if !request.allow_model_execution {
-            ScholarChatDraftInferenceStatus::NeedsExecutionConsent
-        } else if !runtime_ready {
-            ScholarChatDraftInferenceStatus::NeedsRuntimeConfig
-        } else if !prompt_ready {
-            ScholarChatDraftInferenceStatus::NeedsSources
-        } else if matches!(readiness_preview.grounding_policy, GroundingPolicy::LocalOnly) && evidence_candidate_count == 0 {
-            ScholarChatDraftInferenceStatus::NeedsEvidence
-        } else {
-            ScholarChatDraftInferenceStatus::Blocked
-        };
-        return Ok(build_draft_inference_preview(
-            readiness_preview,
-            prompt_pack_preview.prompt_pack.section_count,
-            prompt_pack_text,
-            runtime_health_status,
-            invocation_plan_status,
-            status,
-            output_classification,
-            request.allow_model_execution,
-            false,
-            invocation_plan_preview.plan.safe_model_file_name,
-            invocation_plan_preview.plan.safe_executable_file_name,
-            String::new(),
-            String::new(),
-            0,
-            None,
-            blockers,
-            warnings,
-        ));
-    }
+    let output_classification = draft_output_classification(&request_preview.grounding_policy, false);
 
     let smoke_result = smoke_test_local_runtime_inference(
         &root,
@@ -854,7 +924,12 @@ pub fn preview_scholar_chat_draft_inference(
     };
 
     Ok(build_draft_inference_preview(
-        readiness_preview,
+        request_preview.normalized_prompt,
+        request_preview.mode,
+        request_preview.grounding_policy,
+        request_preview.selected_source_count,
+        retrieval_candidate_count,
+        evidence_candidate_count,
         prompt_pack_preview.prompt_pack.section_count,
         prompt_pack_text,
         runtime_health_status,
@@ -928,7 +1003,12 @@ fn push_draft_blocker(
 
 #[allow(clippy::too_many_arguments)]
 fn build_draft_inference_preview(
-    readiness_preview: ScholarChatAnswerReadinessPreview,
+    normalized_prompt: String,
+    mode: ScholarChatMode,
+    grounding_policy: GroundingPolicy,
+    selected_source_count: usize,
+    retrieval_candidate_count: usize,
+    evidence_candidate_count: usize,
     prompt_pack_section_count: usize,
     prompt_pack_text: String,
     runtime_health_status: LocalModelRuntimeHealthStatus,
@@ -949,12 +1029,12 @@ fn build_draft_inference_preview(
     ScholarChatDraftInferencePreview {
         status,
         output_classification,
-        normalized_prompt: readiness_preview.normalized_prompt,
-        mode: readiness_preview.mode,
-        grounding_policy: readiness_preview.grounding_policy,
-        selected_source_count: readiness_preview.selected_source_count,
-        retrieval_candidate_count: readiness_preview.retrieval_candidate_count,
-        evidence_candidate_count: readiness_preview.evidence_candidate_count,
+        normalized_prompt,
+        mode,
+        grounding_policy,
+        selected_source_count,
+        retrieval_candidate_count,
+        evidence_candidate_count,
         prompt_pack_section_count,
         prompt_char_count: prompt_pack_text.chars().count(),
         runtime_health_status,
@@ -2198,23 +2278,27 @@ fn main() {
         let temp = tempfile::tempdir().unwrap();
         let runtime_config = build_draft_runtime_fixture(&temp);
         let before_entries = fs::read_dir(temp.path()).unwrap().count();
-        let response = preview_scholar_chat_draft_inference(
-            temp.path(),
-            draft_inference_request(
-                "Explain alpha",
-                GroundingPolicy::AllowMarkedModelKnowledge,
-                vec![],
-                runtime_config,
-                false,
-                None,
-                None,
-            ),
-        )
-        .unwrap();
+        let request = draft_inference_request(
+            "Explain alpha",
+            GroundingPolicy::AllowMarkedModelKnowledge,
+            vec![],
+            runtime_config,
+            false,
+            None,
+            None,
+        );
+        let first = preview_scholar_chat_draft_inference(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_draft_inference(temp.path(), request).unwrap();
+        let response = first.clone();
         let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(first, second);
         assert_eq!(response.status, ScholarChatDraftInferenceStatus::NeedsExecutionConsent);
         assert_eq!(response.output_classification, ScholarChatDraftOutputClassification::Blocked);
         assert!(!response.execution_attempted);
+        assert_eq!(response.prompt_pack_section_count, 0);
+        assert_eq!(response.prompt_char_count, 0);
+        assert_eq!(response.runtime_health_status, LocalModelRuntimeHealthStatus::NotConfigured);
+        assert_eq!(response.invocation_plan_status, LocalRuntimeInvocationPlanStatus::PreviewOnly);
         assert!(response.blockers.iter().any(|blocker| blocker.kind == "needs_execution_consent"));
         assert_eq!(before_entries, after_entries);
         assert_draft_boundary_fields(&response);
@@ -2270,6 +2354,8 @@ fn main() {
         assert_eq!(response.status, ScholarChatDraftInferenceStatus::NeedsEvidence);
         assert_eq!(response.output_classification, ScholarChatDraftOutputClassification::Blocked);
         assert!(!response.execution_attempted);
+        assert_eq!(response.prompt_pack_section_count, 0);
+        assert_eq!(response.prompt_char_count, 0);
         assert!(response.blockers.iter().any(|blocker| blocker.kind == "needs_evidence"));
         assert!(response.warnings.iter().any(|warning| warning.kind == "evidence_required"));
         assert_eq!(before_entries, after_entries);
@@ -2309,6 +2395,8 @@ fn main() {
         assert_eq!(response.status, ScholarChatDraftInferenceStatus::NeedsRuntimeConfig);
         assert_eq!(response.output_classification, ScholarChatDraftOutputClassification::Blocked);
         assert!(!response.execution_attempted);
+        assert_eq!(response.prompt_pack_section_count, 0);
+        assert_eq!(response.prompt_char_count, 0);
         assert!(response.blockers.iter().any(|blocker| blocker.kind == "needs_runtime_config"));
         let after_entries = fs::read_dir(temp.path()).unwrap().count();
         assert_eq!(before_entries, after_entries);
@@ -2344,8 +2432,10 @@ fn main() {
         assert_eq!(response.status, ScholarChatDraftInferenceStatus::NeedsRuntimeConfig);
         assert_eq!(response.output_classification, ScholarChatDraftOutputClassification::Blocked);
         assert!(!response.execution_attempted);
+        assert_eq!(response.prompt_pack_section_count, 0);
+        assert_eq!(response.prompt_char_count, 0);
         assert_eq!(response.safe_model_file_name.as_deref(), Some("missing-model.gguf"));
-        assert_eq!(response.safe_executable_file_name.as_deref(), Some("missing-draft-helper.exe"));
+        assert!(response.safe_executable_file_name.is_none());
         let after_entries = fs::read_dir(temp.path()).unwrap().count();
         assert_eq!(before_entries, after_entries);
         assert_draft_boundary_fields(&response);

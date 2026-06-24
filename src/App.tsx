@@ -2600,7 +2600,7 @@ export default function App() {
         <div class="artifact-overview">
           <h3>Draft inference preview</h3>
           <p class="muted">
-            Read-only preview of the future Scholar Chat draft path. It may run the local model, but it is not a Scholar Chat answer and nothing is persisted.
+            Read-only draft-only preview of the future Scholar Chat draft path. It may run the local model only when consent and readiness allow it, but it is not a Scholar Chat answer, grounded answer, or final answer, and nothing is persisted.
           </p>
           <p class="muted">Uses the same execution consent toggle shown in Answer readiness.</p>
           <p class="muted">{scholarChatSelectedSourceIdsSummary()}</p>
@@ -2648,7 +2648,7 @@ export default function App() {
                 </div>
                 {scholarChatDraftInferencePreview()!.stdout_preview ? (
                   <div class="artifact-overview">
-                    <h4>Runtime stdout</h4>
+                    <h4>Runtime stdout diagnostic</h4>
                     <pre>{scholarChatDraftInferencePreview()!.stdout_preview}</pre>
                   </div>
                 ) : (
@@ -2656,7 +2656,7 @@ export default function App() {
                 )}
                 {scholarChatDraftInferencePreview()!.stderr_preview ? (
                   <div class="artifact-overview">
-                    <h4>Runtime stderr</h4>
+                    <h4>Runtime stderr diagnostic</h4>
                     <pre>{scholarChatDraftInferencePreview()!.stderr_preview}</pre>
                   </div>
                 ) : (
