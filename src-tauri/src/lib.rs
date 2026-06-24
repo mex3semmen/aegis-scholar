@@ -26,10 +26,13 @@ use grounded_answer::{build_grounded_answer as build_grounded_answer_impl, read_
 use local_runtime::{
     preview_local_model_runtime_health as preview_local_model_runtime_health_impl,
     preview_local_runtime_invocation_plan as preview_local_runtime_invocation_plan_impl,
+    probe_local_runtime_version as probe_local_runtime_version_impl,
     LocalModelRuntimeConfig,
     LocalModelRuntimeHealthPreview,
     LocalRuntimeInvocationPlanPreview,
     LocalRuntimeInvocationPlanRequest,
+    LocalRuntimeProbeRequest,
+    LocalRuntimeProbeResult,
 };
 use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
 use scholar_chat::{
@@ -290,6 +293,12 @@ fn preview_local_runtime_invocation_plan(
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn probe_local_runtime_version(root: String, request: LocalRuntimeProbeRequest) -> Result<LocalRuntimeProbeResult, String> {
+    probe_local_runtime_version_impl(root, request)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -328,7 +337,8 @@ pub fn run() {
             preview_scholar_chat_evidence_plan,
             preview_scholar_chat_prompt_pack,
             preview_local_model_runtime_health,
-            preview_local_runtime_invocation_plan
+            preview_local_runtime_invocation_plan,
+            probe_local_runtime_version
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");

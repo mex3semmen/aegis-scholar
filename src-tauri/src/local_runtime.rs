@@ -1,7 +1,11 @@
 use crate::errors::{AegisError, AegisResult};
 use serde::{Deserialize, Serialize};
+use std::io::Read;
 use std::fs;
+use std::process::{Command, Stdio};
 use std::path::{Component, Path, PathBuf};
+use std::thread;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -101,6 +105,43 @@ pub struct LocalRuntimeInvocationPlanPreview {
     pub status: LocalRuntimeInvocationPlanStatus,
     pub runtime_kind: LocalModelRuntimeKind,
     pub plan: LocalRuntimeInvocationPlan,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LocalRuntimeProbeStatus {
+    Blocked,
+    Completed,
+    TimedOut,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LocalRuntimeProbeWarning {
+    pub kind: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeProbeRequest {
+    pub executable_path: Option<String>,
+    pub allow_execution: bool,
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeProbeResult {
+    pub status: LocalRuntimeProbeStatus,
+    pub allow_execution: bool,
+    pub execution_attempted: bool,
+    pub probe_argument: String,
+    pub timeout_ms: u64,
+    pub duration_ms: u64,
+    pub safe_executable_file_name: Option<String>,
+    pub exit_code: Option<i32>,
+    pub stdout_preview: String,
+    pub stderr_preview: String,
+    pub blockers: Vec<LocalRuntimeProbeWarning>,
+    pub warnings: Vec<LocalRuntimeProbeWarning>,
 }
 
 pub fn preview_local_model_runtime_health(
@@ -351,6 +392,222 @@ pub fn preview_local_runtime_invocation_plan(
     })
 }
 
+pub fn probe_local_runtime_version(
+    root: impl Into<PathBuf>,
+    request: LocalRuntimeProbeRequest,
+) -> AegisResult<LocalRuntimeProbeResult> {
+    let root = root.into();
+    let normalized_executable_path = normalize_optional_path(request.executable_path)?;
+    let timeout_ms = clamp_probe_timeout_ms(request.timeout_ms);
+    let safe_executable_file_name = safe_file_name_from_path(normalized_executable_path.as_deref());
+    let probe_argument = "--version".to_string();
+    let mut blockers = Vec::new();
+    let mut warnings = vec![
+        LocalRuntimeProbeWarning {
+            kind: "preview_only".to_string(),
+            message: "This is a preview-only runtime probe; no model is loaded and no answer is generated.".to_string(),
+        },
+        LocalRuntimeProbeWarning {
+            kind: "no_persistence".to_string(),
+            message: "Probe configuration is not persisted.".to_string(),
+        },
+    ];
+
+    if !request.allow_execution {
+        push_probe_blocker(
+            &mut blockers,
+            "execution_disabled",
+            "Execution is disabled for this runtime probe.",
+        );
+        return Ok(build_probe_result(
+            LocalRuntimeProbeStatus::Blocked,
+            request.allow_execution,
+            false,
+            probe_argument,
+            timeout_ms,
+            0,
+            safe_executable_file_name,
+            None,
+            String::new(),
+            String::new(),
+            blockers,
+            warnings,
+        ));
+    }
+
+    let Some(executable_path) = normalized_executable_path.as_deref() else {
+        push_probe_blocker(
+            &mut blockers,
+            "executable_missing",
+            "An executable path is required for this runtime probe.",
+        );
+        return Ok(build_probe_result(
+            LocalRuntimeProbeStatus::Blocked,
+            request.allow_execution,
+            false,
+            probe_argument,
+            timeout_ms,
+            0,
+            safe_executable_file_name,
+            None,
+            String::new(),
+            String::new(),
+            blockers,
+            warnings,
+        ));
+    };
+
+    let resolved_executable_path = resolve_runtime_path(&root, executable_path);
+    match fs::metadata(&resolved_executable_path) {
+        Ok(metadata) if metadata.is_file() => {}
+        Ok(_) => {
+            push_probe_blocker(
+                &mut blockers,
+                "executable_not_a_file",
+                "The configured executable path does not point to a file.",
+            );
+            return Ok(build_probe_result(
+                LocalRuntimeProbeStatus::Blocked,
+                request.allow_execution,
+                false,
+                probe_argument,
+                timeout_ms,
+                0,
+                safe_executable_file_name,
+                None,
+                String::new(),
+                String::new(),
+                blockers,
+                warnings,
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            push_probe_blocker(
+                &mut blockers,
+                "executable_missing",
+                "The configured executable file is missing.",
+            );
+            return Ok(build_probe_result(
+                LocalRuntimeProbeStatus::Blocked,
+                request.allow_execution,
+                false,
+                probe_argument,
+                timeout_ms,
+                0,
+                safe_executable_file_name,
+                None,
+                String::new(),
+                String::new(),
+                blockers,
+                warnings,
+            ));
+        }
+        Err(_) => {
+            push_probe_blocker(
+                &mut blockers,
+                "executable_unavailable",
+                "The configured executable could not be inspected.",
+            );
+            return Ok(build_probe_result(
+                LocalRuntimeProbeStatus::Blocked,
+                request.allow_execution,
+                false,
+                probe_argument,
+                timeout_ms,
+                0,
+                safe_executable_file_name,
+                None,
+                String::new(),
+                String::new(),
+                blockers,
+                warnings,
+            ));
+        }
+    }
+
+    match run_version_probe(&resolved_executable_path, timeout_ms) {
+        Ok(execution) => {
+            let (stdout_preview, stdout_truncated) = preview_probe_output(&execution.stdout, LOCAL_RUNTIME_PROBE_PREVIEW_LIMIT);
+            let (stderr_preview, stderr_truncated) = preview_probe_output(&execution.stderr, LOCAL_RUNTIME_PROBE_PREVIEW_LIMIT);
+            if stdout_truncated {
+                push_probe_warning(
+                    &mut warnings,
+                    "stdout_truncated",
+                    "Standard output was truncated to keep the preview compact.",
+                );
+            }
+            if stderr_truncated {
+                push_probe_warning(
+                    &mut warnings,
+                    "stderr_truncated",
+                    "Standard error was truncated to keep the preview compact.",
+                );
+            }
+            if execution.timed_out {
+                push_probe_warning(
+                    &mut warnings,
+                    "timed_out",
+                    "The runtime probe reached its timeout and was stopped.",
+                );
+            }
+            if let Some(exit_code) = execution.exit_code {
+                if exit_code != 0 {
+                    push_probe_warning(
+                        &mut warnings,
+                        "non_zero_exit",
+                        "The runtime probe exited with a non-zero status.",
+                    );
+                }
+            } else {
+                push_probe_warning(
+                    &mut warnings,
+                    "no_exit_code",
+                    "The runtime probe did not report an exit code.",
+                );
+            }
+            Ok(build_probe_result(
+                if execution.timed_out {
+                    LocalRuntimeProbeStatus::TimedOut
+                } else {
+                    LocalRuntimeProbeStatus::Completed
+                },
+                request.allow_execution,
+                true,
+                probe_argument,
+                timeout_ms,
+                execution.duration_ms,
+                safe_executable_file_name,
+                execution.exit_code,
+                stdout_preview,
+                stderr_preview,
+                blockers,
+                warnings,
+            ))
+        }
+        Err(_) => {
+            push_probe_blocker(
+                &mut blockers,
+                "probe_start_failed",
+                "The runtime probe could not start.",
+            );
+            Ok(build_probe_result(
+                LocalRuntimeProbeStatus::Blocked,
+                request.allow_execution,
+                false,
+                probe_argument,
+                timeout_ms,
+                0,
+                safe_executable_file_name,
+                None,
+                String::new(),
+                String::new(),
+                blockers,
+                warnings,
+            ))
+        }
+    }
+}
+
 struct PathInspection {
     state: LocalModelRuntimePathState,
     extension_valid: bool,
@@ -496,10 +753,160 @@ fn format_runtime_kind(runtime_kind: &LocalModelRuntimeKind) -> &'static str {
     }
 }
 
+const LOCAL_RUNTIME_PROBE_PREVIEW_LIMIT: usize = 1024;
+const LOCAL_RUNTIME_PROBE_DEFAULT_TIMEOUT_MS: u64 = 1_500;
+const LOCAL_RUNTIME_PROBE_MIN_TIMEOUT_MS: u64 = 250;
+const LOCAL_RUNTIME_PROBE_MAX_TIMEOUT_MS: u64 = 5_000;
+
+fn clamp_probe_timeout_ms(timeout_ms: Option<u64>) -> u64 {
+    timeout_ms
+        .unwrap_or(LOCAL_RUNTIME_PROBE_DEFAULT_TIMEOUT_MS)
+        .clamp(LOCAL_RUNTIME_PROBE_MIN_TIMEOUT_MS, LOCAL_RUNTIME_PROBE_MAX_TIMEOUT_MS)
+}
+
+fn run_version_probe(
+    executable_path: &Path,
+    timeout_ms: u64,
+) -> AegisResult<LocalRuntimeProbeExecution> {
+    let mut child = Command::new(executable_path)
+        .arg("--version")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let stdout_handle = stdout.map(spawn_pipe_reader);
+    let stderr_handle = stderr.map(spawn_pipe_reader);
+    let started_at = Instant::now();
+    let deadline = Duration::from_millis(timeout_ms);
+    let mut timed_out = false;
+
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if started_at.elapsed() >= deadline {
+            timed_out = true;
+            let _ = child.kill();
+            break child.wait()?;
+        }
+        thread::sleep(Duration::from_millis(10));
+    };
+
+    let stdout = join_pipe_reader(stdout_handle);
+    let stderr = join_pipe_reader(stderr_handle);
+
+    Ok(LocalRuntimeProbeExecution {
+        exit_code: status.code(),
+        duration_ms: bucket_probe_duration_ms(started_at.elapsed().as_millis() as u64),
+        stdout: clean_probe_capture(stdout),
+        stderr: clean_probe_capture(stderr),
+        timed_out,
+    })
+}
+
+fn spawn_pipe_reader<R>(mut reader: R) -> thread::JoinHandle<String>
+where
+    R: Read + Send + 'static,
+{
+    thread::spawn(move || {
+        let mut buffer = Vec::new();
+        if reader.read_to_end(&mut buffer).is_err() {
+            return String::new();
+        }
+        String::from_utf8_lossy(&buffer).into_owned()
+    })
+}
+
+fn join_pipe_reader(handle: Option<thread::JoinHandle<String>>) -> String {
+    match handle {
+        Some(handle) => handle.join().unwrap_or_default(),
+        None => String::new(),
+    }
+}
+
+fn clean_probe_capture(value: String) -> String {
+    value.replace("\r\n", "\n").replace('\r', "\n").trim().to_string()
+}
+
+fn bucket_probe_duration_ms(value: u64) -> u64 {
+    (value / 100) * 100
+}
+
+fn preview_probe_output(value: &str, preview_limit: usize) -> (String, bool) {
+    let normalized = clean_probe_capture(value.to_string());
+    let mut chars = normalized.chars();
+    let preview = chars.by_ref().take(preview_limit).collect::<String>();
+    let truncated = chars.next().is_some();
+    if truncated {
+        (format!("{preview}…"), true)
+    } else {
+        (preview, false)
+    }
+}
+
+fn build_probe_result(
+    status: LocalRuntimeProbeStatus,
+    allow_execution: bool,
+    execution_attempted: bool,
+    probe_argument: String,
+    timeout_ms: u64,
+    duration_ms: u64,
+    safe_executable_file_name: Option<String>,
+    exit_code: Option<i32>,
+    stdout_preview: String,
+    stderr_preview: String,
+    blockers: Vec<LocalRuntimeProbeWarning>,
+    warnings: Vec<LocalRuntimeProbeWarning>,
+) -> LocalRuntimeProbeResult {
+    LocalRuntimeProbeResult {
+        status,
+        allow_execution,
+        execution_attempted,
+        probe_argument,
+        timeout_ms,
+        duration_ms,
+        safe_executable_file_name,
+        exit_code,
+        stdout_preview,
+        stderr_preview,
+        blockers,
+        warnings,
+    }
+}
+
+fn push_probe_warning(warnings: &mut Vec<LocalRuntimeProbeWarning>, kind: &str, message: &str) {
+    if !warnings.iter().any(|warning| warning.kind == kind && warning.message == message) {
+        warnings.push(LocalRuntimeProbeWarning {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        });
+    }
+}
+
+fn push_probe_blocker(blockers: &mut Vec<LocalRuntimeProbeWarning>, kind: &str, message: &str) {
+    if !blockers.iter().any(|blocker| blocker.kind == kind && blocker.message == message) {
+        blockers.push(LocalRuntimeProbeWarning {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        });
+    }
+}
+
+struct LocalRuntimeProbeExecution {
+    exit_code: Option<i32>,
+    duration_ms: u64,
+    stdout: String,
+    stderr: String,
+    timed_out: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
+    use std::env;
 
     fn config(model_path: Option<&str>, executable_path: Option<&str>) -> LocalModelRuntimeConfig {
         LocalModelRuntimeConfig {
@@ -509,6 +916,14 @@ mod tests {
             context_window: None,
             gpu_layers: None,
             temperature: None,
+        }
+    }
+
+    fn probe_request(executable_path: Option<&str>, allow_execution: bool, timeout_ms: Option<u64>) -> LocalRuntimeProbeRequest {
+        LocalRuntimeProbeRequest {
+            executable_path: executable_path.map(|value| value.to_string()),
+            allow_execution,
+            timeout_ms,
         }
     }
 
@@ -868,5 +1283,105 @@ mod tests {
             assert!(matches!(result, Err(AegisError::LocalModelRuntimeInvalidPath)));
             assert!(!temp.path().join(".aegis").exists());
         }
+    }
+
+    #[test]
+    fn local_runtime_probe_version_is_blocked_when_execution_is_disabled() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = probe_local_runtime_version(
+            temp.path(),
+            probe_request(Some("missing-version-probe.exe"), false, Some(0)),
+        )
+        .unwrap();
+        assert_eq!(result.status, LocalRuntimeProbeStatus::Blocked);
+        assert!(!result.execution_attempted);
+        assert_eq!(result.probe_argument, "--version");
+        assert_eq!(result.timeout_ms, LOCAL_RUNTIME_PROBE_MIN_TIMEOUT_MS);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "execution_disabled"));
+        assert!(result.warnings.iter().any(|warning| warning.message.contains("preview-only")));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn local_runtime_probe_version_reports_missing_executable_without_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let missing_executable_path = temp.path().join("missing-version-probe.exe");
+        let result = probe_local_runtime_version(
+            temp.path(),
+            LocalRuntimeProbeRequest {
+                executable_path: Some(missing_executable_path.to_string_lossy().to_string()),
+                allow_execution: true,
+                timeout_ms: Some(1),
+            },
+        )
+        .unwrap();
+        assert_eq!(result.status, LocalRuntimeProbeStatus::Blocked);
+        assert!(!result.execution_attempted);
+        assert_eq!(result.probe_argument, "--version");
+        assert_eq!(result.safe_executable_file_name.as_deref(), Some("missing-version-probe.exe"));
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "executable_missing"));
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn local_runtime_probe_version_rejects_traversal_like_paths_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["..", "../probe.exe", "nested/../probe.exe", "nested\\..\\probe.exe"] {
+            let result = probe_local_runtime_version(
+                temp.path(),
+                probe_request(Some(invalid), true, Some(1000)),
+            );
+            assert!(matches!(result, Err(AegisError::LocalModelRuntimeInvalidPath)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
+    }
+
+    #[test]
+    fn local_runtime_probe_version_is_deterministic_and_path_free() {
+        let temp = tempfile::tempdir().unwrap();
+        let current_exe = env::current_exe().unwrap();
+        let request = LocalRuntimeProbeRequest {
+            executable_path: Some(current_exe.to_string_lossy().to_string()),
+            allow_execution: true,
+            timeout_ms: Some(10_000),
+        };
+        let first = probe_local_runtime_version(temp.path(), request.clone()).unwrap();
+        let second = probe_local_runtime_version(temp.path(), request).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(first.status, LocalRuntimeProbeStatus::Completed);
+        assert!(first.execution_attempted);
+        assert_eq!(first.probe_argument, "--version");
+        assert_eq!(first.timeout_ms, LOCAL_RUNTIME_PROBE_MAX_TIMEOUT_MS);
+        assert_eq!(first.safe_executable_file_name.as_deref(), current_exe.file_name().and_then(|value| value.to_str()));
+        let debug = format!("{first:?}");
+        let json = serde_json::to_string(&first).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert!(first.stdout_preview.len() <= LOCAL_RUNTIME_PROBE_PREVIEW_LIMIT + 1);
+        assert!(first.stderr_preview.len() <= LOCAL_RUNTIME_PROBE_PREVIEW_LIMIT + 1);
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn local_runtime_probe_version_preview_truncates_long_output() {
+        let preview = preview_probe_output(&"x".repeat(LOCAL_RUNTIME_PROBE_PREVIEW_LIMIT + 20), LOCAL_RUNTIME_PROBE_PREVIEW_LIMIT);
+        assert!(preview.1);
+        assert_eq!(preview.0.chars().count(), LOCAL_RUNTIME_PROBE_PREVIEW_LIMIT + 1);
+        assert!(preview.0.ends_with('…'));
+    }
+
+    #[test]
+    fn local_runtime_probe_timeout_is_clamped() {
+        assert_eq!(clamp_probe_timeout_ms(None), LOCAL_RUNTIME_PROBE_DEFAULT_TIMEOUT_MS);
+        assert_eq!(clamp_probe_timeout_ms(Some(0)), LOCAL_RUNTIME_PROBE_MIN_TIMEOUT_MS);
+        assert_eq!(clamp_probe_timeout_ms(Some(100_000)), LOCAL_RUNTIME_PROBE_MAX_TIMEOUT_MS);
     }
 }
