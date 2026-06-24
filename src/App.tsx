@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createSignal, onMount } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 
 type CorpusStatus = {
@@ -6,6 +6,14 @@ type CorpusStatus = {
   registered_count: number;
   extracted_count: number;
   failed_count: number;
+};
+
+type RegisteredSource = {
+  source_id: string;
+  version_id: string;
+  title: string;
+  source_type: string;
+  ingestion_status: string;
 };
 
 const RETRIEVAL_SEARCH_DISPLAY_LIMIT = 10;
@@ -480,6 +488,11 @@ export default function App() {
   const [scholarChatError, setScholarChatError] = createSignal<string | null>(null);
   const [scholarChatValidationError, setScholarChatValidationError] = createSignal<string | null>(null);
   const [scholarChatLoading, setScholarChatLoading] = createSignal(false);
+  const [scholarChatSourceContext, setScholarChatSourceContext] = createSignal<RegisteredSource[]>([]);
+  const [scholarChatSourceContextLoading, setScholarChatSourceContextLoading] = createSignal(false);
+  const [scholarChatSourceContextError, setScholarChatSourceContextError] = createSignal<string | null>(null);
+  const [scholarChatSourceContextSelectedIds, setScholarChatSourceContextSelectedIds] = createSignal<string[]>([]);
+  const [scholarChatSourceContextTouched, setScholarChatSourceContextTouched] = createSignal(false);
   const [scholarChatRetrievalPreview, setScholarChatRetrievalPreview] = createSignal<ScholarChatRetrievalPreviewResponse | null>(null);
   const [scholarChatRetrievalError, setScholarChatRetrievalError] = createSignal<string | null>(null);
   const [scholarChatRetrievalLoading, setScholarChatRetrievalLoading] = createSignal(false);
@@ -618,6 +631,39 @@ export default function App() {
       setRetrievalIndexError(sanitizeBackendError(err));
     } finally {
       setRetrievalIndexLoading(false);
+    }
+  }
+
+  async function loadScholarChatSourceContext(preserveSelection = false) {
+    if (scholarChatSourceContextLoading()) {
+      return;
+    }
+    setScholarChatSourceContextLoading(true);
+    setScholarChatSourceContextError(null);
+    try {
+      const result = await invoke<RegisteredSource[]>("list_sources", {
+        root: ".",
+      });
+      const nextSourceContext = [...result].sort((left, right) => left.source_id.localeCompare(right.source_id));
+      setScholarChatSourceContext(nextSourceContext);
+      const availableSourceIds = new Set(nextSourceContext.map((item) => item.source_id));
+      setScholarChatSourceContextSelectedIds((current) =>
+        current
+          .filter((sourceId) => availableSourceIds.has(sourceId))
+          .sort((left, right) => left.localeCompare(right)),
+      );
+      if (!preserveSelection) {
+        setScholarChatSourceContextTouched(false);
+      }
+    } catch (err) {
+      if (!preserveSelection) {
+        setScholarChatSourceContext([]);
+        setScholarChatSourceContextSelectedIds([]);
+        setScholarChatSourceContextTouched(false);
+      }
+      setScholarChatSourceContextError(sanitizeBackendError(err));
+    } finally {
+      setScholarChatSourceContextLoading(false);
     }
   }
 
@@ -849,7 +895,7 @@ export default function App() {
   }
 
   function diagnosticsAreLoading() {
-    return retrievalIndexLoading() || artifactSourcesLoading() || artifactHealthLoading() || artifactIssuesLoading() || evidencePacksLoading();
+    return retrievalIndexLoading() || artifactSourcesLoading() || artifactHealthLoading() || artifactIssuesLoading() || evidencePacksLoading() || scholarChatSourceContextLoading();
   }
 
   function selectedAnswerArtifactSourceId() {
@@ -867,8 +913,54 @@ export default function App() {
   }
 
   function selectedScholarChatSourceIds() {
+    const explicitSourceIds = [...new Set(scholarChatSourceContextSelectedIds())].sort((left, right) => left.localeCompare(right));
+    if (scholarChatSourceContextTouched()) {
+      return explicitSourceIds;
+    }
     const selectedSourceId = selectedEvidencePackSourceId();
     return selectedSourceId ? [selectedSourceId] : [];
+  }
+
+  function scholarChatSelectedSourceIdsSummary() {
+    const explicitSourceIds = [...new Set(scholarChatSourceContextSelectedIds())].sort((left, right) => left.localeCompare(right));
+    if (explicitSourceIds.length > 0) {
+      return `Selected source context: ${explicitSourceIds.join(", ")}`;
+    }
+    if (scholarChatSourceContextTouched()) {
+      return "No Scholar Chat source context selected; preview will be unscoped.";
+    }
+    if (selectedEvidencePackSourceId()) {
+      return "No Scholar Chat source context selected yet; using existing diagnostic source context.";
+    }
+    return "No Scholar Chat source context selected; preview will be unscoped.";
+  }
+
+  function formatSnakeCaseLabel(value: string) {
+    return value
+      .replace(/_/g, " ")
+      .split(" ")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  function toggleScholarChatSourceContext(sourceId: string) {
+    setScholarChatSourceContextTouched(true);
+    setScholarChatSourceContextSelectedIds((current) => {
+      const nextIds = new Set(current);
+      if (nextIds.has(sourceId)) {
+        nextIds.delete(sourceId);
+      } else {
+        nextIds.add(sourceId);
+      }
+      return Array.from(nextIds).sort((left, right) => left.localeCompare(right));
+    });
+    setScholarChatPreview(null);
+    setScholarChatError(null);
+    setScholarChatValidationError(null);
+    setScholarChatRetrievalPreview(null);
+    setScholarChatRetrievalError(null);
+    setScholarChatRetrievalHasRun(false);
   }
 
   function selectedFinalAnswerDetail() {
@@ -926,6 +1018,7 @@ export default function App() {
     const sourceIdForRetrieval = sourceId().trim() || retrievalIndex()?.source_id?.trim() || "";
     const sourceIdForEvidence = selectedEvidencePackSourceId();
     await Promise.all([
+      loadScholarChatSourceContext(true),
       sourceIdForRetrieval ? loadRetrievalIndex(true, sourceIdForRetrieval) : Promise.resolve(),
       loadArtifactSources(true),
       loadArtifactHealth(true),
@@ -1038,6 +1131,10 @@ export default function App() {
     }
   }
 
+  onMount(() => {
+    void loadScholarChatSourceContext();
+  });
+
   return (
     <main class="app-shell">
       <section class="hero">
@@ -1091,6 +1188,43 @@ export default function App() {
             </select>
           </label>
         </div>
+        <div class="artifact-overview">
+          <h3>Source context</h3>
+          <p class="muted">
+            Choose Scholar Chat source IDs to scope the preview. Existing diagnostic source selection remains a fallback until you set Scholar Chat context.
+          </p>
+          {scholarChatSourceContextLoading() ? (
+            <p>Loading registered sources...</p>
+          ) : scholarChatSourceContextError() ? (
+            <p class="error">{scholarChatSourceContextError()}</p>
+          ) : scholarChatSourceContext().length === 0 ? (
+            <p>No registered sources yet.</p>
+          ) : (
+            <>
+              <p class="muted">Selected source count: {scholarChatSourceContextSelectedIds().length}</p>
+              <ul class="final-answer-list-items">
+                {scholarChatSourceContext().map((item) => (
+                  <li>
+                    <label class="final-answer-list-item">
+                      <span>
+                        <input
+                          type="checkbox"
+                          checked={scholarChatSourceContextSelectedIds().includes(item.source_id)}
+                          onChange={() => toggleScholarChatSourceContext(item.source_id)}
+                        />
+                        <strong> {item.title || item.source_id}</strong>
+                      </span>
+                      <small>
+                        source_id={item.source_id} | type={formatSnakeCaseLabel(item.source_type)} | version={item.version_id} | status={formatSnakeCaseLabel(item.ingestion_status)}
+                      </small>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <p class="muted">{scholarChatSelectedSourceIdsSummary()}</p>
+        </div>
         <label>
           Prompt
           <textarea
@@ -1103,11 +1237,6 @@ export default function App() {
             placeholder="Ask about a lecture, paper, method, or thesis task..."
           />
         </label>
-        {selectedScholarChatSourceIds().length > 0 ? (
-          <p class="muted">Selected source context: {selectedScholarChatSourceIds().join(", ")}</p>
-        ) : (
-          <p class="muted">No source selected yet; preview will be unscoped.</p>
-        )}
         {scholarChatValidationError() && <p class="error">{scholarChatValidationError()}</p>}
         {scholarChatError() && <p class="error">{scholarChatError()}</p>}
         <div class="hero-actions">
