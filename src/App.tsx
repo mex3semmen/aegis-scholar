@@ -705,6 +705,9 @@ export default function App() {
 
   async function selectArtifactSource(item: AnswerArtifactSourceMetadata) {
     setSourceId(item.source_id);
+    setFinalAnswerId("");
+    setFinalAnswer(null);
+    setFinalAnswerError(null);
     await loadArtifactOverviewBySourceId(item.source_id);
   }
 
@@ -715,6 +718,19 @@ export default function App() {
   function selectedAnswerArtifactSourceId() {
     const trimmedSourceId = sourceId().trim();
     return artifactSources().some((item) => item.source_id === trimmedSourceId) ? trimmedSourceId : "";
+  }
+
+  function selectedFinalAnswerDetail() {
+    const selectedSourceId = selectedAnswerArtifactSourceId();
+    const selectedFinalAnswerId = finalAnswerId().trim();
+    const currentFinalAnswer = finalAnswer();
+    if (!selectedSourceId || !selectedFinalAnswerId || !currentFinalAnswer) {
+      return null;
+    }
+    if (currentFinalAnswer.source_id !== selectedSourceId || currentFinalAnswer.final_answer_id !== selectedFinalAnswerId) {
+      return null;
+    }
+    return currentFinalAnswer;
   }
 
   function answerArtifactSourceTotals() {
@@ -767,6 +783,9 @@ export default function App() {
 
   async function selectArtifactSourceId(source_id: string) {
     setSourceId(source_id);
+    setFinalAnswerId("");
+    setFinalAnswer(null);
+    setFinalAnswerError(null);
     await loadArtifactOverviewBySourceId(source_id);
   }
 
@@ -1366,6 +1385,63 @@ export default function App() {
                 ) : (
                   <p>No final answers listed yet for this source.</p>
                 )}
+                <div class="artifact-overview">
+                  <h4>Selected final answer preview</h4>
+                  {finalAnswerLoading() ? (
+                    <p>Loading selected final answer...</p>
+                  ) : finalAnswerId().trim() ? (
+                    selectedFinalAnswerDetail() ? (
+                      <>
+                        <div class="contract-meta">
+                          <div><span>Final answer ID</span><strong>{selectedFinalAnswerDetail()!.final_answer_id}</strong></div>
+                          <div><span>Grounded answer ID</span><strong>{selectedFinalAnswerDetail()!.grounded_answer_id}</strong></div>
+                          <div><span>Mode</span><strong>{selectedFinalAnswerDetail()!.answer_mode}</strong></div>
+                          <div><span>Statements</span><strong>{selectedFinalAnswerDetail()!.statement_count}</strong></div>
+                          <div><span>Needs evidence</span><strong>{selectedFinalAnswerDetail()!.statements.filter((statement) => statement.status === "needs_evidence").length}</strong></div>
+                          <div><span>Unsupported</span><strong>{selectedFinalAnswerDetail()!.unsupported_count}</strong></div>
+                        </div>
+                        {selectedFinalAnswerDetail()!.statements.length > 0 ? (
+                          <ul class="final-answer-list-items">
+                            {selectedFinalAnswerDetail()!.statements.map((statement, index) => (
+                              <li>
+                                <div class="final-answer-list-item">
+                                  <span>
+                                    Statement {index + 1}
+                                  </span>
+                                  <small>
+                                    <span class={`status-pill status-${statement.status}`}>{statement.status}</span> | {statement.support_level}
+                                  </small>
+                                  <p>{statement.text}</p>
+                                  <small>
+                                    evidence={statement.evidence_ids.join(", ") || "none"} | chunks={statement.chunk_ids.join(", ") || "none"} | locators={statement.locators.length}
+                                  </small>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p>No statements in this final answer.</p>
+                        )}
+                        {selectedFinalAnswerDetail()!.warnings.length > 0 && (
+                          <div class="warning-box">
+                            <h4>Warnings</h4>
+                            <ul>
+                              {selectedFinalAnswerDetail()!.warnings.map((warning) => (
+                                <li>{warning}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </>
+                    ) : finalAnswerError() ? (
+                      <p class="error">Selected final answer unavailable: {finalAnswerError()}</p>
+                    ) : (
+                      <p>Selected final answer unavailable.</p>
+                    )
+                  ) : (
+                    <p>Select a final answer to preview details.</p>
+                  )}
+                </div>
               </>
             ) : (
               <p>Loading final answers for the selected source...</p>
