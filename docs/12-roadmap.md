@@ -1086,6 +1086,24 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 76.1 — Draft Grounding Inspection Boundary Review
+
+Phase 76.1 is a review-only hardening pass for the draft grounding inspection preview.
+It keeps support classification conservative and diagnostic-only, and does not broaden product behavior.
+
+Do not implement:
+
+- grounded answer generation
+- final answer generation
+- Evidence Pack building
+- runtime execution changes
+- LLM calls outside preview
+- chat history persistence
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
