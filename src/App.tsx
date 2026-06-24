@@ -208,6 +208,44 @@ type LocalModelRuntimeHealthPreview = {
   warnings: LocalModelRuntimeHealthWarning[];
 };
 
+type LocalRuntimeInvocationPlanStatus =
+  | "not_configured"
+  | "blocked"
+  | "ready_to_invoke_later"
+  | "preview_only";
+
+type LocalRuntimeInvocationBlocker = {
+  kind: string;
+  message: string;
+};
+
+type LocalRuntimeInvocationPlan = {
+  runtime_health_status: LocalModelRuntimeHealthStatus;
+  prompt_char_count: number;
+  estimated_context_char_count: number;
+  max_output_tokens?: number | null;
+  safe_model_file_name?: string | null;
+  safe_executable_file_name?: string | null;
+  invocation_steps: string[];
+  safe_argument_preview: string[];
+  blockers: LocalRuntimeInvocationBlocker[];
+  warnings: LocalModelRuntimeHealthWarning[];
+};
+
+type LocalRuntimeInvocationPlanPreview = {
+  status: LocalRuntimeInvocationPlanStatus;
+  runtime_kind: LocalModelRuntimeKind;
+  plan: LocalRuntimeInvocationPlan;
+};
+
+type LocalRuntimeInvocationPlanRequest = {
+  runtime_config: LocalModelRuntimeConfig;
+  prompt_text: string | null;
+  estimated_input_char_count: number | null;
+  max_output_tokens: number | null;
+  stop_sequences: string[] | null;
+};
+
 type RetrievalIndexEntry = {
   chunk_id: string;
   source_id: string;
@@ -632,6 +670,13 @@ export default function App() {
   const [localRuntimeValidationError, setLocalRuntimeValidationError] = createSignal<string | null>(null);
   const [localRuntimeLoading, setLocalRuntimeLoading] = createSignal(false);
   const [localRuntimeHasRun, setLocalRuntimeHasRun] = createSignal(false);
+  const [localRuntimeInvocationMaxOutputTokens, setLocalRuntimeInvocationMaxOutputTokens] = createSignal("");
+  const [localRuntimeInvocationStopSequences, setLocalRuntimeInvocationStopSequences] = createSignal("");
+  const [localRuntimeInvocationPreview, setLocalRuntimeInvocationPreview] = createSignal<LocalRuntimeInvocationPlanPreview | null>(null);
+  const [localRuntimeInvocationError, setLocalRuntimeInvocationError] = createSignal<string | null>(null);
+  const [localRuntimeInvocationValidationError, setLocalRuntimeInvocationValidationError] = createSignal<string | null>(null);
+  const [localRuntimeInvocationLoading, setLocalRuntimeInvocationLoading] = createSignal(false);
+  const [localRuntimeInvocationHasRun, setLocalRuntimeInvocationHasRun] = createSignal(false);
   const [sourceId, setSourceId] = createSignal("");
   const [finalAnswerId, setFinalAnswerId] = createSignal("");
   const [finalAnswer, setFinalAnswer] = createSignal<FinalAnswer | null>(null);
@@ -1102,12 +1147,14 @@ export default function App() {
     setScholarChatPromptPackPreview(null);
     setScholarChatPromptPackError(null);
     setScholarChatPromptPackHasRun(false);
+    clearLocalRuntimeInvocationPreview();
   }
 
   function clearScholarChatPromptPackPreview() {
     setScholarChatPromptPackPreview(null);
     setScholarChatPromptPackError(null);
     setScholarChatPromptPackHasRun(false);
+    clearLocalRuntimeInvocationPreview();
   }
 
   function clearLocalRuntimePreview() {
@@ -1117,35 +1164,61 @@ export default function App() {
     setLocalRuntimeHasRun(false);
   }
 
+  function clearLocalRuntimeInvocationPreview() {
+    setLocalRuntimeInvocationPreview(null);
+    setLocalRuntimeInvocationError(null);
+    setLocalRuntimeInvocationValidationError(null);
+    setLocalRuntimeInvocationHasRun(false);
+  }
+
   function normalizeOptionalTextInput(value: string) {
     const trimmed = value.trim();
     return trimmed ? trimmed : null;
   }
 
-  function parseOptionalIntegerInput(value: string, label: string) {
+  function parseOptionalIntegerInput(
+    value: string,
+    label: string,
+    setValidationError = setLocalRuntimeValidationError,
+  ) {
     const trimmed = value.trim();
     if (!trimmed) {
       return null;
     }
     const parsed = Number(trimmed);
     if (!Number.isInteger(parsed)) {
-      setLocalRuntimeValidationError(`${label} must be a whole number.`);
+      setValidationError(`${label} must be a whole number.`);
       return undefined;
     }
     return parsed;
   }
 
-  function parseOptionalNumberInput(value: string, label: string) {
+  function parseOptionalNumberInput(
+    value: string,
+    label: string,
+    setValidationError = setLocalRuntimeValidationError,
+  ) {
     const trimmed = value.trim();
     if (!trimmed) {
       return null;
     }
     const parsed = Number(trimmed);
     if (!Number.isFinite(parsed)) {
-      setLocalRuntimeValidationError(`${label} must be a number.`);
+      setValidationError(`${label} must be a number.`);
       return undefined;
     }
     return parsed;
+  }
+
+  function parseOptionalCommaSeparatedListInput(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    return trimmed
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
   }
 
   function selectedFinalAnswerDetail() {
@@ -1423,6 +1496,84 @@ export default function App() {
       setLocalRuntimeError(sanitizeBackendError(err));
     } finally {
       setLocalRuntimeLoading(false);
+    }
+  }
+
+  async function previewLocalRuntimeInvocationPlan() {
+    if (localRuntimeInvocationLoading()) {
+      return;
+    }
+
+    const contextWindow = parseOptionalIntegerInput(
+      localRuntimeContextWindow(),
+      "Context window",
+      setLocalRuntimeInvocationValidationError,
+    );
+    const gpuLayers = parseOptionalIntegerInput(
+      localRuntimeGpuLayers(),
+      "GPU layers",
+      setLocalRuntimeInvocationValidationError,
+    );
+    const temperature = parseOptionalNumberInput(
+      localRuntimeTemperature(),
+      "Temperature",
+      setLocalRuntimeInvocationValidationError,
+    );
+    const maxOutputTokens = parseOptionalIntegerInput(
+      localRuntimeInvocationMaxOutputTokens(),
+      "Max output tokens",
+      setLocalRuntimeInvocationValidationError,
+    );
+    const stopSequences = parseOptionalCommaSeparatedListInput(localRuntimeInvocationStopSequences());
+    if (
+      contextWindow === undefined ||
+      gpuLayers === undefined ||
+      temperature === undefined ||
+      maxOutputTokens === undefined
+    ) {
+      setLocalRuntimeInvocationHasRun(true);
+      setLocalRuntimeInvocationPreview(null);
+      setLocalRuntimeInvocationError(null);
+      return;
+    }
+
+    const trimmedPromptText = scholarChatPrompt().trim();
+    const promptPackEstimate = scholarChatPromptPackPreview()?.prompt_pack.estimated_input_char_count ?? null;
+    const estimatedInputCharCount = promptPackEstimate ?? (trimmedPromptText ? Array.from(trimmedPromptText).length : null);
+
+    if (localRuntimeInvocationLoading()) {
+      return;
+    }
+
+    setLocalRuntimeInvocationHasRun(true);
+    setLocalRuntimeInvocationLoading(true);
+    setLocalRuntimeInvocationError(null);
+    setLocalRuntimeInvocationValidationError(null);
+    setLocalRuntimeInvocationPreview(null);
+    try {
+      const request: LocalRuntimeInvocationPlanRequest = {
+        runtime_config: {
+          runtime_kind: localRuntimeKind(),
+          model_path: normalizeOptionalTextInput(localRuntimeModelPath()),
+          executable_path: normalizeOptionalTextInput(localRuntimeExecutablePath()),
+          context_window: contextWindow,
+          gpu_layers: gpuLayers,
+          temperature: temperature,
+        },
+        prompt_text: trimmedPromptText || null,
+        estimated_input_char_count: estimatedInputCharCount,
+        max_output_tokens: maxOutputTokens,
+        stop_sequences: stopSequences,
+      };
+      const result = await invoke<LocalRuntimeInvocationPlanPreview>("preview_local_runtime_invocation_plan", {
+        root: ".",
+        request,
+      });
+      setLocalRuntimeInvocationPreview(result);
+    } catch (err) {
+      setLocalRuntimeInvocationError(sanitizeBackendError(err));
+    } finally {
+      setLocalRuntimeInvocationLoading(false);
     }
   }
 
@@ -1823,6 +1974,7 @@ export default function App() {
                 onChange={(event) => {
                   setLocalRuntimeKind(event.currentTarget.value as LocalModelRuntimeKind);
                   clearLocalRuntimePreview();
+                  clearLocalRuntimeInvocationPreview();
                 }}
               >
                 <option value="none">None</option>
@@ -1837,6 +1989,7 @@ export default function App() {
                 onInput={(event) => {
                   setLocalRuntimeContextWindow(event.currentTarget.value);
                   clearLocalRuntimePreview();
+                  clearLocalRuntimeInvocationPreview();
                 }}
                 placeholder="4096"
               />
@@ -1849,6 +2002,7 @@ export default function App() {
                 onInput={(event) => {
                   setLocalRuntimeGpuLayers(event.currentTarget.value);
                   clearLocalRuntimePreview();
+                  clearLocalRuntimeInvocationPreview();
                 }}
                 placeholder="0"
               />
@@ -1862,6 +2016,7 @@ export default function App() {
                 onInput={(event) => {
                   setLocalRuntimeTemperature(event.currentTarget.value);
                   clearLocalRuntimePreview();
+                  clearLocalRuntimeInvocationPreview();
                 }}
                 placeholder="0.7"
               />
@@ -1876,6 +2031,7 @@ export default function App() {
                 onInput={(event) => {
                   setLocalRuntimeModelPath(event.currentTarget.value);
                   clearLocalRuntimePreview();
+                  clearLocalRuntimeInvocationPreview();
                 }}
                 placeholder="E:\\models\\scholar.gguf"
               />
@@ -1888,6 +2044,7 @@ export default function App() {
                 onInput={(event) => {
                   setLocalRuntimeExecutablePath(event.currentTarget.value);
                   clearLocalRuntimePreview();
+                  clearLocalRuntimeInvocationPreview();
                 }}
                 placeholder="E:\\bin\\llama-server.exe"
               />
@@ -1940,6 +2097,124 @@ export default function App() {
             )
           ) : (
             <p>No local model runtime preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Runtime invocation plan</h3>
+          <p class="muted">
+            Read-only preview of the future local runtime invocation. It uses the current Scholar Chat prompt and optional prompt-pack estimate, but it never starts a process or persists configuration.
+          </p>
+          <div class="form-row">
+            <label>
+              Max output tokens
+              <input
+                type="number"
+                value={localRuntimeInvocationMaxOutputTokens()}
+                onInput={(event) => {
+                  setLocalRuntimeInvocationMaxOutputTokens(event.currentTarget.value);
+                  clearLocalRuntimeInvocationPreview();
+                }}
+                placeholder="1024"
+              />
+            </label>
+            <label>
+              Stop sequences
+              <input
+                type="text"
+                value={localRuntimeInvocationStopSequences()}
+                onInput={(event) => {
+                  setLocalRuntimeInvocationStopSequences(event.currentTarget.value);
+                  clearLocalRuntimeInvocationPreview();
+                }}
+                placeholder="</s>, <|end|>"
+              />
+            </label>
+          </div>
+          <div class="hero-actions">
+            <button onClick={previewLocalRuntimeInvocationPlan} disabled={localRuntimeInvocationLoading()}>
+              {localRuntimeInvocationLoading() ? "Previewing..." : "Preview invocation plan"}
+            </button>
+          </div>
+          <p class="muted">No process is executed. No tokens are generated. Configuration is not persisted.</p>
+          {localRuntimeInvocationValidationError() && <p class="error">{localRuntimeInvocationValidationError()}</p>}
+          {localRuntimeInvocationError() && <p class="error">{localRuntimeInvocationError()}</p>}
+          {localRuntimeInvocationLoading() ? (
+            <p>Previewing invocation plan...</p>
+          ) : localRuntimeInvocationHasRun() ? (
+            localRuntimeInvocationPreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(localRuntimeInvocationPreview()!.status) },
+                  { label: "Runtime kind", value: formatSnakeCaseLabel(localRuntimeInvocationPreview()!.runtime_kind) },
+                  { label: "Runtime health", value: formatSnakeCaseLabel(localRuntimeInvocationPreview()!.plan.runtime_health_status) },
+                  { label: "Prompt chars", value: localRuntimeInvocationPreview()!.plan.prompt_char_count },
+                  { label: "Estimated context chars", value: localRuntimeInvocationPreview()!.plan.estimated_context_char_count },
+                  { label: "Max output tokens", value: localRuntimeInvocationPreview()!.plan.max_output_tokens ?? "missing" },
+                ])}
+                <div class="contract-meta">
+                  <div><span>Model file</span><strong>{localRuntimeInvocationPreview()!.plan.safe_model_file_name ?? "not configured"}</strong></div>
+                  <div><span>Executable file</span><strong>{localRuntimeInvocationPreview()!.plan.safe_executable_file_name ?? "not configured"}</strong></div>
+                </div>
+                <h4>Invocation steps</h4>
+                {localRuntimeInvocationPreview()!.plan.invocation_steps.length > 0 ? (
+                  <ul>
+                    {localRuntimeInvocationPreview()!.plan.invocation_steps.map((step) => (
+                      <li>{step}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No invocation steps planned.</p>
+                )}
+                <h4>Safe argument preview</h4>
+                {localRuntimeInvocationPreview()!.plan.safe_argument_preview.length > 0 ? (
+                  <ul class="final-answer-list-items">
+                    {localRuntimeInvocationPreview()!.plan.safe_argument_preview.map((item) => (
+                      <li>
+                        <div class="final-answer-list-item">
+                          <span>{item}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No safe argument preview available.</p>
+                )}
+                {localRuntimeInvocationPreview()!.plan.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {localRuntimeInvocationPreview()!.plan.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No invocation blockers.</p>
+                )}
+                {localRuntimeInvocationPreview()!.plan.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {localRuntimeInvocationPreview()!.plan.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No invocation warnings.</p>
+                )}
+              </>
+            ) : (
+              <p>No runtime invocation plan preview loaded yet.</p>
+            )
+          ) : (
+            <p>No runtime invocation plan preview loaded yet.</p>
           )}
         </div>
       </section>

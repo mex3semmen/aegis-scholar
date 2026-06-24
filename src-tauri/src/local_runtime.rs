@@ -58,6 +58,51 @@ pub struct LocalModelRuntimeHealthPreview {
     pub warnings: Vec<LocalModelRuntimeHealthWarning>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LocalRuntimeInvocationPlanStatus {
+    NotConfigured,
+    Blocked,
+    ReadyToInvokeLater,
+    PreviewOnly,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeInvocationPlanRequest {
+    pub runtime_config: LocalModelRuntimeConfig,
+    pub prompt_text: Option<String>,
+    pub estimated_input_char_count: Option<u32>,
+    pub max_output_tokens: Option<u32>,
+    pub stop_sequences: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LocalRuntimeInvocationBlocker {
+    pub kind: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeInvocationPlan {
+    pub runtime_health_status: LocalModelRuntimeHealthStatus,
+    pub prompt_char_count: u32,
+    pub estimated_context_char_count: u32,
+    pub max_output_tokens: Option<u32>,
+    pub safe_model_file_name: Option<String>,
+    pub safe_executable_file_name: Option<String>,
+    pub invocation_steps: Vec<String>,
+    pub safe_argument_preview: Vec<String>,
+    pub blockers: Vec<LocalRuntimeInvocationBlocker>,
+    pub warnings: Vec<LocalModelRuntimeHealthWarning>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeInvocationPlanPreview {
+    pub status: LocalRuntimeInvocationPlanStatus,
+    pub runtime_kind: LocalModelRuntimeKind,
+    pub plan: LocalRuntimeInvocationPlan,
+}
+
 pub fn preview_local_model_runtime_health(
     root: impl Into<PathBuf>,
     config: LocalModelRuntimeConfig,
@@ -141,6 +186,171 @@ pub fn preview_local_model_runtime_health(
     })
 }
 
+pub fn preview_local_runtime_invocation_plan(
+    root: impl Into<PathBuf>,
+    request: LocalRuntimeInvocationPlanRequest,
+) -> AegisResult<LocalRuntimeInvocationPlanPreview> {
+    let root = root.into();
+    let runtime_config = request.runtime_config;
+    let normalized_model_path = normalize_optional_path(runtime_config.model_path.clone())?;
+    let normalized_executable_path = normalize_optional_path(runtime_config.executable_path.clone())?;
+    let prompt_text = normalize_optional_text(request.prompt_text);
+    let prompt_char_count = prompt_text
+        .as_deref()
+        .map(|value| value.chars().count() as u32)
+        .unwrap_or(0);
+    let estimated_context_char_count = request
+        .estimated_input_char_count
+        .unwrap_or(prompt_char_count);
+    let max_output_tokens = request.max_output_tokens;
+    let stop_sequence_count = normalize_optional_text_list(request.stop_sequences).len() as u32;
+
+    let health = preview_local_model_runtime_health(
+        root,
+        LocalModelRuntimeConfig {
+            runtime_kind: runtime_config.runtime_kind.clone(),
+            model_path: normalized_model_path.clone(),
+            executable_path: normalized_executable_path.clone(),
+            context_window: runtime_config.context_window,
+            gpu_layers: runtime_config.gpu_layers,
+            temperature: runtime_config.temperature,
+        },
+    )?;
+
+    let safe_model_file_name = safe_file_name_from_path(normalized_model_path.as_deref());
+    let safe_executable_file_name = safe_file_name_from_path(normalized_executable_path.as_deref());
+
+    let mut warnings = health.warnings.clone();
+    let mut blockers = Vec::new();
+
+    match health.status {
+        LocalModelRuntimeHealthStatus::NotConfigured => {
+            push_blocker(
+                &mut blockers,
+                "runtime_not_configured",
+                "No local runtime is configured yet.",
+            );
+        }
+        LocalModelRuntimeHealthStatus::ModelMissing => {
+            push_blocker(
+                &mut blockers,
+                "model_missing",
+                "Configured model file is missing.",
+            );
+        }
+        LocalModelRuntimeHealthStatus::ExecutableMissing => {
+            push_blocker(
+                &mut blockers,
+                "executable_missing",
+                "Configured executable file is missing.",
+            );
+        }
+        LocalModelRuntimeHealthStatus::ConfigPresent | LocalModelRuntimeHealthStatus::ReadyToTestLater => {}
+    }
+
+    if health.model_state == LocalModelRuntimePathState::Exists && !health.model_extension_valid {
+        push_blocker(
+            &mut blockers,
+            "model_extension_invalid",
+            "Configured model file does not use a .gguf extension.",
+        );
+    }
+
+    if prompt_char_count == 0 {
+        push_warning(
+            &mut warnings,
+            "No prompt text was provided; preview is using runtime configuration only.",
+        );
+    }
+
+    if max_output_tokens.is_none() {
+        push_warning(
+            &mut warnings,
+            "No max output tokens were provided yet.",
+        );
+    }
+
+    if stop_sequence_count > 0 {
+        push_warning(
+            &mut warnings,
+            "Stop sequences are captured as a count only in this preview.",
+        );
+    }
+
+    let status = if matches!(health.status, LocalModelRuntimeHealthStatus::NotConfigured) {
+        LocalRuntimeInvocationPlanStatus::NotConfigured
+    } else if !blockers.is_empty() {
+        LocalRuntimeInvocationPlanStatus::Blocked
+    } else if matches!(health.status, LocalModelRuntimeHealthStatus::ReadyToTestLater)
+        && prompt_char_count > 0
+        && max_output_tokens.unwrap_or(0) > 0
+    {
+        LocalRuntimeInvocationPlanStatus::ReadyToInvokeLater
+    } else {
+        LocalRuntimeInvocationPlanStatus::PreviewOnly
+    };
+
+    let mut invocation_steps = vec![
+        "Validate runtime readiness and prompt inputs.".to_string(),
+        "Prepare redacted invocation arguments.".to_string(),
+        "Stop before any process execution.".to_string(),
+    ];
+    if prompt_char_count > 0 {
+        invocation_steps.insert(
+            1,
+            format!("Use the trimmed prompt text ({prompt_char_count} characters)."),
+        );
+    }
+    invocation_steps.insert(
+        1,
+        format!("Estimate prompt/context size as {estimated_context_char_count} characters."),
+    );
+
+    let mut safe_argument_preview = vec![
+        format!("--runtime-kind={}", format_runtime_kind(&runtime_config.runtime_kind)),
+        format!("--prompt-chars={prompt_char_count}"),
+        format!("--estimated-context-chars={estimated_context_char_count}"),
+        format!("--stop-sequences={stop_sequence_count}"),
+    ];
+    if let Some(max_output_tokens) = max_output_tokens {
+        safe_argument_preview.push(format!("--max-output-tokens={max_output_tokens}"));
+    } else {
+        safe_argument_preview.push("--max-output-tokens=<missing>".to_string());
+    }
+    if let Some(file_name) = safe_model_file_name.as_deref() {
+        safe_argument_preview.push(format!("--model-file-name={file_name}"));
+    }
+    if let Some(file_name) = safe_executable_file_name.as_deref() {
+        safe_argument_preview.push(format!("--executable-file-name={file_name}"));
+    }
+    if let Some(context_window) = runtime_config.context_window {
+        safe_argument_preview.push(format!("--ctx-size={context_window}"));
+    }
+    if let Some(gpu_layers) = runtime_config.gpu_layers {
+        safe_argument_preview.push(format!("--gpu-layers={gpu_layers}"));
+    }
+    if let Some(temperature) = runtime_config.temperature {
+        safe_argument_preview.push(format!("--temperature={temperature}"));
+    }
+
+    Ok(LocalRuntimeInvocationPlanPreview {
+        status,
+        runtime_kind: runtime_config.runtime_kind,
+        plan: LocalRuntimeInvocationPlan {
+            runtime_health_status: health.status,
+            prompt_char_count,
+            estimated_context_char_count,
+            max_output_tokens,
+            safe_model_file_name,
+            safe_executable_file_name,
+            invocation_steps,
+            safe_argument_preview,
+            blockers,
+            warnings,
+        },
+    })
+}
+
 struct PathInspection {
     state: LocalModelRuntimePathState,
     extension_valid: bool,
@@ -162,6 +372,35 @@ fn normalize_optional_path(path: Option<String>) -> AegisResult<Option<String>> 
     }
 }
 
+fn normalize_optional_text(path: Option<String>) -> Option<String> {
+    path.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+fn normalize_optional_text_list(values: Option<Vec<String>>) -> Vec<String> {
+    let mut normalized = values
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|value| {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+    normalized
+}
+
 fn validate_runtime_path(path: &str) -> AegisResult<()> {
     if Path::new(path)
         .components()
@@ -170,6 +409,15 @@ fn validate_runtime_path(path: &str) -> AegisResult<()> {
         return Err(AegisError::LocalModelRuntimeInvalidPath);
     }
     Ok(())
+}
+
+fn safe_file_name_from_path(path: Option<&str>) -> Option<String> {
+    path.and_then(|value| {
+        Path::new(value)
+            .file_name()
+            .and_then(|component| component.to_str())
+            .map(|component| component.to_string())
+    })
 }
 
 fn inspect_configured_path(root: &Path, path: Option<&str>) -> AegisResult<PathInspection> {
@@ -229,6 +477,22 @@ fn push_warning(warnings: &mut Vec<LocalModelRuntimeHealthWarning>, message: &st
                 .replace("__", "_"),
             message: message.to_string(),
         });
+    }
+}
+
+fn push_blocker(blockers: &mut Vec<LocalRuntimeInvocationBlocker>, kind: &str, message: &str) {
+    if !blockers.iter().any(|blocker| blocker.kind == kind && blocker.message == message) {
+        blockers.push(LocalRuntimeInvocationBlocker {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        });
+    }
+}
+
+fn format_runtime_kind(runtime_kind: &LocalModelRuntimeKind) -> &'static str {
+    match runtime_kind {
+        LocalModelRuntimeKind::LlamaCpp => "llama_cpp",
+        LocalModelRuntimeKind::None => "none",
     }
 }
 
@@ -404,6 +668,202 @@ mod tests {
                     gpu_layers: None,
                     temperature: None,
                 },
+            );
+            assert!(matches!(result, Err(AegisError::LocalModelRuntimeInvalidPath)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
+    }
+
+    fn invocation_request(
+        runtime_kind: LocalModelRuntimeKind,
+        model_path: Option<&str>,
+        executable_path: Option<&str>,
+        prompt_text: Option<&str>,
+        estimated_input_char_count: Option<u32>,
+        max_output_tokens: Option<u32>,
+        stop_sequences: Option<Vec<&str>>,
+        context_window: Option<u32>,
+        gpu_layers: Option<i32>,
+        temperature: Option<f64>,
+    ) -> LocalRuntimeInvocationPlanRequest {
+        LocalRuntimeInvocationPlanRequest {
+            runtime_config: LocalModelRuntimeConfig {
+                runtime_kind,
+                model_path: model_path.map(|value| value.to_string()),
+                executable_path: executable_path.map(|value| value.to_string()),
+                context_window,
+                gpu_layers,
+                temperature,
+            },
+            prompt_text: prompt_text.map(|value| value.to_string()),
+            estimated_input_char_count,
+            max_output_tokens,
+            stop_sequences: stop_sequences.map(|values| values.into_iter().map(|value| value.to_string()).collect()),
+        }
+    }
+
+    #[test]
+    fn local_runtime_invocation_plan_preview_is_not_configured_for_default_config() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_local_runtime_invocation_plan(
+            temp.path(),
+            invocation_request(LocalModelRuntimeKind::None, None, None, None, None, None, None, None, None, None),
+        )
+        .unwrap();
+        assert_eq!(result.status, LocalRuntimeInvocationPlanStatus::NotConfigured);
+        assert_eq!(result.plan.runtime_health_status, LocalModelRuntimeHealthStatus::NotConfigured);
+        assert!(result.plan.blockers.iter().any(|blocker| blocker.kind == "runtime_not_configured"));
+        assert!(result.plan.warnings.iter().any(|warning| warning.message.contains("preview only")));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn local_runtime_invocation_plan_preview_reports_missing_model_without_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let model_path = temp.path().join("missing-model.gguf");
+        let result = preview_local_runtime_invocation_plan(
+            temp.path(),
+            invocation_request(
+                LocalModelRuntimeKind::LlamaCpp,
+                Some(model_path.to_string_lossy().as_ref()),
+                None,
+                Some("  question about runtime  "),
+                Some(42),
+                Some(128),
+                None,
+                Some(4096),
+                Some(8),
+                Some(0.6),
+            ),
+        )
+        .unwrap();
+        assert_eq!(result.status, LocalRuntimeInvocationPlanStatus::Blocked);
+        assert_eq!(result.plan.runtime_health_status, LocalModelRuntimeHealthStatus::ModelMissing);
+        assert!(result.plan.blockers.iter().any(|blocker| blocker.kind == "model_missing"));
+        assert_eq!(result.plan.prompt_char_count, "question about runtime".chars().count() as u32);
+        assert_eq!(result.plan.estimated_context_char_count, 42);
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+    }
+
+    #[test]
+    fn local_runtime_invocation_plan_preview_blocks_non_gguf_extensions() {
+        let temp = tempfile::tempdir().unwrap();
+        let model_path = temp.path().join("model.txt");
+        fs::write(&model_path, "not a gguf model").unwrap();
+        let result = preview_local_runtime_invocation_plan(
+            temp.path(),
+            invocation_request(
+                LocalModelRuntimeKind::LlamaCpp,
+                Some(model_path.to_string_lossy().as_ref()),
+                None,
+                Some("runtime planning"),
+                None,
+                Some(256),
+                None,
+                Some(4096),
+                Some(8),
+                Some(0.6),
+            ),
+        )
+        .unwrap();
+        assert_eq!(result.status, LocalRuntimeInvocationPlanStatus::Blocked);
+        assert_eq!(result.plan.runtime_health_status, LocalModelRuntimeHealthStatus::ConfigPresent);
+        assert!(result.plan.blockers.iter().any(|blocker| blocker.kind == "model_extension_invalid"));
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+    }
+
+    #[test]
+    fn local_runtime_invocation_plan_preview_reports_ready_to_invoke_later_for_existing_gguf_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let model_path = temp.path().join("ready-model.gguf");
+        let executable_path = temp.path().join("llama-cli.exe");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        fs::write(&executable_path, "placeholder").unwrap();
+        let result = preview_local_runtime_invocation_plan(
+            temp.path(),
+            invocation_request(
+                LocalModelRuntimeKind::LlamaCpp,
+                Some(model_path.to_string_lossy().as_ref()),
+                Some(executable_path.to_string_lossy().as_ref()),
+                Some("  prompt with spaces  "),
+                Some(512),
+                Some(1024),
+                Some(vec!["</s>", "<|end|>"]),
+                Some(8192),
+                Some(16),
+                Some(0.2),
+            ),
+        )
+        .unwrap();
+        assert_eq!(result.status, LocalRuntimeInvocationPlanStatus::ReadyToInvokeLater);
+        assert_eq!(result.plan.runtime_health_status, LocalModelRuntimeHealthStatus::ReadyToTestLater);
+        assert_eq!(result.plan.safe_model_file_name.as_deref(), Some("ready-model.gguf"));
+        assert_eq!(result.plan.safe_executable_file_name.as_deref(), Some("llama-cli.exe"));
+        assert!(result.plan.safe_argument_preview.iter().any(|item| item == "--model-file-name=ready-model.gguf"));
+        assert!(result.plan.safe_argument_preview.iter().any(|item| item == "--executable-file-name=llama-cli.exe"));
+        assert!(result.plan.invocation_steps.iter().any(|step| step.contains("Prepare redacted invocation arguments")));
+    }
+
+    #[test]
+    fn local_runtime_invocation_plan_preview_is_deterministic_and_path_free() {
+        let temp = tempfile::tempdir().unwrap();
+        let model_path = temp.path().join("deterministic.gguf");
+        let executable_path = temp.path().join("llama-cli.exe");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        fs::write(&executable_path, "placeholder").unwrap();
+        let request = invocation_request(
+            LocalModelRuntimeKind::LlamaCpp,
+            Some(model_path.to_string_lossy().as_ref()),
+            Some(executable_path.to_string_lossy().as_ref()),
+            Some("  trimmed prompt  "),
+            Some(777),
+            Some(2048),
+            Some(vec!["stop", "stop", " end "]),
+            Some(4096),
+            Some(8),
+            Some(0.6),
+        );
+        let first = preview_local_runtime_invocation_plan(temp.path(), request.clone()).unwrap();
+        let second = preview_local_runtime_invocation_plan(temp.path(), request).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(first.plan.prompt_char_count, "trimmed prompt".chars().count() as u32);
+        assert_eq!(first.plan.estimated_context_char_count, 777);
+        assert!(first.plan.safe_argument_preview.iter().any(|item| item == "--stop-sequences=2"));
+        let debug = format!("{first:?}");
+        let json = serde_json::to_string(&first).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn local_runtime_invocation_plan_preview_rejects_traversal_like_paths_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["..", "../model.gguf", "nested/../model.gguf", "nested\\..\\model.gguf"] {
+            let result = preview_local_runtime_invocation_plan(
+                temp.path(),
+                invocation_request(
+                    LocalModelRuntimeKind::LlamaCpp,
+                    Some(invalid),
+                    Some("llama-cli.exe"),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
             );
             assert!(matches!(result, Err(AegisError::LocalModelRuntimeInvalidPath)));
             assert!(!temp.path().join(".aegis").exists());
