@@ -8,6 +8,8 @@ type CorpusStatus = {
   failed_count: number;
 };
 
+const RETRIEVAL_SEARCH_DISPLAY_LIMIT = 10;
+
 type RetrievalIndexEntry = {
   chunk_id: string;
   source_id: string;
@@ -397,6 +399,8 @@ export default function App() {
   const [retrievalIndexLoading, setRetrievalIndexLoading] = createSignal(false);
   const [retrievalSearchQuery, setRetrievalSearchQuery] = createSignal("");
   const [retrievalSearch, setRetrievalSearch] = createSignal<RetrievalSearchResponse | null>(null);
+  const [retrievalSearchHasRun, setRetrievalSearchHasRun] = createSignal(false);
+  const [retrievalSearchValidationError, setRetrievalSearchValidationError] = createSignal<string | null>(null);
   const [retrievalSearchError, setRetrievalSearchError] = createSignal<string | null>(null);
   const [retrievalSearchLoading, setRetrievalSearchLoading] = createSignal(false);
   const [artifactSources, setArtifactSources] = createSignal<AnswerArtifactSourceMetadata[]>([]);
@@ -495,19 +499,25 @@ export default function App() {
     const trimmedSourceId = sourceId().trim();
     const trimmedQuery = retrievalSearchQuery().trim();
     if (!trimmedSourceId) {
+      setRetrievalSearchHasRun(true);
       setRetrievalSearch(null);
-      setRetrievalSearchError("Source ID is required to run retrieval search.");
+      setRetrievalSearchValidationError("Source ID is required to run retrieval search.");
+      setRetrievalSearchError(null);
       return;
     }
     if (!trimmedQuery) {
+      setRetrievalSearchHasRun(true);
       setRetrievalSearch(null);
-      setRetrievalSearchError("Query is required to run retrieval search.");
+      setRetrievalSearchValidationError("Query is required to run retrieval search.");
+      setRetrievalSearchError(null);
       return;
     }
     if (retrievalSearchLoading()) {
       return;
     }
+    setRetrievalSearchHasRun(true);
     setRetrievalSearchLoading(true);
+    setRetrievalSearchValidationError(null);
     setRetrievalSearchError(null);
     setRetrievalSearch(null);
     try {
@@ -515,7 +525,7 @@ export default function App() {
         root: ".",
         source_id: trimmedSourceId,
         query: trimmedQuery,
-        max_results: 10,
+        max_results: 25,
       });
       setRetrievalSearch(result);
     } catch (err) {
@@ -1276,46 +1286,59 @@ export default function App() {
               <input
                 type="text"
                 value={retrievalSearchQuery()}
-                onInput={(event) => setRetrievalSearchQuery(event.currentTarget.value)}
+                onInput={(event) => {
+                  setRetrievalSearchQuery(event.currentTarget.value);
+                  setRetrievalSearchValidationError(null);
+                }}
                 placeholder="alpha beta"
               />
             </label>
           </div>
+          {retrievalSearchValidationError() && <p class="error">{retrievalSearchValidationError()}</p>}
           <div class="hero-actions">
             <button onClick={runRetrievalSearch} disabled={retrievalSearchLoading()}>
               {retrievalSearchLoading() ? "Loading..." : "Run retrieval search"}
             </button>
           </div>
           {retrievalSearchError() && <p class="error">{retrievalSearchError()}</p>}
-          {retrievalSearch() ? (
-            <>
-              <div class="contract-meta">
-                <div><span>Query</span><strong>{retrievalSearch()!.query}</strong></div>
-                <div><span>Result count</span><strong>{retrievalSearch()!.result_count}</strong></div>
-                <div>
-                  <span>Normalized terms</span>
-                  <strong>{retrievalSearch()!.normalized_query_terms.length}</strong>
+          {retrievalSearchHasRun() ? (
+            retrievalSearch() ? (
+              <>
+                <div class="contract-meta">
+                  <div><span>Query</span><strong>{retrievalSearch()!.query}</strong></div>
+                  <div><span>Result count</span><strong>{retrievalSearch()!.result_count}</strong></div>
+                  <div>
+                    <span>Normalized terms</span>
+                    <strong>{retrievalSearch()!.normalized_query_terms.length}</strong>
+                  </div>
                 </div>
-              </div>
-              {retrievalSearch()!.results.length > 0 ? (
-                <ul class="final-answer-list-items">
-                  {retrievalSearch()!.results.map((item) => (
-                    <li>
-                      <div class="final-answer-list-item">
-                        <span>{item.chunk_id}</span>
-                        <small>
-                          source={item.source_id} | score={item.score.toFixed(3)} | matched={item.matched_terms.join(", ") || "none"}
-                        </small>
-                        <small>{locatorSummary(item.locator)}</small>
-                        <p>{item.preview}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>No retrieval results matched the query.</p>
-              )}
-            </>
+                {retrievalSearch()!.results.length > 0 ? (
+                  <>
+                    {retrievalSearch()!.results.length > RETRIEVAL_SEARCH_DISPLAY_LIMIT ? (
+                      <p class="muted">
+                        Showing first {RETRIEVAL_SEARCH_DISPLAY_LIMIT} of {retrievalSearch()!.results.length} results returned.
+                      </p>
+                    ) : null}
+                    <ul class="final-answer-list-items">
+                      {retrievalSearch()!.results.slice(0, RETRIEVAL_SEARCH_DISPLAY_LIMIT).map((item) => (
+                        <li>
+                          <div class="final-answer-list-item">
+                            <span>{item.chunk_id}</span>
+                            <small>
+                              source={item.source_id} | score={item.score.toFixed(3)} | matched={item.matched_terms.join(", ") || "none"}
+                            </small>
+                            <small>{locatorSummary(item.locator)}</small>
+                            <p>{item.preview}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <p>No retrieval results matched the query.</p>
+                )}
+              </>
+            ) : null
           ) : (
             <p>No retrieval search run yet.</p>
           )}
