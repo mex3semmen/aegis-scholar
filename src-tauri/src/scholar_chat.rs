@@ -441,6 +441,41 @@ pub struct ScholarChatGroundedDraftReadinessPreview {
     pub next_required_actions: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatGroundedAnswerBuildPlanStatus {
+    Blocked,
+    NeedsReview,
+    PlanReadyLater,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatGroundedAnswerBuildPlanPreview {
+    pub status: ScholarChatGroundedAnswerBuildPlanStatus,
+    pub readiness_status: ScholarChatGroundedDraftReadinessStatus,
+    pub normalized_prompt: String,
+    pub selected_source_count: usize,
+    pub evidence_candidate_count: usize,
+    pub inspected_item_count: usize,
+    pub supported_item_count: usize,
+    pub weakly_supported_item_count: usize,
+    pub unsupported_item_count: usize,
+    pub summary: String,
+    pub planned_steps: Vec<String>,
+    pub preview_only: bool,
+    pub not_answer_draft: bool,
+    pub not_grounded_answer: bool,
+    pub not_final_answer: bool,
+    pub no_answer_artifact_created: bool,
+    pub no_evidence_pack_built: bool,
+    pub no_persistence: bool,
+    pub no_llm_call: bool,
+    pub no_runtime_execution: bool,
+    pub blockers: Vec<ScholarChatDraftGroundingInspectionBlocker>,
+    pub warnings: Vec<ScholarChatDraftGroundingInspectionWarning>,
+    pub next_required_actions: Vec<String>,
+}
+
 enum ScholarChatPreviewKind {
     Request,
     Retrieval,
@@ -1271,6 +1306,80 @@ pub fn preview_scholar_chat_grounded_draft_readiness(
     })
 }
 
+pub fn preview_scholar_chat_grounded_answer_build_plan(
+    root: impl Into<PathBuf>,
+    request: ScholarChatDraftGroundingInspectionRequest,
+) -> AegisResult<ScholarChatGroundedAnswerBuildPlanPreview> {
+    let root = root.into();
+    let readiness_preview = preview_scholar_chat_grounded_draft_readiness(&root, request)?;
+    let status = grounded_answer_build_plan_status(&readiness_preview);
+    let mut blockers = readiness_preview.blockers.clone();
+    let mut warnings = readiness_preview.warnings.clone();
+
+    push_grounding_inspection_warning(
+        &mut warnings,
+        "boundary",
+        "This is a grounded-answer build plan preview only; it is not an AnswerDraft, GroundedAnswer, FinalAnswer, Evidence Pack, or persisted artifact.",
+    );
+
+    match status {
+        ScholarChatGroundedAnswerBuildPlanStatus::Blocked => {
+            if blockers.is_empty() {
+                push_grounding_inspection_blocker(
+                    &mut blockers,
+                    "build_plan_blocked",
+                    "Grounded-answer build planning is blocked until draft grounding readiness is available.",
+                );
+            }
+        }
+        ScholarChatGroundedAnswerBuildPlanStatus::NeedsReview => {
+            push_grounding_inspection_warning(
+                &mut warnings,
+                "needs_review",
+                "Weakly supported or unsupported draft items remain and should be reviewed before planning a GroundedAnswer.",
+            );
+        }
+        ScholarChatGroundedAnswerBuildPlanStatus::PlanReadyLater => {
+            push_grounding_inspection_warning(
+                &mut warnings,
+                "plan_ready_later",
+                "All inspected items were supported by local evidence. This is still only a plan preview.",
+            );
+        }
+    }
+
+    let summary = grounded_answer_build_plan_summary(&status, &readiness_preview);
+    let planned_steps = grounded_answer_build_plan_planned_steps(&status);
+    let next_required_actions =
+        grounded_answer_build_plan_next_required_actions(&status, &readiness_preview);
+
+    Ok(ScholarChatGroundedAnswerBuildPlanPreview {
+        status,
+        readiness_status: readiness_preview.status,
+        normalized_prompt: readiness_preview.normalized_prompt,
+        selected_source_count: readiness_preview.selected_source_count,
+        evidence_candidate_count: readiness_preview.evidence_candidate_count,
+        inspected_item_count: readiness_preview.inspected_item_count,
+        supported_item_count: readiness_preview.supported_item_count,
+        weakly_supported_item_count: readiness_preview.weakly_supported_item_count,
+        unsupported_item_count: readiness_preview.unsupported_item_count,
+        summary,
+        planned_steps,
+        preview_only: true,
+        not_answer_draft: true,
+        not_grounded_answer: true,
+        not_final_answer: true,
+        no_answer_artifact_created: true,
+        no_evidence_pack_built: true,
+        no_persistence: true,
+        no_llm_call: true,
+        no_runtime_execution: true,
+        blockers,
+        warnings,
+        next_required_actions,
+    })
+}
+
 const SCHOLAR_CHAT_DRAFT_GROUNDING_INSPECTION_LIMIT: usize = 8;
 
 struct DraftGroundingInspectionItems {
@@ -1414,6 +1523,93 @@ fn grounded_draft_readiness_next_required_actions(
     }
 }
 
+fn grounded_answer_build_plan_status(
+    readiness_preview: &ScholarChatGroundedDraftReadinessPreview,
+) -> ScholarChatGroundedAnswerBuildPlanStatus {
+    match readiness_preview.status {
+        ScholarChatGroundedDraftReadinessStatus::Blocked => ScholarChatGroundedAnswerBuildPlanStatus::Blocked,
+        ScholarChatGroundedDraftReadinessStatus::NeedsReview => ScholarChatGroundedAnswerBuildPlanStatus::NeedsReview,
+        ScholarChatGroundedDraftReadinessStatus::ReadyForGroundedDraftLater => {
+            ScholarChatGroundedAnswerBuildPlanStatus::PlanReadyLater
+        }
+    }
+}
+
+fn grounded_answer_build_plan_summary(
+    status: &ScholarChatGroundedAnswerBuildPlanStatus,
+    readiness_preview: &ScholarChatGroundedDraftReadinessPreview,
+) -> String {
+    match status {
+        ScholarChatGroundedAnswerBuildPlanStatus::Blocked => match readiness_preview.status {
+            ScholarChatGroundedDraftReadinessStatus::Blocked => {
+                "Grounded-answer build planning is blocked because grounded-draft readiness is blocked.".to_string()
+            }
+            ScholarChatGroundedDraftReadinessStatus::NeedsReview => {
+                "Grounded-answer build planning is blocked because grounded-draft readiness still needs review.".to_string()
+            }
+            ScholarChatGroundedDraftReadinessStatus::ReadyForGroundedDraftLater => {
+                "Grounded-answer build planning is blocked until the readiness preview is available.".to_string()
+            }
+        },
+        ScholarChatGroundedAnswerBuildPlanStatus::NeedsReview => {
+            "The draft is not yet ready for a grounded-answer build plan because weakly supported or unsupported items remain.".to_string()
+        }
+        ScholarChatGroundedAnswerBuildPlanStatus::PlanReadyLater => {
+            "All inspected items were supported by local evidence. This is still only a grounded-answer build plan preview.".to_string()
+        }
+    }
+}
+
+fn grounded_answer_build_plan_planned_steps(
+    status: &ScholarChatGroundedAnswerBuildPlanStatus,
+) -> Vec<String> {
+    match status {
+        ScholarChatGroundedAnswerBuildPlanStatus::Blocked => vec![
+            "Resolve grounded-draft readiness blockers.".to_string(),
+            "Re-run draft grounding inspection and readiness preview.".to_string(),
+            "Only then add a future GroundedAnswer implementation.".to_string(),
+        ],
+        ScholarChatGroundedAnswerBuildPlanStatus::NeedsReview => vec![
+            "Review supported draft items.".to_string(),
+            "Resolve weakly supported and unsupported items.".to_string(),
+            "Require an explicit implementation phase before writing GroundedAnswer.".to_string(),
+        ],
+        ScholarChatGroundedAnswerBuildPlanStatus::PlanReadyLater => vec![
+            "Review supported draft items.".to_string(),
+            "Map supported draft items to future grounded claims.".to_string(),
+            "Require an explicit implementation phase before writing GroundedAnswer.".to_string(),
+        ],
+    }
+}
+
+fn grounded_answer_build_plan_next_required_actions(
+    status: &ScholarChatGroundedAnswerBuildPlanStatus,
+    readiness_preview: &ScholarChatGroundedDraftReadinessPreview,
+) -> Vec<String> {
+    let mut next_required_actions = readiness_preview.next_required_actions.clone();
+    match status {
+        ScholarChatGroundedAnswerBuildPlanStatus::Blocked => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Resolve grounded-draft readiness blockers before any GroundedAnswer implementation.",
+            );
+        }
+        ScholarChatGroundedAnswerBuildPlanStatus::NeedsReview => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Review weakly supported and unsupported draft items before any GroundedAnswer implementation.",
+            );
+        }
+        ScholarChatGroundedAnswerBuildPlanStatus::PlanReadyLater => {
+            push_unique_text(
+                &mut next_required_actions,
+                "A GroundedAnswer implementation can be added later without changing this plan preview.",
+            );
+        }
+    }
+    next_required_actions
+}
+
 fn normalize_optional_draft_text(draft_text: Option<String>) -> Option<String> {
     draft_text
         .map(|text| text.trim().to_string())
@@ -1430,6 +1626,12 @@ fn push_grounding_inspection_warning(
             kind: kind.to_string(),
             message: message.to_string(),
         });
+    }
+}
+
+fn push_unique_text(items: &mut Vec<String>, value: &str) {
+    if !items.iter().any(|item| item == value) {
+        items.push(value.to_string());
     }
 }
 
@@ -2474,6 +2676,41 @@ fn main() {
             assert!(!debug.contains(temp_path.as_ref()));
             assert!(!json.contains(temp_path.as_ref()));
             assert_grounded_draft_readiness_boundary_fields(preview);
+        }
+        first
+    }
+
+    fn assert_grounded_answer_build_plan_boundary_fields(
+        preview: &ScholarChatGroundedAnswerBuildPlanPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.not_answer_draft);
+        assert!(preview.not_grounded_answer);
+        assert!(preview.not_final_answer);
+        assert!(preview.no_answer_artifact_created);
+        assert!(preview.no_evidence_pack_built);
+        assert!(preview.no_persistence);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_runtime_execution);
+    }
+
+    fn assert_grounded_answer_build_plan_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatDraftGroundingInspectionRequest,
+    ) -> ScholarChatGroundedAnswerBuildPlanPreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let first = preview_scholar_chat_grounded_answer_build_plan(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_grounded_answer_build_plan(temp.path(), request).unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_grounded_answer_build_plan_boundary_fields(preview);
         }
         first
     }
@@ -3719,6 +3956,199 @@ fn main() {
         let first = assert_grounded_draft_readiness_deterministic_and_path_free(&temp, request);
         assert_eq!(first.status, ScholarChatGroundedDraftReadinessStatus::ReadyForGroundedDraftLater);
         assert_eq!(first.inspection_status, ScholarChatDraftGroundingInspectionStatus::Inspected);
+        assert_eq!(first.inspected_item_count, 1);
+        assert_eq!(first.supported_item_count, 1);
+        assert_eq!(first.weakly_supported_item_count, 0);
+        assert_eq!(first.unsupported_item_count, 0);
+        assert!(first.summary.contains("All inspected items were supported by local evidence"));
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_plan_rejects_empty_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_grounded_answer_build_plan(
+            temp.path(),
+            ScholarChatDraftGroundingInspectionRequest {
+                scholar_chat_request: ScholarChatRequest {
+                    prompt: "   ".to_string(),
+                    mode: ScholarChatMode::LectureLearning,
+                    grounding_policy: GroundingPolicy::LocalFirst,
+                    selected_source_ids: vec![],
+                },
+                draft_text: Some("Alpha beta.".to_string()),
+                max_items: Some(4),
+            },
+        );
+        assert!(matches!(result, Err(AegisError::ScholarChatPromptEmpty)));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_plan_blocks_without_draft_text() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = assert_grounded_answer_build_plan_deterministic_and_path_free(
+            &temp,
+            ScholarChatDraftGroundingInspectionRequest {
+                scholar_chat_request: ScholarChatRequest {
+                    prompt: "alpha grounded evidence".to_string(),
+                    mode: ScholarChatMode::LectureLearning,
+                    grounding_policy: GroundingPolicy::LocalFirst,
+                    selected_source_ids: vec![source_id],
+                },
+                draft_text: Some("   ".to_string()),
+                max_items: Some(4),
+            },
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerBuildPlanStatus::Blocked);
+        assert_eq!(result.readiness_status, ScholarChatGroundedDraftReadinessStatus::Blocked);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "draft_text_missing"));
+        assert!(result.summary.contains("blocked"));
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_plan_blocks_without_selected_sources() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_grounded_answer_build_plan_deterministic_and_path_free(
+            &temp,
+            ScholarChatDraftGroundingInspectionRequest {
+                scholar_chat_request: ScholarChatRequest {
+                    prompt: "alpha grounded evidence".to_string(),
+                    mode: ScholarChatMode::LectureLearning,
+                    grounding_policy: GroundingPolicy::LocalFirst,
+                    selected_source_ids: vec![],
+                },
+                draft_text: Some("Alpha beta.".to_string()),
+                max_items: Some(4),
+            },
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerBuildPlanStatus::Blocked);
+        assert_eq!(result.readiness_status, ScholarChatGroundedDraftReadinessStatus::Blocked);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "needs_sources"));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("Select Scholar Chat source context")));
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_plan_blocks_without_evidence_candidates() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("note-no-index.md");
+        fs::write(&source_path, "alpha beta\n").unwrap();
+        let authority = crate::corpus_authority::CorpusAuthority::new(temp.path());
+        let source = authority
+            .register_source(
+                &source_path,
+                crate::source_metadata::SourceMetadataInput {
+                    title: "Notes".to_string(),
+                    source_type: crate::source_metadata::SourceType::MarkdownNote,
+                    discipline: "psychology".to_string(),
+                    subdiscipline: Some("statistics".to_string()),
+                    language: "en".to_string(),
+                    tags: vec!["study".to_string()],
+                    reliability_notes: None,
+                },
+            )
+            .unwrap();
+        crate::extraction::ExtractionService::new(temp.path())
+            .extract_source(&source.source_id)
+            .unwrap();
+        crate::chunking::ChunkingService::new(temp.path())
+            .chunk_source(&source.source_id)
+            .unwrap();
+
+        let result = assert_grounded_answer_build_plan_deterministic_and_path_free(
+            &temp,
+            ScholarChatDraftGroundingInspectionRequest {
+                scholar_chat_request: ScholarChatRequest {
+                    prompt: "alpha grounded evidence".to_string(),
+                    mode: ScholarChatMode::LectureLearning,
+                    grounding_policy: GroundingPolicy::LocalOnly,
+                    selected_source_ids: vec![source.source_id.clone()],
+                },
+                draft_text: Some("Alpha beta.".to_string()),
+                max_items: Some(4),
+            },
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerBuildPlanStatus::Blocked);
+        assert_eq!(result.readiness_status, ScholarChatGroundedDraftReadinessStatus::Blocked);
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "needs_evidence_candidates"));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("Add local evidence candidates")));
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_plan_marks_weak_or_unsupported_items_for_review() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let weak_result = assert_grounded_answer_build_plan_deterministic_and_path_free(
+            &temp,
+            ScholarChatDraftGroundingInspectionRequest {
+                scholar_chat_request: ScholarChatRequest {
+                    prompt: "alpha grounded evidence".to_string(),
+                    mode: ScholarChatMode::LectureLearning,
+                    grounding_policy: GroundingPolicy::LocalFirst,
+                    selected_source_ids: vec![source_id.clone()],
+                },
+                draft_text: Some("The alpha.".to_string()),
+                max_items: Some(4),
+            },
+        );
+        assert_eq!(weak_result.status, ScholarChatGroundedAnswerBuildPlanStatus::NeedsReview);
+        assert_eq!(weak_result.readiness_status, ScholarChatGroundedDraftReadinessStatus::NeedsReview);
+        assert_eq!(weak_result.weakly_supported_item_count, 1);
+        assert_eq!(weak_result.unsupported_item_count, 0);
+        assert!(weak_result
+            .warnings
+            .iter()
+            .any(|warning| warning.kind == "needs_review"));
+
+        let unsupported_result = assert_grounded_answer_build_plan_deterministic_and_path_free(
+            &temp,
+            ScholarChatDraftGroundingInspectionRequest {
+                scholar_chat_request: ScholarChatRequest {
+                    prompt: "alpha grounded evidence".to_string(),
+                    mode: ScholarChatMode::LectureLearning,
+                    grounding_policy: GroundingPolicy::LocalFirst,
+                    selected_source_ids: vec![source_id],
+                },
+                draft_text: Some("Zeta kappa.".to_string()),
+                max_items: Some(4),
+            },
+        );
+        assert_eq!(unsupported_result.status, ScholarChatGroundedAnswerBuildPlanStatus::NeedsReview);
+        assert_eq!(unsupported_result.readiness_status, ScholarChatGroundedDraftReadinessStatus::NeedsReview);
+        assert_eq!(unsupported_result.supported_item_count, 0);
+        assert_eq!(unsupported_result.weakly_supported_item_count, 0);
+        assert_eq!(unsupported_result.unsupported_item_count, 1);
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_plan_is_ready_only_when_every_item_has_local_support() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let request = ScholarChatDraftGroundingInspectionRequest {
+            scholar_chat_request: ScholarChatRequest {
+                prompt: "alpha grounded evidence".to_string(),
+                mode: ScholarChatMode::LectureLearning,
+                grounding_policy: GroundingPolicy::LocalFirst,
+                selected_source_ids: vec![source_id],
+            },
+            draft_text: Some("Alpha beta.".to_string()),
+            max_items: Some(4),
+        };
+        let first = assert_grounded_answer_build_plan_deterministic_and_path_free(&temp, request);
+        assert_eq!(first.status, ScholarChatGroundedAnswerBuildPlanStatus::PlanReadyLater);
+        assert_eq!(
+            first.readiness_status,
+            ScholarChatGroundedDraftReadinessStatus::ReadyForGroundedDraftLater
+        );
         assert_eq!(first.inspected_item_count, 1);
         assert_eq!(first.supported_item_count, 1);
         assert_eq!(first.weakly_supported_item_count, 0);

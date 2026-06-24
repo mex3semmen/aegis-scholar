@@ -1158,6 +1158,26 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 79 — Grounded Answer Build Plan Preview
+
+Phase 79.0 adds a preview-only grounded-answer build-plan diagnostic that composes the grounded-draft readiness preview and explains what would still be needed before a future GroundedAnswer could be written.
+It remains plan-only and does not create an AnswerDraft, GroundedAnswer, FinalAnswer, Evidence Pack, persisted artifact, or runtime execution.
+
+Do not implement:
+
+- grounded answer generation
+- AnswerDraft creation
+- GroundedAnswer creation
+- FinalAnswer creation
+- Evidence Pack building
+- runtime execution changes
+- LLM calls outside preview
+- chat history persistence
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
