@@ -413,6 +413,7 @@ export default function App() {
   const [artifactIssues, setArtifactIssues] = createSignal<AnswerArtifactIssue[]>([]);
   const [artifactIssuesError, setArtifactIssuesError] = createSignal<string | null>(null);
   const [artifactIssuesLoading, setArtifactIssuesLoading] = createSignal(false);
+  const [artifactIssuesHasRun, setArtifactIssuesHasRun] = createSignal(false);
   const [artifactManifest, setArtifactManifest] = createSignal<AnswerArtifactExportManifest | null>(null);
   const [artifactManifestError, setArtifactManifestError] = createSignal<string | null>(null);
   const [artifactManifestLoading, setArtifactManifestLoading] = createSignal(false);
@@ -601,6 +602,7 @@ export default function App() {
     if (artifactIssuesLoading()) {
       return;
     }
+    setArtifactIssuesHasRun(true);
     setArtifactIssuesLoading(true);
     setArtifactIssuesError(null);
     try {
@@ -702,6 +704,27 @@ export default function App() {
         draft_count: 0,
         grounded_answer_count: 0,
         final_answer_count: 0,
+      },
+    );
+  }
+
+  function answerArtifactIssueTotals() {
+    return artifactIssues().reduce(
+      (totals, item) => ({
+        issue_count: totals.issue_count + 1,
+        source_count: item.source_id && !totals.source_ids.includes(item.source_id) ? totals.source_count + 1 : totals.source_count,
+        malformed_final_answer_count: totals.malformed_final_answer_count + (item.issue_kind === "malformed_final_answer" ? 1 : 0),
+        unsupported_statement_count: totals.unsupported_statement_count + (item.issue_kind === "unsupported_statement" ? 1 : 0),
+        needs_evidence_statement_count: totals.needs_evidence_statement_count + (item.issue_kind === "needs_evidence_statement" ? 1 : 0),
+        source_ids: item.source_id && !totals.source_ids.includes(item.source_id) ? [...totals.source_ids, item.source_id] : totals.source_ids,
+      }),
+      {
+        issue_count: 0,
+        source_count: 0,
+        malformed_final_answer_count: 0,
+        unsupported_statement_count: 0,
+        needs_evidence_statement_count: 0,
+        source_ids: [] as string[],
       },
     );
   }
@@ -894,10 +917,20 @@ export default function App() {
           )}
         </div>
         <div class="artifact-overview">
-          <h3>Artifact issues</h3>
-          {artifactIssues().length > 0 ? (
+          <h3>Answer artifact issues</h3>
+          <p class="muted">Read-only issue list for existing answer artifacts.</p>
+          {artifactIssuesLoading() ? (
+            <p>Loading answer artifact issues...</p>
+          ) : artifactIssuesHasRun() ? (
             <>
-              <p class="muted">Issues: {artifactIssues().length}</p>
+              <div class="contract-meta">
+                <div><span>Issues</span><strong>{answerArtifactIssueTotals().issue_count}</strong></div>
+                <div><span>Sources</span><strong>{answerArtifactIssueTotals().source_count}</strong></div>
+                <div><span>Malformed finals</span><strong>{answerArtifactIssueTotals().malformed_final_answer_count}</strong></div>
+                <div><span>Needs evidence</span><strong>{answerArtifactIssueTotals().needs_evidence_statement_count}</strong></div>
+                <div><span>Unsupported</span><strong>{answerArtifactIssueTotals().unsupported_statement_count}</strong></div>
+              </div>
+              {artifactIssues().length > 0 ? (
               <ul class="final-answer-list-items">
                 {artifactIssues().map((item) => (
                   <li>
@@ -919,9 +952,12 @@ export default function App() {
                   </li>
                 ))}
               </ul>
+              ) : (
+                <p>No answer artifact issues reported.</p>
+              )}
             </>
           ) : (
-            <p>No artifact issues loaded yet.</p>
+            <p>No answer artifact issues loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">
