@@ -170,6 +170,44 @@ type ScholarChatPromptPackPreviewResponse = {
   warnings: string[];
 };
 
+type LocalModelRuntimeKind = "llama_cpp" | "none";
+
+type LocalModelRuntimeHealthStatus =
+  | "not_configured"
+  | "config_present"
+  | "model_missing"
+  | "executable_missing"
+  | "ready_to_test_later";
+
+type LocalModelRuntimePathState = "not_configured" | "missing" | "exists";
+
+type LocalModelRuntimeHealthWarning = {
+  kind: string;
+  message: string;
+};
+
+type LocalModelRuntimeConfig = {
+  runtime_kind: LocalModelRuntimeKind;
+  model_path: string | null;
+  executable_path: string | null;
+  context_window: number | null;
+  gpu_layers: number | null;
+  temperature: number | null;
+};
+
+type LocalModelRuntimeHealthPreview = {
+  status: LocalModelRuntimeHealthStatus;
+  runtime_kind: LocalModelRuntimeKind;
+  model_state: LocalModelRuntimePathState;
+  executable_state: LocalModelRuntimePathState;
+  model_extension_valid: boolean;
+  model_file_name?: string | null;
+  context_window?: number | null;
+  gpu_layers?: number | null;
+  temperature?: number | null;
+  warnings: LocalModelRuntimeHealthWarning[];
+};
+
 type RetrievalIndexEntry = {
   chunk_id: string;
   source_id: string;
@@ -583,6 +621,17 @@ export default function App() {
   const [scholarChatPromptPackError, setScholarChatPromptPackError] = createSignal<string | null>(null);
   const [scholarChatPromptPackLoading, setScholarChatPromptPackLoading] = createSignal(false);
   const [scholarChatPromptPackHasRun, setScholarChatPromptPackHasRun] = createSignal(false);
+  const [localRuntimeKind, setLocalRuntimeKind] = createSignal<LocalModelRuntimeKind>("none");
+  const [localRuntimeModelPath, setLocalRuntimeModelPath] = createSignal("");
+  const [localRuntimeExecutablePath, setLocalRuntimeExecutablePath] = createSignal("");
+  const [localRuntimeContextWindow, setLocalRuntimeContextWindow] = createSignal("");
+  const [localRuntimeGpuLayers, setLocalRuntimeGpuLayers] = createSignal("");
+  const [localRuntimeTemperature, setLocalRuntimeTemperature] = createSignal("");
+  const [localRuntimePreview, setLocalRuntimePreview] = createSignal<LocalModelRuntimeHealthPreview | null>(null);
+  const [localRuntimeError, setLocalRuntimeError] = createSignal<string | null>(null);
+  const [localRuntimeValidationError, setLocalRuntimeValidationError] = createSignal<string | null>(null);
+  const [localRuntimeLoading, setLocalRuntimeLoading] = createSignal(false);
+  const [localRuntimeHasRun, setLocalRuntimeHasRun] = createSignal(false);
   const [sourceId, setSourceId] = createSignal("");
   const [finalAnswerId, setFinalAnswerId] = createSignal("");
   const [finalAnswer, setFinalAnswer] = createSignal<FinalAnswer | null>(null);
@@ -1061,6 +1110,44 @@ export default function App() {
     setScholarChatPromptPackHasRun(false);
   }
 
+  function clearLocalRuntimePreview() {
+    setLocalRuntimePreview(null);
+    setLocalRuntimeError(null);
+    setLocalRuntimeValidationError(null);
+    setLocalRuntimeHasRun(false);
+  }
+
+  function normalizeOptionalTextInput(value: string) {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  function parseOptionalIntegerInput(value: string, label: string) {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isInteger(parsed)) {
+      setLocalRuntimeValidationError(`${label} must be a whole number.`);
+      return undefined;
+    }
+    return parsed;
+  }
+
+  function parseOptionalNumberInput(value: string, label: string) {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) {
+      setLocalRuntimeValidationError(`${label} must be a number.`);
+      return undefined;
+    }
+    return parsed;
+  }
+
   function selectedFinalAnswerDetail() {
     const selectedSourceId = selectedAnswerArtifactSourceId();
     const selectedFinalAnswerId = finalAnswerId().trim();
@@ -1293,6 +1380,49 @@ export default function App() {
       setScholarChatPromptPackError(sanitizeBackendError(err));
     } finally {
       setScholarChatPromptPackLoading(false);
+    }
+  }
+
+  async function previewLocalRuntimeHealth() {
+    if (localRuntimeLoading()) {
+      return;
+    }
+
+    const contextWindow = parseOptionalIntegerInput(localRuntimeContextWindow(), "Context window");
+    const gpuLayers = parseOptionalIntegerInput(localRuntimeGpuLayers(), "GPU layers");
+    const temperature = parseOptionalNumberInput(localRuntimeTemperature(), "Temperature");
+    if (
+      contextWindow === undefined ||
+      gpuLayers === undefined ||
+      temperature === undefined
+    ) {
+      setLocalRuntimeHasRun(true);
+      setLocalRuntimePreview(null);
+      return;
+    }
+
+    setLocalRuntimeHasRun(true);
+    setLocalRuntimeLoading(true);
+    setLocalRuntimeError(null);
+    setLocalRuntimeValidationError(null);
+    setLocalRuntimePreview(null);
+    try {
+      const result = await invoke<LocalModelRuntimeHealthPreview>("preview_local_model_runtime_health", {
+        root: ".",
+        config: {
+          runtime_kind: localRuntimeKind(),
+          model_path: normalizeOptionalTextInput(localRuntimeModelPath()),
+          executable_path: normalizeOptionalTextInput(localRuntimeExecutablePath()),
+          context_window: contextWindow,
+          gpu_layers: gpuLayers,
+          temperature: temperature,
+        },
+      });
+      setLocalRuntimePreview(result);
+    } catch (err) {
+      setLocalRuntimeError(sanitizeBackendError(err));
+    } finally {
+      setLocalRuntimeLoading(false);
     }
   }
 
@@ -1678,6 +1808,138 @@ export default function App() {
             )
           ) : (
             <p>No Scholar Chat prompt pack preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Local model runtime</h3>
+          <p class="muted">
+            Read-only local model runtime readiness preview. It only checks configured paths and preview settings; no model is executed, no answer is generated, and nothing is persisted.
+          </p>
+          <div class="form-row">
+            <label>
+              Runtime kind
+              <select
+                value={localRuntimeKind()}
+                onChange={(event) => {
+                  setLocalRuntimeKind(event.currentTarget.value as LocalModelRuntimeKind);
+                  clearLocalRuntimePreview();
+                }}
+              >
+                <option value="none">None</option>
+                <option value="llama_cpp">llama_cpp</option>
+              </select>
+            </label>
+            <label>
+              Context window
+              <input
+                type="number"
+                value={localRuntimeContextWindow()}
+                onInput={(event) => {
+                  setLocalRuntimeContextWindow(event.currentTarget.value);
+                  clearLocalRuntimePreview();
+                }}
+                placeholder="4096"
+              />
+            </label>
+            <label>
+              GPU layers
+              <input
+                type="number"
+                value={localRuntimeGpuLayers()}
+                onInput={(event) => {
+                  setLocalRuntimeGpuLayers(event.currentTarget.value);
+                  clearLocalRuntimePreview();
+                }}
+                placeholder="0"
+              />
+            </label>
+            <label>
+              Temperature
+              <input
+                type="number"
+                step="0.1"
+                value={localRuntimeTemperature()}
+                onInput={(event) => {
+                  setLocalRuntimeTemperature(event.currentTarget.value);
+                  clearLocalRuntimePreview();
+                }}
+                placeholder="0.7"
+              />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>
+              Model path
+              <input
+                type="text"
+                value={localRuntimeModelPath()}
+                onInput={(event) => {
+                  setLocalRuntimeModelPath(event.currentTarget.value);
+                  clearLocalRuntimePreview();
+                }}
+                placeholder="E:\\models\\scholar.gguf"
+              />
+            </label>
+            <label>
+              Executable path
+              <input
+                type="text"
+                value={localRuntimeExecutablePath()}
+                onInput={(event) => {
+                  setLocalRuntimeExecutablePath(event.currentTarget.value);
+                  clearLocalRuntimePreview();
+                }}
+                placeholder="E:\\bin\\llama-server.exe"
+              />
+            </label>
+          </div>
+          <div class="hero-actions">
+            <button onClick={previewLocalRuntimeHealth} disabled={localRuntimeLoading()}>
+              {localRuntimeLoading() ? "Previewing..." : "Preview runtime health"}
+            </button>
+          </div>
+          <p class="muted">No model is executed. No answer will be generated. Configuration is not persisted.</p>
+          {localRuntimeValidationError() && <p class="error">{localRuntimeValidationError()}</p>}
+          {localRuntimeError() && <p class="error">{localRuntimeError()}</p>}
+          {localRuntimeLoading() ? (
+            <p>Previewing local runtime health...</p>
+          ) : localRuntimeHasRun() ? (
+            localRuntimePreview() ? (
+              <>
+                <div class="contract-meta">
+                  <div><span>Status</span><strong>{formatSnakeCaseLabel(localRuntimePreview()!.status)}</strong></div>
+                  <div><span>Runtime kind</span><strong>{formatSnakeCaseLabel(localRuntimePreview()!.runtime_kind)}</strong></div>
+                  <div><span>Model state</span><strong>{formatSnakeCaseLabel(localRuntimePreview()!.model_state)}</strong></div>
+                  <div><span>Executable state</span><strong>{formatSnakeCaseLabel(localRuntimePreview()!.executable_state)}</strong></div>
+                  <div><span>Model extension valid</span><strong>{localRuntimePreview()!.model_extension_valid ? "yes" : "no"}</strong></div>
+                  <div><span>Context window</span><strong>{localRuntimePreview()!.context_window ?? "missing"}</strong></div>
+                  <div><span>GPU layers</span><strong>{localRuntimePreview()!.gpu_layers ?? "missing"}</strong></div>
+                  <div><span>Temperature</span><strong>{localRuntimePreview()!.temperature ?? "missing"}</strong></div>
+                </div>
+                {localRuntimePreview()!.model_file_name ? (
+                  <p><strong>Model file name:</strong> {localRuntimePreview()!.model_file_name}</p>
+                ) : null}
+                {localRuntimePreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {localRuntimePreview()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No runtime warnings.</p>
+                )}
+              </>
+            ) : (
+              <p>No local model runtime preview loaded yet.</p>
+            )
+          ) : (
+            <p>No local model runtime preview loaded yet.</p>
           )}
         </div>
       </section>

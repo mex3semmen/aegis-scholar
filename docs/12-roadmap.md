@@ -918,6 +918,27 @@ Do not implement:
 - web search or scholarly database integration
 - routing/charts/frontend test framework
 
+## Phase 69 — Local Model Runtime Config / Health Preview
+
+Preview-bound local runtime readiness slice.
+
+Phase 69.0 adds the preview-only `preview_local_model_runtime_health` command and a compact local model runtime preview card.
+It accepts a read-only runtime config, checks model/executable file readiness when paths are provided, and stays path-free, deterministic, and non-persistent.
+It does not start a process, call an LLM, stream tokens, generate answers, persist config, or download/install models.
+
+Do not implement:
+
+- local model inference/runtime execution
+- LLM calls
+- streaming tokens
+- answer generation
+- config persistence
+- model download/install behavior
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
