@@ -682,6 +682,27 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 58 — Final Answer Detail Preview UI Surface
+
+Frontend-only diagnostic surface.
+
+Phase 58.0 extends the existing read-only final answer list card with a compact detail preview for the selected final answer, using the already-exposed `get_final_answer` command.
+It keeps the UI path-free and does not change backend answer-artifact semantics.
+It adds no new backend command exposure and no new answer-artifact workflow.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
