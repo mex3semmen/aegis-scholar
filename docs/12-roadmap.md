@@ -621,6 +621,26 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 55 — Answer Artifact Issues UI Surface
+
+Frontend-only diagnostic surface.
+
+Phase 55.0 adds a compact read-only answer artifact issues card using the already-exposed `list_answer_artifact_issues` command.
+It shows deterministic issue summaries and keeps the UI path-free, and it does not change backend answer-artifact semantics.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
