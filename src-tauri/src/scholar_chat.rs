@@ -2457,6 +2457,27 @@ fn main() {
         assert!(preview.no_runtime_execution);
     }
 
+    fn assert_grounded_draft_readiness_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatDraftGroundingInspectionRequest,
+    ) -> ScholarChatGroundedDraftReadinessPreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let first = preview_scholar_chat_grounded_draft_readiness(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_grounded_draft_readiness(temp.path(), request).unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_grounded_draft_readiness_boundary_fields(preview);
+        }
+        first
+    }
+
     #[test]
     fn scholar_chat_draft_grounding_inspection_drops_stopwords_and_short_noise_terms() {
         let terms = inspection_terms("the and of to in a an is are was were with for on by as at from this that 12 alpha 2024 x y");
@@ -3539,8 +3560,8 @@ fn main() {
     fn scholar_chat_grounded_draft_readiness_blocks_without_draft_text() {
         let temp = tempfile::tempdir().unwrap();
         let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
-        let result = preview_scholar_chat_grounded_draft_readiness(
-            temp.path(),
+        let result = assert_grounded_draft_readiness_deterministic_and_path_free(
+            &temp,
             ScholarChatDraftGroundingInspectionRequest {
                 scholar_chat_request: ScholarChatRequest {
                     prompt: "alpha grounded evidence".to_string(),
@@ -3551,20 +3572,18 @@ fn main() {
                 draft_text: Some("   ".to_string()),
                 max_items: Some(4),
             },
-        )
-        .unwrap();
+        );
         assert_eq!(result.status, ScholarChatGroundedDraftReadinessStatus::Blocked);
         assert_eq!(result.inspection_status, ScholarChatDraftGroundingInspectionStatus::NoDraftText);
         assert!(result.blockers.iter().any(|blocker| blocker.kind == "draft_text_missing"));
         assert!(result.summary.contains("blocked"));
-        assert_grounded_draft_readiness_boundary_fields(&result);
     }
 
     #[test]
     fn scholar_chat_grounded_draft_readiness_blocks_without_selected_sources() {
         let temp = tempfile::tempdir().unwrap();
-        let result = preview_scholar_chat_grounded_draft_readiness(
-            temp.path(),
+        let result = assert_grounded_draft_readiness_deterministic_and_path_free(
+            &temp,
             ScholarChatDraftGroundingInspectionRequest {
                 scholar_chat_request: ScholarChatRequest {
                     prompt: "alpha grounded evidence".to_string(),
@@ -3575,8 +3594,7 @@ fn main() {
                 draft_text: Some("Alpha beta.".to_string()),
                 max_items: Some(4),
             },
-        )
-        .unwrap();
+        );
         assert_eq!(result.status, ScholarChatGroundedDraftReadinessStatus::Blocked);
         assert_eq!(result.inspection_status, ScholarChatDraftGroundingInspectionStatus::Blocked);
         assert!(result.blockers.iter().any(|blocker| blocker.kind == "needs_sources"));
@@ -3584,7 +3602,6 @@ fn main() {
             .next_required_actions
             .iter()
             .any(|action| action.contains("Select Scholar Chat source context")));
-        assert_grounded_draft_readiness_boundary_fields(&result);
     }
 
     #[test]
@@ -3614,8 +3631,8 @@ fn main() {
             .chunk_source(&source.source_id)
             .unwrap();
 
-        let result = preview_scholar_chat_grounded_draft_readiness(
-            temp.path(),
+        let result = assert_grounded_draft_readiness_deterministic_and_path_free(
+            &temp,
             ScholarChatDraftGroundingInspectionRequest {
                 scholar_chat_request: ScholarChatRequest {
                     prompt: "alpha grounded evidence".to_string(),
@@ -3626,8 +3643,7 @@ fn main() {
                 draft_text: Some("Alpha beta.".to_string()),
                 max_items: Some(4),
             },
-        )
-        .unwrap();
+        );
         assert_eq!(result.status, ScholarChatGroundedDraftReadinessStatus::Blocked);
         assert_eq!(result.inspection_status, ScholarChatDraftGroundingInspectionStatus::NoEvidenceCandidates);
         assert!(result
@@ -3638,15 +3654,14 @@ fn main() {
             .next_required_actions
             .iter()
             .any(|action| action.contains("Add local evidence candidates")));
-        assert_grounded_draft_readiness_boundary_fields(&result);
     }
 
     #[test]
     fn scholar_chat_grounded_draft_readiness_marks_weak_or_unsupported_items_for_review() {
         let temp = tempfile::tempdir().unwrap();
         let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
-        let weak_result = preview_scholar_chat_grounded_draft_readiness(
-            temp.path(),
+        let weak_result = assert_grounded_draft_readiness_deterministic_and_path_free(
+            &temp,
             ScholarChatDraftGroundingInspectionRequest {
                 scholar_chat_request: ScholarChatRequest {
                     prompt: "alpha grounded evidence".to_string(),
@@ -3657,8 +3672,7 @@ fn main() {
                 draft_text: Some("The alpha.".to_string()),
                 max_items: Some(4),
             },
-        )
-        .unwrap();
+        );
         assert_eq!(weak_result.status, ScholarChatGroundedDraftReadinessStatus::NeedsReview);
         assert_eq!(weak_result.inspection_status, ScholarChatDraftGroundingInspectionStatus::Inspected);
         assert_eq!(weak_result.weakly_supported_item_count, 1);
@@ -3667,10 +3681,9 @@ fn main() {
             .warnings
             .iter()
             .any(|warning| warning.kind == "needs_review"));
-        assert_grounded_draft_readiness_boundary_fields(&weak_result);
 
-        let unsupported_result = preview_scholar_chat_grounded_draft_readiness(
-            temp.path(),
+        let unsupported_result = assert_grounded_draft_readiness_deterministic_and_path_free(
+            &temp,
             ScholarChatDraftGroundingInspectionRequest {
                 scholar_chat_request: ScholarChatRequest {
                     prompt: "alpha grounded evidence".to_string(),
@@ -3681,21 +3694,18 @@ fn main() {
                 draft_text: Some("Zeta kappa.".to_string()),
                 max_items: Some(4),
             },
-        )
-        .unwrap();
+        );
         assert_eq!(unsupported_result.status, ScholarChatGroundedDraftReadinessStatus::NeedsReview);
         assert_eq!(unsupported_result.inspection_status, ScholarChatDraftGroundingInspectionStatus::Inspected);
         assert_eq!(unsupported_result.supported_item_count, 0);
         assert_eq!(unsupported_result.weakly_supported_item_count, 0);
         assert_eq!(unsupported_result.unsupported_item_count, 1);
-        assert_grounded_draft_readiness_boundary_fields(&unsupported_result);
     }
 
     #[test]
     fn scholar_chat_grounded_draft_readiness_is_ready_only_when_every_item_has_local_support() {
         let temp = tempfile::tempdir().unwrap();
         let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
-        let before_entries = count_entries_recursively(temp.path());
         let request = ScholarChatDraftGroundingInspectionRequest {
             scholar_chat_request: ScholarChatRequest {
                 prompt: "alpha grounded evidence".to_string(),
@@ -3706,10 +3716,7 @@ fn main() {
             draft_text: Some("Alpha beta.".to_string()),
             max_items: Some(4),
         };
-        let first = preview_scholar_chat_grounded_draft_readiness(temp.path(), request.clone()).unwrap();
-        let second = preview_scholar_chat_grounded_draft_readiness(temp.path(), request).unwrap();
-        let after_entries = count_entries_recursively(temp.path());
-        assert_eq!(first, second);
+        let first = assert_grounded_draft_readiness_deterministic_and_path_free(&temp, request);
         assert_eq!(first.status, ScholarChatGroundedDraftReadinessStatus::ReadyForGroundedDraftLater);
         assert_eq!(first.inspection_status, ScholarChatDraftGroundingInspectionStatus::Inspected);
         assert_eq!(first.inspected_item_count, 1);
@@ -3717,12 +3724,5 @@ fn main() {
         assert_eq!(first.weakly_supported_item_count, 0);
         assert_eq!(first.unsupported_item_count, 0);
         assert!(first.summary.contains("All inspected items were supported by local evidence"));
-        let debug = format!("{first:?}");
-        let json = serde_json::to_string(&first).unwrap();
-        let temp_path = temp.path().to_string_lossy();
-        assert!(!debug.contains(temp_path.as_ref()));
-        assert!(!json.contains(temp_path.as_ref()));
-        assert_eq!(before_entries, after_entries);
-        assert_grounded_draft_readiness_boundary_fields(&first);
     }
 }
