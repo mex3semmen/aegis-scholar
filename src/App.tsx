@@ -92,6 +92,39 @@ type ScholarChatRetrievalPreviewResponse = {
   warnings: string[];
 };
 
+type ScholarChatEvidenceCandidate = {
+  source_id: string;
+  version_id: string;
+  chunk_id: string;
+  score: number;
+  matched_terms: string[];
+  preview: string;
+  locator: CitationLocator;
+};
+
+type ScholarChatEvidencePlan = {
+  retrieval_candidate_count: number;
+  evidence_candidate_count: number;
+  evidence_required: boolean;
+  evidence_pack_would_be_built_later: boolean;
+  summary: string;
+  steps: string[];
+};
+
+type ScholarChatEvidencePlanResponse = {
+  status: "evidence_plan_preview";
+  normalized_prompt: string;
+  mode: ScholarChatMode;
+  grounding_policy: GroundingPolicy;
+  selected_source_ids: string[];
+  selected_source_count: number;
+  retrieval_candidate_count: number;
+  evidence_candidate_count: number;
+  evidence_plan: ScholarChatEvidencePlan;
+  candidates: ScholarChatEvidenceCandidate[];
+  warnings: string[];
+};
+
 type RetrievalIndexEntry = {
   chunk_id: string;
   source_id: string;
@@ -497,6 +530,10 @@ export default function App() {
   const [scholarChatRetrievalError, setScholarChatRetrievalError] = createSignal<string | null>(null);
   const [scholarChatRetrievalLoading, setScholarChatRetrievalLoading] = createSignal(false);
   const [scholarChatRetrievalHasRun, setScholarChatRetrievalHasRun] = createSignal(false);
+  const [scholarChatEvidencePlanPreview, setScholarChatEvidencePlanPreview] = createSignal<ScholarChatEvidencePlanResponse | null>(null);
+  const [scholarChatEvidencePlanError, setScholarChatEvidencePlanError] = createSignal<string | null>(null);
+  const [scholarChatEvidencePlanLoading, setScholarChatEvidencePlanLoading] = createSignal(false);
+  const [scholarChatEvidencePlanHasRun, setScholarChatEvidencePlanHasRun] = createSignal(false);
   const [sourceId, setSourceId] = createSignal("");
   const [finalAnswerId, setFinalAnswerId] = createSignal("");
   const [finalAnswer, setFinalAnswer] = createSignal<FinalAnswer | null>(null);
@@ -961,6 +998,9 @@ export default function App() {
     setScholarChatRetrievalPreview(null);
     setScholarChatRetrievalError(null);
     setScholarChatRetrievalHasRun(false);
+    setScholarChatEvidencePlanPreview(null);
+    setScholarChatEvidencePlanError(null);
+    setScholarChatEvidencePlanHasRun(false);
   }
 
   function selectedFinalAnswerDetail() {
@@ -1128,6 +1168,40 @@ export default function App() {
       setScholarChatRetrievalError(sanitizeBackendError(err));
     } finally {
       setScholarChatRetrievalLoading(false);
+    }
+  }
+
+  async function previewScholarChatEvidencePlan() {
+    const trimmedPrompt = scholarChatPrompt().trim();
+    if (!trimmedPrompt) {
+      setScholarChatEvidencePlanPreview(null);
+      setScholarChatEvidencePlanError(null);
+      setScholarChatValidationError("Prompt is required to preview a Scholar Chat evidence plan.");
+      return;
+    }
+    if (scholarChatEvidencePlanLoading()) {
+      return;
+    }
+    setScholarChatEvidencePlanHasRun(true);
+    setScholarChatEvidencePlanLoading(true);
+    setScholarChatEvidencePlanError(null);
+    setScholarChatValidationError(null);
+    setScholarChatEvidencePlanPreview(null);
+    try {
+      const result = await invoke<ScholarChatEvidencePlanResponse>("preview_scholar_chat_evidence_plan", {
+        root: ".",
+        request: {
+          prompt: trimmedPrompt,
+          mode: scholarChatMode(),
+          grounding_policy: scholarChatGroundingPolicy(),
+          selected_source_ids: selectedScholarChatSourceIds(),
+        },
+      });
+      setScholarChatEvidencePlanPreview(result);
+    } catch (err) {
+      setScholarChatEvidencePlanError(sanitizeBackendError(err));
+    } finally {
+      setScholarChatEvidencePlanLoading(false);
     }
   }
 
@@ -1343,6 +1417,82 @@ export default function App() {
             )
           ) : (
             <p>No Scholar Chat retrieval preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Evidence plan preview</h3>
+          <p class="muted">
+            Read-only evidence-plan preview for retrieval candidates that would be eligible for Evidence Pack assembly later. It does not build an Evidence Pack or generate an answer.
+          </p>
+          <div class="hero-actions">
+            <button onClick={previewScholarChatEvidencePlan} disabled={scholarChatEvidencePlanLoading()}>
+              {scholarChatEvidencePlanLoading() ? "Previewing..." : "Preview evidence plan"}
+            </button>
+          </div>
+          {scholarChatEvidencePlanError() && <p class="error">{scholarChatEvidencePlanError()}</p>}
+          {scholarChatEvidencePlanLoading() ? (
+            <p>Previewing evidence plan...</p>
+          ) : scholarChatEvidencePlanHasRun() ? (
+            scholarChatEvidencePlanPreview() ? (
+              <>
+                <div class="contract-meta">
+                  <div><span>Status</span><strong>{scholarChatEvidencePlanPreview()!.status}</strong></div>
+                  <div><span>Mode</span><strong>{scholarChatEvidencePlanPreview()!.mode}</strong></div>
+                  <div><span>Grounding policy</span><strong>{scholarChatEvidencePlanPreview()!.grounding_policy}</strong></div>
+                  <div><span>Selected sources</span><strong>{scholarChatEvidencePlanPreview()!.selected_source_count}</strong></div>
+                  <div><span>Retrieval candidates</span><strong>{scholarChatEvidencePlanPreview()!.retrieval_candidate_count}</strong></div>
+                  <div><span>Evidence candidates</span><strong>{scholarChatEvidencePlanPreview()!.evidence_candidate_count}</strong></div>
+                </div>
+                <p><strong>Prompt:</strong> {scholarChatEvidencePlanPreview()!.normalized_prompt}</p>
+                <p>{scholarChatEvidencePlanPreview()!.evidence_plan.summary}</p>
+                <div class="contract-meta">
+                  <div><span>Evidence required</span><strong>{scholarChatEvidencePlanPreview()!.evidence_plan.evidence_required ? "yes" : "no"}</strong></div>
+                  <div><span>Evidence Pack later</span><strong>{scholarChatEvidencePlanPreview()!.evidence_plan.evidence_pack_would_be_built_later ? "yes" : "no"}</strong></div>
+                </div>
+                <h4>Plan steps</h4>
+                <ul>
+                  {scholarChatEvidencePlanPreview()!.evidence_plan.steps.map((step) => (
+                    <li>{step}</li>
+                  ))}
+                </ul>
+                {scholarChatEvidencePlanPreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {scholarChatEvidencePlanPreview()!.warnings.map((warning) => (
+                        <li>{warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {scholarChatEvidencePlanPreview()!.candidates.length > 0 ? (
+                  <ul class="final-answer-list-items">
+                    {scholarChatEvidencePlanPreview()!.candidates.map((item) => (
+                      <li>
+                        <div class="final-answer-list-item">
+                          <span>{item.chunk_id}</span>
+                          <small>
+                            source={item.source_id} | version={item.version_id} | score={item.score.toFixed(3)} | matched={item.matched_terms.join(", ") || "none"}
+                          </small>
+                          <small>{locatorSummary(item.locator)}</small>
+                          <p>{item.preview}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>
+                    {scholarChatEvidencePlanPreview()!.selected_source_count > 0
+                      ? "No retrieval candidates were eligible for Evidence Pack assembly yet."
+                      : "No Scholar Chat source context selected; preview is unscoped."}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p>No Scholar Chat evidence plan preview loaded yet.</p>
+            )
+          ) : (
+            <p>No Scholar Chat evidence plan preview loaded yet.</p>
           )}
         </div>
       </section>
