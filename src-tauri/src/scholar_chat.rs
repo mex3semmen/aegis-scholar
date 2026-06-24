@@ -13,7 +13,7 @@ use crate::local_runtime::{
     LocalRuntimeSmokeInferenceStatus,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 const SCHOLAR_CHAT_RETRIEVAL_PREVIEW_LIMIT: usize = 5;
@@ -335,6 +335,77 @@ pub struct ScholarChatDraftInferencePreview {
     pub no_persistence: bool,
     pub blockers: Vec<ScholarChatDraftInferenceBlocker>,
     pub warnings: Vec<ScholarChatDraftInferenceWarning>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatDraftGroundingInspectionStatus {
+    Blocked,
+    NoDraftText,
+    NoEvidenceCandidates,
+    Inspected,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatDraftGroundingSupportStatus {
+    NotInspected,
+    Unsupported,
+    WeaklySupported,
+    SupportedByLocalEvidence,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatDraftGroundingInspectionBlocker {
+    pub kind: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatDraftGroundingInspectionWarning {
+    pub kind: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatDraftGroundingInspectionRequest {
+    pub scholar_chat_request: ScholarChatRequest,
+    pub draft_text: Option<String>,
+    pub max_items: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatDraftGroundingInspectionItem {
+    pub item_index: usize,
+    pub text_preview: String,
+    pub support_status: ScholarChatDraftGroundingSupportStatus,
+    pub matched_evidence_count: usize,
+    pub source_ids: Vec<String>,
+    pub locator_previews: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatDraftGroundingInspectionPreview {
+    pub status: ScholarChatDraftGroundingInspectionStatus,
+    pub normalized_prompt: String,
+    pub draft_char_count: usize,
+    pub selected_source_count: usize,
+    pub evidence_candidate_count: usize,
+    pub inspected_item_count: usize,
+    pub unsupported_item_count: usize,
+    pub weakly_supported_item_count: usize,
+    pub supported_item_count: usize,
+    pub items: Vec<ScholarChatDraftGroundingInspectionItem>,
+    pub inspection_only: bool,
+    pub not_grounded_answer: bool,
+    pub not_final_answer: bool,
+    pub no_evidence_pack_built: bool,
+    pub no_answer_artifact_created: bool,
+    pub no_persistence: bool,
+    pub no_llm_call: bool,
+    pub no_runtime_execution: bool,
+    pub blockers: Vec<ScholarChatDraftGroundingInspectionBlocker>,
+    pub warnings: Vec<ScholarChatDraftGroundingInspectionWarning>,
 }
 
 enum ScholarChatPreviewKind {
@@ -947,6 +1018,388 @@ pub fn preview_scholar_chat_draft_inference(
         blockers,
         warnings,
     ))
+}
+
+pub fn preview_scholar_chat_draft_grounding_inspection(
+    root: impl Into<PathBuf>,
+    request: ScholarChatDraftGroundingInspectionRequest,
+) -> AegisResult<ScholarChatDraftGroundingInspectionPreview> {
+    let root = root.into();
+    let scholar_chat_request = request.scholar_chat_request;
+    let request_preview = preview_scholar_chat_request(&root, scholar_chat_request.clone())?;
+    let mut blockers = Vec::new();
+    let mut warnings = Vec::new();
+    let normalized_draft_text = normalize_optional_draft_text(request.draft_text);
+
+    for warning in &request_preview.warnings {
+        push_grounding_inspection_warning(&mut warnings, "request_preview", warning);
+    }
+    push_grounding_inspection_warning(
+        &mut warnings,
+        "boundary",
+        "This is a draft grounding inspection preview only; no grounded answer, final answer, Evidence Pack, or persistence was created.",
+    );
+
+    let Some(normalized_draft_text) = normalized_draft_text else {
+        push_grounding_inspection_blocker(
+            &mut blockers,
+            "draft_text_missing",
+            "No draft text was provided to inspect.",
+        );
+        return Ok(build_draft_grounding_inspection_preview(
+            request_preview.normalized_prompt,
+            0,
+            request_preview.selected_source_count,
+            0,
+            Vec::new(),
+            0,
+            0,
+            0,
+            blockers,
+            warnings,
+        ));
+    };
+
+    if request_preview.selected_source_count == 0 {
+        push_grounding_inspection_blocker(
+            &mut blockers,
+            "needs_sources",
+            "No Scholar Chat source context was selected for this inspection.",
+        );
+        push_grounding_inspection_warning(
+            &mut warnings,
+            "unscoped_inspection",
+            "No Scholar Chat source context selected; inspection will be unscoped.",
+        );
+        return Ok(build_draft_grounding_inspection_preview(
+            request_preview.normalized_prompt,
+            normalized_draft_text.chars().count(),
+            request_preview.selected_source_count,
+            0,
+            Vec::new(),
+            0,
+            0,
+            0,
+            blockers,
+            warnings,
+        ));
+    }
+
+    let evidence_plan_preview = preview_scholar_chat_evidence_plan(&root, scholar_chat_request.clone())?;
+    for warning in &evidence_plan_preview.warnings {
+        push_grounding_inspection_warning(&mut warnings, "evidence_plan_preview", warning);
+    }
+
+    let evidence_candidate_count = evidence_plan_preview.evidence_candidate_count;
+    if evidence_candidate_count == 0 {
+        push_grounding_inspection_blocker(
+            &mut blockers,
+            "needs_evidence_candidates",
+            "No local evidence candidates were available for the selected sources.",
+        );
+        push_grounding_inspection_warning(
+            &mut warnings,
+            "evidence_required",
+            "No local evidence candidates are available yet for draft grounding inspection.",
+        );
+        return Ok(build_draft_grounding_inspection_preview(
+            request_preview.normalized_prompt,
+            normalized_draft_text.chars().count(),
+            request_preview.selected_source_count,
+            evidence_candidate_count,
+            Vec::new(),
+            0,
+            0,
+            0,
+            blockers,
+            warnings,
+        ));
+    }
+
+    let max_items = request
+        .max_items
+        .unwrap_or(SCHOLAR_CHAT_DRAFT_GROUNDING_INSPECTION_LIMIT)
+        .clamp(1, SCHOLAR_CHAT_DRAFT_GROUNDING_INSPECTION_LIMIT);
+    let inspected_items = inspect_draft_grounding_items(&normalized_draft_text, &evidence_plan_preview.candidates, max_items);
+    if inspected_items.items.is_empty() {
+        push_grounding_inspection_blocker(
+            &mut blockers,
+            "draft_text_missing",
+            "Draft text did not contain inspectable content.",
+        );
+        push_grounding_inspection_warning(
+            &mut warnings,
+            "draft_text_empty",
+            "No inspectable draft sentences were found in the provided draft text.",
+        );
+        return Ok(build_draft_grounding_inspection_preview(
+            request_preview.normalized_prompt,
+            normalized_draft_text.chars().count(),
+            request_preview.selected_source_count,
+            evidence_candidate_count,
+            Vec::new(),
+            0,
+            0,
+            0,
+            blockers,
+            warnings,
+        ));
+    }
+    if inspected_items.was_clamped {
+        push_grounding_inspection_warning(
+            &mut warnings,
+            "inspection_clamped",
+            &format!("Only the first {max_items} draft items were inspected."),
+        );
+    }
+    warnings.extend(inspected_items.warnings);
+
+    Ok(build_draft_grounding_inspection_preview(
+        request_preview.normalized_prompt,
+        normalized_draft_text.chars().count(),
+        request_preview.selected_source_count,
+        evidence_candidate_count,
+        inspected_items.items,
+        inspected_items.supported_item_count,
+        inspected_items.weakly_supported_item_count,
+        inspected_items.unsupported_item_count,
+        blockers,
+        warnings,
+    ))
+}
+
+const SCHOLAR_CHAT_DRAFT_GROUNDING_INSPECTION_LIMIT: usize = 8;
+
+struct DraftGroundingInspectionItems {
+    items: Vec<ScholarChatDraftGroundingInspectionItem>,
+    supported_item_count: usize,
+    weakly_supported_item_count: usize,
+    unsupported_item_count: usize,
+    warnings: Vec<ScholarChatDraftGroundingInspectionWarning>,
+    was_clamped: bool,
+}
+
+fn build_draft_grounding_inspection_preview(
+    normalized_prompt: String,
+    draft_char_count: usize,
+    selected_source_count: usize,
+    evidence_candidate_count: usize,
+    items: Vec<ScholarChatDraftGroundingInspectionItem>,
+    supported_item_count: usize,
+    weakly_supported_item_count: usize,
+    unsupported_item_count: usize,
+    blockers: Vec<ScholarChatDraftGroundingInspectionBlocker>,
+    warnings: Vec<ScholarChatDraftGroundingInspectionWarning>,
+) -> ScholarChatDraftGroundingInspectionPreview {
+    let inspected_item_count = items.len();
+    ScholarChatDraftGroundingInspectionPreview {
+        status: if draft_char_count == 0 {
+            ScholarChatDraftGroundingInspectionStatus::NoDraftText
+        } else if selected_source_count == 0 {
+            ScholarChatDraftGroundingInspectionStatus::Blocked
+        } else if evidence_candidate_count == 0 {
+            ScholarChatDraftGroundingInspectionStatus::NoEvidenceCandidates
+        } else {
+            ScholarChatDraftGroundingInspectionStatus::Inspected
+        },
+        normalized_prompt,
+        draft_char_count,
+        selected_source_count,
+        evidence_candidate_count,
+        inspected_item_count,
+        unsupported_item_count,
+        weakly_supported_item_count,
+        supported_item_count,
+        items,
+        inspection_only: true,
+        not_grounded_answer: true,
+        not_final_answer: true,
+        no_evidence_pack_built: true,
+        no_answer_artifact_created: true,
+        no_persistence: true,
+        no_llm_call: true,
+        no_runtime_execution: true,
+        blockers,
+        warnings,
+    }
+}
+
+fn normalize_optional_draft_text(draft_text: Option<String>) -> Option<String> {
+    draft_text
+        .map(|text| text.trim().to_string())
+        .and_then(|text| if text.is_empty() { None } else { Some(text) })
+}
+
+fn push_grounding_inspection_warning(
+    warnings: &mut Vec<ScholarChatDraftGroundingInspectionWarning>,
+    kind: &str,
+    message: &str,
+) {
+    if !warnings.iter().any(|warning| warning.kind == kind && warning.message == message) {
+        warnings.push(ScholarChatDraftGroundingInspectionWarning {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        });
+    }
+}
+
+fn push_grounding_inspection_blocker(
+    blockers: &mut Vec<ScholarChatDraftGroundingInspectionBlocker>,
+    kind: &str,
+    message: &str,
+) {
+    if !blockers.iter().any(|blocker| blocker.kind == kind && blocker.message == message) {
+        blockers.push(ScholarChatDraftGroundingInspectionBlocker {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        });
+    }
+}
+
+fn inspect_draft_grounding_items(
+    draft_text: &str,
+    evidence_candidates: &[ScholarChatEvidenceCandidate],
+    max_items: usize,
+) -> DraftGroundingInspectionItems {
+    let mut items = Vec::new();
+    let mut supported_item_count = 0;
+    let mut weakly_supported_item_count = 0;
+    let mut unsupported_item_count = 0;
+    let warnings = Vec::new();
+
+    let segments = split_draft_text_into_segments(draft_text);
+    let was_clamped = segments.len() > max_items;
+    for (item_index, segment) in segments.into_iter().take(max_items).enumerate() {
+        let normalized_segment = compact_text_preview(&segment, 180);
+        let item_terms = inspection_terms(&normalized_segment);
+        if item_terms.is_empty() {
+            continue;
+        }
+
+        let mut matched_evidence = Vec::new();
+        for candidate in evidence_candidates {
+            let candidate_terms = inspection_terms(&candidate.preview)
+                .into_iter()
+                .chain(candidate.matched_terms.iter().flat_map(|term| inspection_terms(term).into_iter()))
+                .collect::<BTreeSet<_>>();
+            let overlap = item_terms.intersection(&candidate_terms).count();
+            if overlap > 0 {
+                matched_evidence.push((overlap, candidate));
+            }
+        }
+
+        let support_status = if matched_evidence.is_empty() {
+            unsupported_item_count += 1;
+            ScholarChatDraftGroundingSupportStatus::Unsupported
+        } else {
+            let best_overlap = matched_evidence.iter().map(|(overlap, _)| *overlap).max().unwrap_or(0);
+            if best_overlap >= 2 {
+                supported_item_count += 1;
+                ScholarChatDraftGroundingSupportStatus::SupportedByLocalEvidence
+            } else {
+                weakly_supported_item_count += 1;
+                ScholarChatDraftGroundingSupportStatus::WeaklySupported
+            }
+        };
+
+        let mut source_ids = BTreeSet::new();
+        let mut locator_previews = BTreeSet::new();
+        let matched_evidence_count = matched_evidence.len();
+        for (_, candidate) in matched_evidence {
+            source_ids.insert(candidate.source_id.clone());
+            locator_previews.insert(locator_preview(&candidate.locator));
+        }
+
+        items.push(ScholarChatDraftGroundingInspectionItem {
+            item_index,
+            text_preview: normalized_segment,
+            support_status,
+            matched_evidence_count,
+            source_ids: source_ids.into_iter().collect(),
+            locator_previews: locator_previews.into_iter().collect(),
+        });
+    }
+
+    DraftGroundingInspectionItems {
+        items,
+        supported_item_count,
+        weakly_supported_item_count,
+        unsupported_item_count,
+        warnings,
+        was_clamped,
+    }
+}
+
+fn split_draft_text_into_segments(draft_text: &str) -> Vec<String> {
+    let mut segments = Vec::new();
+    let mut current = String::new();
+
+    for ch in draft_text.chars() {
+        if matches!(ch, '.' | '!' | '?' | '\n' | '\r') {
+            let trimmed = current.trim();
+            if !trimmed.is_empty() {
+                segments.push(trimmed.to_string());
+            }
+            current.clear();
+        } else {
+            current.push(ch);
+        }
+    }
+
+    let trimmed = current.trim();
+    if !trimmed.is_empty() {
+        segments.push(trimmed.to_string());
+    }
+
+    if segments.is_empty() && !draft_text.trim().is_empty() {
+        segments.push(draft_text.trim().to_string());
+    }
+
+    segments
+}
+
+fn compact_text_preview(text: &str, max_chars: usize) -> String {
+    let compacted = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut preview = compacted.trim().to_string();
+    if preview.chars().count() > max_chars {
+        let mut truncated = String::new();
+        for ch in preview.chars().take(max_chars.saturating_sub(1)) {
+            truncated.push(ch);
+        }
+        truncated.push('…');
+        preview = truncated;
+    }
+    preview
+}
+
+fn inspection_terms(text: &str) -> BTreeSet<String> {
+    text.split(|ch: char| !ch.is_alphanumeric())
+        .filter_map(|term| {
+            let normalized = term.trim().to_lowercase();
+            if normalized.is_empty() {
+                None
+            } else {
+                Some(normalized)
+            }
+        })
+        .collect()
+}
+
+fn locator_preview(locator: &CitationLocator) -> String {
+    let mut parts = vec![format!("{:?}", locator.locator_type).to_lowercase()];
+    if !locator.label.trim().is_empty() {
+        parts.push(format!("label={}", locator.label.trim()));
+    }
+    if let Some(page) = locator.page {
+        parts.push(format!("page={page}"));
+    }
+    if let Some(slide) = locator.slide {
+        parts.push(format!("slide={slide}"));
+    }
+    if let Some(start) = locator.character_start {
+        parts.push(format!("chars={start}-{}", locator.character_end.unwrap_or(start)));
+    }
+    parts.join(" | ")
 }
 
 fn render_prompt_pack_for_runtime(prompt_pack: &ScholarChatPromptPack) -> String {
@@ -1715,6 +2168,24 @@ fn main() {
         )
     }
 
+    fn count_entries_recursively(path: &std::path::Path) -> usize {
+        fn inner(path: &std::path::Path, count: &mut usize) {
+            if let Ok(entries) = fs::read_dir(path) {
+                for entry in entries.flatten() {
+                    *count += 1;
+                    let entry_path = entry.path();
+                    if entry_path.is_dir() {
+                        inner(&entry_path, count);
+                    }
+                }
+            }
+        }
+
+        let mut count = 0;
+        inner(path, &mut count);
+        count
+    }
+
     fn draft_inference_request(
         prompt: &str,
         grounding_policy: GroundingPolicy,
@@ -1753,6 +2224,19 @@ fn main() {
         assert!(preview.no_answer_artifact_created);
         assert!(preview.no_evidence_pack_built);
         assert!(preview.no_persistence);
+    }
+
+    fn assert_draft_grounding_inspection_boundary_fields(
+        preview: &ScholarChatDraftGroundingInspectionPreview,
+    ) {
+        assert!(preview.inspection_only);
+        assert!(preview.not_grounded_answer);
+        assert!(preview.not_final_answer);
+        assert!(preview.no_evidence_pack_built);
+        assert!(preview.no_answer_artifact_created);
+        assert!(preview.no_persistence);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_runtime_execution);
     }
 
     #[test]
@@ -2484,5 +2968,204 @@ fn main() {
         let temp_path = temp.path().to_string_lossy();
         assert!(!debug.contains(temp_path.as_ref()));
         assert!(!json.contains(temp_path.as_ref()));
+    }
+
+    #[test]
+    fn scholar_chat_draft_grounding_inspection_rejects_empty_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_draft_grounding_inspection(
+            temp.path(),
+            ScholarChatDraftGroundingInspectionRequest {
+                scholar_chat_request: request("   "),
+                draft_text: Some("Draft text".to_string()),
+                max_items: Some(4),
+            },
+        );
+        assert!(matches!(result, Err(AegisError::ScholarChatPromptEmpty)));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_draft_grounding_inspection_rejects_invalid_source_ids_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["", " ", "..", "../evil", "evil/source", "evil\\source"] {
+            let result = preview_scholar_chat_draft_grounding_inspection(
+                temp.path(),
+                ScholarChatDraftGroundingInspectionRequest {
+                    scholar_chat_request: ScholarChatRequest {
+                        prompt: "Explain grounded text".to_string(),
+                        mode: ScholarChatMode::LectureLearning,
+                        grounding_policy: GroundingPolicy::LocalFirst,
+                        selected_source_ids: vec![invalid.to_string()],
+                    },
+                    draft_text: Some("alpha beta.".to_string()),
+                    max_items: Some(4),
+                },
+            );
+            assert!(matches!(result, Err(AegisError::ScholarChatInvalidSourceId)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
+    }
+
+    #[test]
+    fn scholar_chat_draft_grounding_inspection_reports_no_draft_text() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_draft_grounding_inspection(
+            temp.path(),
+            ScholarChatDraftGroundingInspectionRequest {
+                scholar_chat_request: request("Explain grounded text"),
+                draft_text: Some("   ".to_string()),
+                max_items: Some(4),
+            },
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatDraftGroundingInspectionStatus::NoDraftText);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "draft_text_missing"));
+        assert_draft_grounding_inspection_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_draft_grounding_inspection_blocks_without_selected_sources() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_draft_grounding_inspection(
+            temp.path(),
+            ScholarChatDraftGroundingInspectionRequest {
+                scholar_chat_request: ScholarChatRequest {
+                    prompt: "Explain grounded text".to_string(),
+                    mode: ScholarChatMode::LectureLearning,
+                    grounding_policy: GroundingPolicy::LocalFirst,
+                    selected_source_ids: vec![],
+                },
+                draft_text: Some("alpha beta.".to_string()),
+                max_items: Some(4),
+            },
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatDraftGroundingInspectionStatus::Blocked);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "needs_sources"));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.message.contains("No Scholar Chat source context selected")));
+        assert_draft_grounding_inspection_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_draft_grounding_inspection_reports_no_evidence_candidates() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("note-no-index.md");
+        fs::write(&source_path, "alpha beta\n").unwrap();
+        let authority = crate::corpus_authority::CorpusAuthority::new(temp.path());
+        let source = authority
+            .register_source(
+                &source_path,
+                crate::source_metadata::SourceMetadataInput {
+                    title: "Notes".to_string(),
+                    source_type: crate::source_metadata::SourceType::MarkdownNote,
+                    discipline: "psychology".to_string(),
+                    subdiscipline: Some("statistics".to_string()),
+                    language: "en".to_string(),
+                    tags: vec!["study".to_string()],
+                    reliability_notes: None,
+                },
+            )
+            .unwrap();
+        crate::extraction::ExtractionService::new(temp.path())
+            .extract_source(&source.source_id)
+            .unwrap();
+        crate::chunking::ChunkingService::new(temp.path())
+            .chunk_source(&source.source_id)
+            .unwrap();
+
+        let result = preview_scholar_chat_draft_grounding_inspection(
+            temp.path(),
+            ScholarChatDraftGroundingInspectionRequest {
+                scholar_chat_request: ScholarChatRequest {
+                    prompt: "Explain grounded text".to_string(),
+                    mode: ScholarChatMode::LectureLearning,
+                    grounding_policy: GroundingPolicy::LocalOnly,
+                    selected_source_ids: vec![source.source_id.clone()],
+                },
+                draft_text: Some("alpha beta.".to_string()),
+                max_items: Some(4),
+            },
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatDraftGroundingInspectionStatus::NoEvidenceCandidates);
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "needs_evidence_candidates"));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.message.contains("No local evidence candidates")));
+        assert_draft_grounding_inspection_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_draft_grounding_inspection_is_deterministic_and_path_free() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let before_entries = count_entries_recursively(temp.path());
+        let request = ScholarChatDraftGroundingInspectionRequest {
+            scholar_chat_request: ScholarChatRequest {
+                prompt: "  alpha beta grounded evidence  ".to_string(),
+                mode: ScholarChatMode::ThesisWriting,
+                grounding_policy: GroundingPolicy::LocalFirst,
+                selected_source_ids: vec![source_id.clone()],
+            },
+            draft_text: Some("Alpha beta. Gamma delta? Alpha beta gamma.".to_string()),
+            max_items: Some(8),
+        };
+        let first = preview_scholar_chat_draft_grounding_inspection(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_draft_grounding_inspection(temp.path(), request).unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(first.normalized_prompt, "alpha beta grounded evidence");
+        assert_eq!(first.status, ScholarChatDraftGroundingInspectionStatus::Inspected);
+        assert_eq!(first.selected_source_count, 1);
+        assert!(!first.items.is_empty());
+        assert!(first.items.iter().any(|item| item.support_status == ScholarChatDraftGroundingSupportStatus::SupportedByLocalEvidence));
+        let debug = format!("{first:?}");
+        let json = serde_json::to_string(&first).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert_eq!(before_entries, after_entries);
+        assert_draft_grounding_inspection_boundary_fields(&first);
+    }
+
+    #[test]
+    fn scholar_chat_draft_grounding_inspection_supports_local_evidence_and_clamps_items() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = preview_scholar_chat_draft_grounding_inspection(
+            temp.path(),
+            ScholarChatDraftGroundingInspectionRequest {
+                scholar_chat_request: ScholarChatRequest {
+                    prompt: "alpha beta grounded evidence".to_string(),
+                    mode: ScholarChatMode::LectureLearning,
+                    grounding_policy: GroundingPolicy::LocalFirst,
+                    selected_source_ids: vec![source_id],
+                },
+                draft_text: Some(
+                    "Alpha beta support. Gamma delta explain. Alpha beta gamma evidence. Delta alpha beta. More alpha beta. Another alpha beta. Extra alpha beta. Final alpha beta. Clamped alpha beta.".to_string(),
+                ),
+                max_items: Some(4),
+            },
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatDraftGroundingInspectionStatus::Inspected);
+        assert_eq!(result.items.len(), 4);
+        assert_eq!(
+            result.supported_item_count + result.weakly_supported_item_count + result.unsupported_item_count,
+            result.items.len()
+        );
+        assert!(result.items.iter().any(|item| item.support_status == ScholarChatDraftGroundingSupportStatus::SupportedByLocalEvidence));
+        assert!(result.items.iter().all(|item| !item.text_preview.contains("  ")));
+        assert!(result.items.iter().all(|item| !item.locator_previews.iter().any(|preview| preview.contains("section_path"))));
+        assert!(result.warnings.iter().any(|warning| warning.kind == "inspection_clamped"));
+        assert_draft_grounding_inspection_boundary_fields(&result);
     }
 }

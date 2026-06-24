@@ -1068,6 +1068,24 @@ Do not implement:
 - web search or scholarly database integration
 - routing/charts/frontend test framework
 
+## Phase 76 — Draft Grounding Inspection Preview
+
+Phase 76.0 adds a read-only draft grounding inspection preview using `preview_scholar_chat_draft_grounding_inspection` and a compact Scholar Chat UI card.
+It inspects draft text against local evidence candidates only and remains diagnostic-only: no grounded answer, no final answer, no Evidence Pack, no runtime execution, no LLM call, and no persistence.
+
+Do not implement:
+
+- Scholar Chat answer generation
+- grounded answer generation
+- Evidence Pack building
+- runtime execution changes
+- LLM calls outside preview
+- chat history persistence
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
