@@ -540,6 +540,26 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 51 — Retrieval UI Guardrails
+
+Frontend-only hardening.
+
+Phase 51.0 tightens the read-only retrieval search surface with query validation, capped visible results, and clearer empty/error states.
+No backend retrieval behavior changed.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
