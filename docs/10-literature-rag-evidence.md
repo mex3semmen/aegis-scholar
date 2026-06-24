@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Literature Memory makes scientific work source-grounded.
+Literature Memory makes Scholar Chat scientific work source-grounded.
 
 It handles:
 
@@ -17,6 +17,22 @@ It handles:
 - evidence packs
 - citations
 - contradiction warnings
+
+## Scholar Chat grounding policy
+
+AEGIS Scholar v1 is targeted at a local-first academic chat workflow. The user selects a mode or context, asks naturally, and the system searches local material before any answer synthesis.
+
+Context priority:
+
+- selected course or project context
+- registered local sources
+- existing local artifacts
+- external scholarly adapters later, after results become Source Registry entries
+- general model knowledge only when explicitly allowed or clearly marked as not locally grounded
+
+Local memory is not model training. It is a curated local corpus and project store for retrieval, evidence packs, source grounding and provenance. The LLM is a reasoning and formulation engine, not the source of truth for scientific claims.
+
+If retrieval cannot build a sufficient Evidence Pack, the app should say so instead of presenting unsupported claims as locally grounded.
 
 ## Evidence Pack
 

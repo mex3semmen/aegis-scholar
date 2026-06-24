@@ -1,6 +1,6 @@
 # 00 — Executive Summary
 
-AEGIS Scholar is a local-first scientific knowledge OS. It combines literature memory, source-grounded retrieval, evidence packs, course study, scientific writing support, statistics/method tools, discipline profiles and long-term academic project memory.
+AEGIS Scholar is a local-first academic Scholar Chat workspace. It combines a natural prompt interface with literature memory, source-grounded retrieval, evidence packs, course study, scientific writing support, statistics/method tools, discipline profiles and long-term academic project memory.
 
 The central principle:
 
@@ -10,16 +10,33 @@ The model may be useful only where the system can ground, retrieve, constrain an
 
 ## Why AEGIS exists
 
-The target user does not need another generic chatbot or coding assistant. The target user needs a local scientific assistant that can:
+The target user does not need another generic chatbot or coding assistant. The target user needs a local academic assistant that can:
 
 - register literature, slides, PDFs and notes
 - preserve source identity, version, metadata and locators
 - retrieve evidence from a local academic corpus
+- answer natural prompts through selected course or project context
 - summarize courses without losing lecture context
 - support scientific writing with evidence-backed claims
 - handle psychology, statistics and APA workflows first
 - expand into mathematics and broader MINT disciplines through discipline modules
 - preserve project memory without becoming a prompt dump
+
+## V1 product target
+
+AEGIS Scholar v1 should feel like a local Scholar Chat workspace: the user selects a course, project, literature context or method mode, asks naturally, and the app retrieves local material first before assembling evidence context. Local model runtime and answer generation come later; the current target is the product contract those features must obey.
+
+Primary modes:
+
+- lecture learning / course assistant
+- thesis / scientific writing
+- literature review
+- flashcards
+- statistics / methods help
+
+Local memory is not model training. It is a curated local corpus and project store used for retrieval, evidence packs, provenance and project memory. The LLM is a reasoning and formulation engine, not the source of truth for scientific claims.
+
+Default answer policy is local-first: selected context, registered local sources, existing local artifacts, explicit external scholarly adapters later, and only then clearly marked general model knowledge when allowed. If no local evidence is found, AEGIS should say so instead of presenting unsupported claims as grounded.
 
 ## MVP
 

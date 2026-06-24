@@ -763,6 +763,38 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 62 — Product Target / Scholar Chat UX Contract
+
+Product and architecture alignment only.
+
+Phase 62.0 defines the v1 product target as a local-first academic Scholar Chat workspace: mode/context selection, natural prompting, local corpus retrieval, evidence-pack assembly, source provenance, and later local llama.cpp/GGUF model runtime.
+This pass changes docs only and does not add chat execution, model runtime, retrieval semantics, evidence generation, or answer synthesis.
+
+Default answer policy:
+
+- selected course or project context first
+- registered local sources second
+- existing local artifacts third
+- external scholarly adapters later, after results become Source Registry entries
+- general model knowledge only when explicitly allowed or clearly marked as not locally grounded
+
+Recommended next implementation slice: Scholar Chat Request Contract or Chat Shell UI.
+The next slice should start the product workflow boundary rather than add another diagnostic card.
+
+Do not implement:
+
+- local model runtime
+- LLM calls
+- chat execution
+- web search
+- scholarly database integration
+- source import
+- evidence generation
+- answer generation
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
