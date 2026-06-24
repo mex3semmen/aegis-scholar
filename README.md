@@ -2,16 +2,17 @@
 
 **AEGIS = Agentic Evidence & Grounded Intelligence System**
 
-AEGIS Scholar is a Windows-first, local-first scientific knowledge OS for literature memory, discipline-grounded RAG, evidence packs, study workflows, scientific writing support, statistics/method support and long-term academic project memory.
+AEGIS Scholar is a Windows-first, local-first academic Scholar Chat workspace for literature memory, discipline-grounded RAG, evidence packs, study workflows, scientific writing support, statistics/method support and long-term academic project memory.
 
-This repository contains the **v0.7 Research Foundation Edition** plus a minimal **Phase 1 technical scaffold** for Tauri v2, Solid/Vite and Rust Corpus Authority.
+This repository contains the **v0.7 Research Foundation Edition** plus an evolving Tauri v2, Solid/Vite and Rust foundation. The current app still exposes many read-only diagnostic surfaces, but the v1 product target is a ChatGPT/Claude/Codex-like academic prompt workspace grounded in local sources.
 
 ## Product stance
 
 AEGIS Scholar is:
 
-- a local scientific knowledge workspace
+- a local academic Scholar Chat workspace
 - a literature memory and source-grounded RAG system
+- a prompt interface over registered local sources, retrieval, evidence packs and provenance
 - a modular skill system for academic workflows
 - a discipline system for psychology, statistics, mathematics and later broader MINT domains
 - a Tauri v2 + Rust authority desktop app
@@ -24,7 +25,7 @@ AEGIS Scholar is not:
 - a coding app
 - a Pi replacement
 - an OpenCode/Aider/Codex-style coding harness
-- a generic chatbot dashboard
+- an ungrounded generic chatbot dashboard
 - a Docker-first product
 - a browser-only app
 - a hidden autonomous execution layer
@@ -35,10 +36,21 @@ AEGIS may support code only where code is part of scientific work: statistics sc
 ## Core architecture rule
 
 ```text
-source -> registry -> extraction -> chunks -> retrieval -> evidence pack -> grounded answer or skill output
+selected context -> prompt -> source registry -> extraction -> chunks -> retrieval -> evidence pack -> grounded answer or skill output
 ```
 
 The model must not answer from anonymous context blobs when external or uploaded material is involved. Scientific output must keep source identity, locators and evidence provenance.
+
+Local memory is not model training. It is a curated local corpus and project memory used for retrieval, evidence packs and source grounding. The LLM is a reasoning and formulation engine, not the source of truth for scientific claims.
+
+Default answer policy:
+
+- selected course or project context first
+- registered local sources second
+- previously created local artifacts third
+- external scholarly adapters later, after results become Source Registry entries
+- general model knowledge only when explicitly allowed or clearly marked as not locally grounded
+- if no local evidence is found, say so instead of bluffing
 
 ## Non-negotiables
 
@@ -101,9 +113,9 @@ Closed contract areas:
 - retrieval/evidence-pack review block
 - source/chunk metadata review slice
 
-Next direction:
+Current product direction:
 
-- developer-facing diagnostics and onboarding cleanup
+- Scholar Chat request contract and chat shell work, using existing local-first retrieval and evidence boundaries
 
 ## Initial skills
 
@@ -116,7 +128,7 @@ The first skill contracts live under `.aegis/skills/`:
 
 ## Current code scaffold
 
-The minimal app scaffold lives in:
+The current app foundation lives in:
 
 ```text
 package.json
@@ -143,4 +155,4 @@ Use:
 prompts/codex-phase-1-corpus-authority.md
 ```
 
-Phase 1 builds Corpus Authority and Source Registry. It must not implement model runtime, embeddings, answer synthesis, browser automation, Pi/MCP integration or coding-agent behavior.
+Near-term product work should move toward a Scholar Chat request contract and shell while preserving source identity, local-first retrieval, evidence packs and path-free diagnostics. It must not implement model runtime, embeddings, answer synthesis, browser automation, Pi/MCP integration or coding-agent behavior until those phases are explicitly selected.

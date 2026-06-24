@@ -7,6 +7,7 @@ Windows Host
   ├─ AEGIS Desktop App
   │   ├─ Solid 1.x + Vite UI
   │   └─ Tauri v2 + Rust Core
+  │       ├─ Scholar Chat Request Contract later
   │       ├─ Corpus Authority
   │       ├─ Source Registry
   │       ├─ Ingestion Pipeline
@@ -34,7 +35,7 @@ Windows Host
 ## Core flow
 
 ```text
-source -> registry -> extraction -> chunks -> retrieval -> evidence pack -> skill output
+selected context -> prompt -> source registry -> extraction -> chunks -> retrieval -> evidence pack -> grounded answer or skill output
 ```
 
 ## Plane separation
@@ -70,6 +71,8 @@ Owns model execution later:
 - local model profiles
 - runtime supervision
 
+The model plane is not the source of truth for scientific claims. It formats and reasons over explicit local context after retrieval and evidence-pack assembly. General model knowledge must be explicitly allowed or clearly marked as not locally grounded.
+
 ### Skill Plane
 
 Owns academic workflows:
@@ -83,3 +86,9 @@ Owns academic workflows:
 ## Frontend role
 
 The frontend handles views and user interaction. It does not own source authority, filesystem writes, direct process execution or hidden database mutation.
+
+The v1 frontend target is a Scholar Chat shell: mode/context selection plus a natural prompt surface backed by local corpus retrieval and evidence packs. Current diagnostic surfaces are implementation aids, not the final product workflow.
+
+## External scholarly search
+
+External scientific search should come later through explicit adapters. External results must become Source Registry entries before they are used as evidence. The system must not answer scientific claims from anonymous external context blobs.
