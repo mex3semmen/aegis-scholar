@@ -883,6 +883,28 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 67 — Scholar Chat Evidence Plan Preview
+
+Read-only preview bridge toward Evidence Pack assembly.
+
+Phase 67.0 adds a compact Scholar Chat evidence plan preview using the existing preview-only `preview_scholar_chat_evidence_plan` command.
+It reuses the Scholar Chat prompt, mode, grounding policy, and source context, describes which retrieval candidates would be eligible for later Evidence Pack assembly, and remains preview-only and read-only.
+It does not build Evidence Packs, call an LLM, generate answers, or write files.
+
+Do not implement:
+
+- local model runtime
+- LLM calls
+- answer generation
+- Evidence Pack generation/building
+- retrieval execution changes
+- web search
+- scholarly database integration
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.

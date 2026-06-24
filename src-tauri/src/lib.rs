@@ -25,8 +25,10 @@ use grounded_answer::{build_grounded_answer as build_grounded_answer_impl, read_
 use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
 use scholar_chat::{
     preview_scholar_chat_request as preview_scholar_chat_request_impl,
+    preview_scholar_chat_evidence_plan as preview_scholar_chat_evidence_plan_impl,
     preview_scholar_chat_retrieval as preview_scholar_chat_retrieval_impl,
     ScholarChatRequest,
+    ScholarChatEvidencePlanResponse,
     ScholarChatResponse,
     ScholarChatRetrievalPreviewResponse,
 };
@@ -250,6 +252,12 @@ fn preview_scholar_chat_retrieval(root: String, request: ScholarChatRequest) -> 
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn preview_scholar_chat_evidence_plan(root: String, request: ScholarChatRequest) -> Result<ScholarChatEvidencePlanResponse, String> {
+    preview_scholar_chat_evidence_plan_impl(root, request)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -284,7 +292,8 @@ pub fn run() {
             inspect_answer_artifact_export_bundle,
             export_answer_artifacts,
             preview_scholar_chat_request,
-            preview_scholar_chat_retrieval
+            preview_scholar_chat_retrieval,
+            preview_scholar_chat_evidence_plan
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");
