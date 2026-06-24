@@ -1052,6 +1052,22 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 75.1 — Draft Inference Boundary Review
+
+Phase 75.1 is a boundary review for the Scholar Chat draft-inference preview.
+It hardens the preview-only, draft-only, non-persistent boundary without broadening runtime execution or changing product scope.
+
+Do not implement:
+
+- Scholar Chat answer generation
+- grounded answer generation
+- Evidence Pack building
+- chat history persistence
+- export/report/share workflows
+- source import
+- web search or scholarly database integration
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
