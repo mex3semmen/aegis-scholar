@@ -896,13 +896,26 @@ Do not implement:
 - local model runtime
 - LLM calls
 - answer generation
-- Evidence Pack generation/building
+
+## Phase 68 — Scholar Chat Prompt Pack Preview
+
+Preview-bound Scholar Chat formatting slice.
+
+Phase 68.0 adds the preview-only `preview_scholar_chat_prompt_pack` command and a compact Scholar Chat prompt pack preview card.
+It reuses the Scholar Chat prompt, mode, grounding policy, and selected source context, shows the planned prompt sections and compact context items, and remains preview-only and read-only.
+It does not call an LLM, run retrieval, build Evidence Packs, generate answers, or write files.
+
+Do not implement:
+
+- local model runtime
+- LLM calls
 - retrieval execution changes
-- web search
-- scholarly database integration
+- Evidence Pack building
+- answer generation
 - source import
 - editing workflows
 - export/report/share workflows
+- web search or scholarly database integration
 - routing/charts/frontend test framework
 
 ## Phase 11 — Obsidian Export

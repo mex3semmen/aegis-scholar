@@ -2,6 +2,7 @@ use crate::errors::{AegisError, AegisResult};
 use crate::locators::CitationLocator;
 use crate::retrieval::{RetrievalResponse, RetrievalService};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 const SCHOLAR_CHAT_RETRIEVAL_PREVIEW_LIMIT: usize = 5;
@@ -130,6 +131,62 @@ pub struct ScholarChatEvidencePlanResponse {
     pub warnings: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatPromptPackStatus {
+    PromptPackPreview,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatPromptPackSectionKind {
+    SystemOrPolicyInstructions,
+    ModeInstructions,
+    GroundingInstructions,
+    SourceContext,
+    UserPrompt,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatPromptPackSection {
+    pub kind: ScholarChatPromptPackSectionKind,
+    pub title: String,
+    pub lines: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ScholarChatPromptContextItem {
+    pub source_id: String,
+    pub version_id: String,
+    pub chunk_id: String,
+    pub score: f32,
+    pub matched_terms: Vec<String>,
+    pub preview: String,
+    pub locator: CitationLocator,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatPromptPack {
+    pub section_count: usize,
+    pub context_item_count: usize,
+    pub estimated_input_char_count: usize,
+    pub sections: Vec<ScholarChatPromptPackSection>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ScholarChatPromptPackPreviewResponse {
+    pub status: ScholarChatPromptPackStatus,
+    pub normalized_prompt: String,
+    pub mode: ScholarChatMode,
+    pub grounding_policy: GroundingPolicy,
+    pub selected_source_ids: Vec<String>,
+    pub selected_source_count: usize,
+    pub evidence_candidate_count: usize,
+    pub prompt_pack: ScholarChatPromptPack,
+    pub context_items: Vec<ScholarChatPromptContextItem>,
+    pub warnings: Vec<String>,
+}
+
 enum ScholarChatPreviewKind {
     Request,
     Retrieval,
@@ -252,6 +309,49 @@ pub fn preview_scholar_chat_evidence_plan(
     })
 }
 
+pub fn preview_scholar_chat_prompt_pack(
+    root: impl Into<PathBuf>,
+    request: ScholarChatRequest,
+) -> AegisResult<ScholarChatPromptPackPreviewResponse> {
+    let evidence_plan = preview_scholar_chat_evidence_plan(root, request)?;
+    let context_items = convert_evidence_candidates_to_prompt_context_items(&evidence_plan.candidates);
+    let prompt_pack = build_prompt_pack(
+        &evidence_plan.mode,
+        &evidence_plan.grounding_policy,
+        &evidence_plan.normalized_prompt,
+        &evidence_plan.selected_source_ids,
+        &context_items,
+        evidence_plan.evidence_candidate_count,
+    );
+    let mut warnings = evidence_plan.warnings.clone();
+    if evidence_plan.selected_source_count == 0 {
+        push_warning(&mut warnings, "No selected sources; prompt pack preview is unscoped.");
+    }
+    if evidence_plan.evidence_candidate_count == 0 {
+        push_warning(&mut warnings, "No evidence candidates were eligible for prompt-pack assembly yet.");
+    }
+    push_warning(&mut warnings, "This is a prompt pack preview only; no model inference was run.");
+    if matches!(evidence_plan.grounding_policy, GroundingPolicy::LocalOnly) {
+        push_warning(&mut warnings, "local_only requires local evidence before a prompt pack can be turned into an answer.");
+    }
+    if matches!(evidence_plan.grounding_policy, GroundingPolicy::AllowMarkedModelKnowledge) {
+        push_warning(&mut warnings, "Model knowledge would need to be clearly marked later.");
+    }
+
+    Ok(ScholarChatPromptPackPreviewResponse {
+        status: ScholarChatPromptPackStatus::PromptPackPreview,
+        normalized_prompt: evidence_plan.normalized_prompt,
+        mode: evidence_plan.mode,
+        grounding_policy: evidence_plan.grounding_policy,
+        selected_source_ids: evidence_plan.selected_source_ids,
+        selected_source_count: evidence_plan.selected_source_count,
+        evidence_candidate_count: evidence_plan.evidence_candidate_count,
+        prompt_pack,
+        context_items,
+        warnings,
+    })
+}
+
 fn normalized_prompt_or_err(prompt: String) -> AegisResult<String> {
     let normalized_prompt = prompt.trim().to_string();
     if normalized_prompt.is_empty() {
@@ -346,6 +446,184 @@ fn convert_retrieval_candidates_from_preview(
             locator: result.locator.clone(),
         })
         .collect()
+}
+
+fn convert_evidence_candidates_to_prompt_context_items(
+    candidates: &[ScholarChatEvidenceCandidate],
+) -> Vec<ScholarChatPromptContextItem> {
+    candidates
+        .iter()
+        .map(|result| ScholarChatPromptContextItem {
+            source_id: result.source_id.clone(),
+            version_id: result.version_id.clone(),
+            chunk_id: result.chunk_id.clone(),
+            score: result.score,
+            matched_terms: result.matched_terms.clone(),
+            preview: result.preview.clone(),
+            locator: result.locator.clone(),
+        })
+        .collect()
+}
+
+fn build_prompt_pack(
+    mode: &ScholarChatMode,
+    policy: &GroundingPolicy,
+    normalized_prompt: &str,
+    selected_source_ids: &[String],
+    context_items: &[ScholarChatPromptContextItem],
+    evidence_candidate_count: usize,
+) -> ScholarChatPromptPack {
+    let sections = vec![
+        ScholarChatPromptPackSection {
+            kind: ScholarChatPromptPackSectionKind::SystemOrPolicyInstructions,
+            title: "System or policy instructions".to_string(),
+            lines: system_or_policy_instructions(policy),
+        },
+        ScholarChatPromptPackSection {
+            kind: ScholarChatPromptPackSectionKind::ModeInstructions,
+            title: "Mode instructions".to_string(),
+            lines: mode_instructions(mode),
+        },
+        ScholarChatPromptPackSection {
+            kind: ScholarChatPromptPackSectionKind::GroundingInstructions,
+            title: "Grounding instructions".to_string(),
+            lines: grounding_pack_instructions(policy, selected_source_ids.len(), evidence_candidate_count),
+        },
+        ScholarChatPromptPackSection {
+            kind: ScholarChatPromptPackSectionKind::SourceContext,
+            title: "Source context".to_string(),
+            lines: source_context_lines(selected_source_ids, context_items),
+        },
+        ScholarChatPromptPackSection {
+            kind: ScholarChatPromptPackSectionKind::UserPrompt,
+            title: "User prompt".to_string(),
+            lines: vec![normalized_prompt.to_string()],
+        },
+    ];
+
+    ScholarChatPromptPack {
+        section_count: sections.len(),
+        context_item_count: context_items.len(),
+        estimated_input_char_count: estimate_prompt_pack_char_count(&sections, context_items),
+        sections,
+    }
+}
+
+fn system_or_policy_instructions(policy: &GroundingPolicy) -> Vec<String> {
+    let mut lines = vec![
+        "AEGIS Scholar local-first academic Scholar Chat workspace.".to_string(),
+        "Preview only; no model inference or answer generation is run here.".to_string(),
+    ];
+    match policy {
+        GroundingPolicy::LocalOnly => lines.push("Use only selected local evidence.".to_string()),
+        GroundingPolicy::LocalFirst => lines.push("Prefer selected local evidence before any later fallback.".to_string()),
+        GroundingPolicy::AllowMarkedModelKnowledge => lines.push("Model knowledge may be used later only if clearly marked.".to_string()),
+        GroundingPolicy::ExternalAdaptersLater => lines.push("External scholarly adapters are not implemented yet.".to_string()),
+    }
+    lines
+}
+
+fn mode_instructions(mode: &ScholarChatMode) -> Vec<String> {
+    match mode {
+        ScholarChatMode::LectureLearning => vec![
+            "Answer from course or lecture material first.".to_string(),
+            "Prioritize what was taught and keep explanations grounded.".to_string(),
+        ],
+        ScholarChatMode::ThesisWriting => vec![
+            "Support scientific writing, outlining, and literature synthesis.".to_string(),
+            "Keep claims grounded and ready for citation.".to_string(),
+        ],
+        ScholarChatMode::LiteratureReview => vec![
+            "Compare and synthesize papers with provenance.".to_string(),
+            "Prefer source-linked evidence over general summaries.".to_string(),
+        ],
+        ScholarChatMode::Flashcards => vec![
+            "Generate source-linked study-card candidates later.".to_string(),
+            "Keep prompts compact and recall-oriented.".to_string(),
+        ],
+        ScholarChatMode::StatisticsMethods => vec![
+            "Explain methods and support reproducible academic work.".to_string(),
+            "Keep terminology precise and source-linked.".to_string(),
+        ],
+        ScholarChatMode::GeneralScholar => vec![
+            "General academic assistant, local-first.".to_string(),
+            "Use selected sources before any later fallback.".to_string(),
+        ],
+    }
+}
+
+fn grounding_pack_instructions(
+    policy: &GroundingPolicy,
+    selected_source_count: usize,
+    evidence_candidate_count: usize,
+) -> Vec<String> {
+    let mut lines = vec![
+        format!("Selected source count: {selected_source_count}."),
+        format!("Evidence candidate count: {evidence_candidate_count}."),
+    ];
+    match policy {
+        GroundingPolicy::LocalOnly => lines.push("local_only cannot answer without local evidence.".to_string()),
+        GroundingPolicy::LocalFirst => lines.push("Prefer local evidence before any later fallback.".to_string()),
+        GroundingPolicy::AllowMarkedModelKnowledge => lines.push("Model knowledge is only allowed when clearly marked later.".to_string()),
+        GroundingPolicy::ExternalAdaptersLater => lines.push("External adapters are not implemented in this preview.".to_string()),
+    }
+    lines
+}
+
+fn source_context_lines(selected_source_ids: &[String], context_items: &[ScholarChatPromptContextItem]) -> Vec<String> {
+    if selected_source_ids.is_empty() {
+        return vec!["No selected sources; prompt pack preview is unscoped.".to_string()];
+    }
+
+    let mut counts_by_source = BTreeMap::new();
+    for item in context_items {
+        *counts_by_source.entry(item.source_id.clone()).or_insert(0usize) += 1;
+    }
+
+    let mut lines = vec![format!("Selected source IDs: {}.", selected_source_ids.join(", "))];
+    for source_id in selected_source_ids {
+        let count = counts_by_source.get(source_id).copied().unwrap_or(0);
+        lines.push(format!("{source_id}: {count} evidence candidate(s)."));
+    }
+    lines
+}
+
+fn estimate_prompt_pack_char_count(
+    sections: &[ScholarChatPromptPackSection],
+    context_items: &[ScholarChatPromptContextItem],
+) -> usize {
+    let section_chars = sections.iter().fold(0usize, |acc, section| {
+        let title_chars = section.title.chars().count();
+        let line_chars = section.lines.iter().map(|line| line.chars().count()).sum::<usize>();
+        let separator_chars = section.lines.len().saturating_sub(1);
+        acc + title_chars + line_chars + separator_chars
+    });
+    let context_chars = context_items.iter().fold(0usize, |acc, item| {
+        acc + item.source_id.chars().count()
+            + item.version_id.chars().count()
+            + item.chunk_id.chars().count()
+            + item.preview.chars().count()
+            + item.matched_terms.iter().map(|term| term.chars().count()).sum::<usize>()
+            + locator_summary_chars(&item.locator)
+    });
+    section_chars + context_chars
+}
+
+fn locator_summary_chars(locator: &CitationLocator) -> usize {
+    let section = locator
+        .section_path
+        .as_ref()
+        .map(|value| value.iter().map(|part| part.chars().count()).sum::<usize>())
+        .unwrap_or(0);
+    let start = locator.character_start.map(|value| value.to_string().chars().count()).unwrap_or(0);
+    let end = locator.character_end.map(|value| value.to_string().chars().count()).unwrap_or(0);
+    locator.label.chars().count() + section + start + end
+}
+
+fn push_warning(warnings: &mut Vec<String>, message: &str) {
+    if !warnings.iter().any(|warning| warning == message) {
+        warnings.push(message.to_string());
+    }
 }
 
 fn evidence_plan(
@@ -494,6 +772,15 @@ mod tests {
 
     fn evidence_plan_request(prompt: &str, selected_source_ids: Vec<String>) -> ScholarChatRequest {
         retrieval_request(prompt, selected_source_ids)
+    }
+
+    fn prompt_pack_request(prompt: &str, selected_source_ids: Vec<String>) -> ScholarChatRequest {
+        ScholarChatRequest {
+            prompt: prompt.to_string(),
+            mode: ScholarChatMode::ThesisWriting,
+            grounding_policy: GroundingPolicy::LocalOnly,
+            selected_source_ids,
+        }
     }
 
     fn build_source_with_index(temp: &tempfile::TempDir, text: &str) -> String {
@@ -705,6 +992,78 @@ mod tests {
         assert_eq!(first.retrieval_candidate_count, first.candidates.len());
         assert_eq!(first.evidence_candidate_count, first.candidates.len());
         assert!(first.candidates.windows(2).all(|pair| pair[0].score >= pair[1].score));
+        let debug = format!("{first:?}");
+        let json = serde_json::to_string(&first).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert!(!temp.path().join(".aegis").join("corpus").join("sources").join("missing").exists());
+    }
+
+    #[test]
+    fn scholar_chat_prompt_pack_rejects_empty_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_prompt_pack(temp.path(), prompt_pack_request("   ", vec![]));
+        assert!(matches!(result, Err(AegisError::ScholarChatPromptEmpty)));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_prompt_pack_rejects_invalid_source_ids_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["", " ", "..", "../evil", "evil/source", "evil\\source"] {
+            let result = preview_scholar_chat_prompt_pack(temp.path(), prompt_pack_request("Explain alpha", vec![invalid.to_string()]));
+            assert!(matches!(result, Err(AegisError::ScholarChatInvalidSourceId)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
+    }
+
+    #[test]
+    fn scholar_chat_prompt_pack_allows_no_selected_sources_with_warning() {
+        let temp = tempfile::tempdir().unwrap();
+        let response = preview_scholar_chat_prompt_pack(temp.path(), prompt_pack_request("Explain alpha", vec![])).unwrap();
+        assert_eq!(response.selected_source_count, 0);
+        assert_eq!(response.evidence_candidate_count, 0);
+        assert_eq!(response.context_items.len(), 0);
+        assert_eq!(response.status, ScholarChatPromptPackStatus::PromptPackPreview);
+        assert!(response.warnings.iter().any(|warning| warning.contains("unscoped")));
+        assert!(response.warnings.iter().any(|warning| warning.contains("no model inference")));
+    }
+
+    #[test]
+    fn scholar_chat_prompt_pack_includes_mode_and_grounding_sections() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta\n\nalpha gamma\n");
+        let response = preview_scholar_chat_prompt_pack(
+            temp.path(),
+            prompt_pack_request("  alpha  ", vec![source_id.clone()]),
+        )
+        .unwrap();
+        assert_eq!(response.normalized_prompt, "alpha");
+        assert_eq!(response.selected_source_ids, vec![source_id.clone()]);
+        assert_eq!(response.prompt_pack.section_count, 5);
+        assert_eq!(response.prompt_pack.context_item_count, response.context_items.len());
+        assert!(response.prompt_pack.sections.iter().any(|section| section.kind == ScholarChatPromptPackSectionKind::SystemOrPolicyInstructions));
+        assert!(response.prompt_pack.sections.iter().any(|section| section.kind == ScholarChatPromptPackSectionKind::ModeInstructions));
+        assert!(response.prompt_pack.sections.iter().any(|section| section.kind == ScholarChatPromptPackSectionKind::GroundingInstructions));
+        assert!(response.prompt_pack.sections.iter().any(|section| section.kind == ScholarChatPromptPackSectionKind::SourceContext));
+        assert!(response.prompt_pack.sections.iter().any(|section| section.kind == ScholarChatPromptPackSectionKind::UserPrompt));
+        assert!(response.prompt_pack.sections.iter().any(|section| section.lines.iter().any(|line| line.contains("local evidence"))));
+        assert!(response.warnings.iter().any(|warning| warning.contains("local evidence")));
+    }
+
+    #[test]
+    fn scholar_chat_prompt_pack_is_deterministic_and_path_free() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_a = build_source_with_index(&temp, "alpha beta\n\nalpha gamma\n");
+        let source_b = build_source_with_index(&temp, "alpha delta\n\nalpha epsilon\n");
+        let request = prompt_pack_request("  alpha  ", vec![source_b.clone(), source_a.clone()]);
+        let first = preview_scholar_chat_prompt_pack(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_prompt_pack(temp.path(), request).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(first.selected_source_ids, vec![source_b, source_a]);
+        assert_eq!(first.prompt_pack.section_count, first.prompt_pack.sections.len());
+        assert_eq!(first.prompt_pack.context_item_count, first.context_items.len());
         let debug = format!("{first:?}");
         let json = serde_json::to_string(&first).unwrap();
         let temp_path = temp.path().to_string_lossy();
