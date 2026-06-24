@@ -499,6 +499,26 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 49 — Read-Only Metadata UI Surface
+
+Planning boundary only.
+
+Phase 49.0 adds a small read-only retrieval index metadata surface in the UI using the already-exposed `get_retrieval_index` command.
+It shows compact deterministic metadata with loading, empty, and error states, and it does not change backend semantics.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
