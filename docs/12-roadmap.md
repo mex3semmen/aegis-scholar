@@ -743,6 +743,26 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 61 — Evidence Pack UI Surface
+
+Frontend-only diagnostic surface.
+
+Phase 61.0 implements a compact read-only Evidence Packs card using the already-exposed `list_evidence_packs` command and the existing source-selection flow.
+It keeps the UI deterministic and path-free, adds no backend exposure, and does not change backend Evidence Pack semantics.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.

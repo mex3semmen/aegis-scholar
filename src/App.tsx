@@ -137,6 +137,19 @@ type AnswerArtifactIssue = {
   message: string;
 };
 
+type EvidencePackMetadata = {
+  source_id: string;
+  version_id: string;
+  evidence_pack_id: string;
+  query: string;
+  created_at: string;
+  retrieval_index_version: string;
+  result_count: number;
+  item_count: number;
+  warning_count: number;
+  evidence_pack_version: string;
+};
+
 type AnswerArtifactExportSource = {
   source_id: string;
   draft_count: number;
@@ -414,6 +427,10 @@ export default function App() {
   const [artifactIssuesError, setArtifactIssuesError] = createSignal<string | null>(null);
   const [artifactIssuesLoading, setArtifactIssuesLoading] = createSignal(false);
   const [artifactIssuesHasRun, setArtifactIssuesHasRun] = createSignal(false);
+  const [evidencePacks, setEvidencePacks] = createSignal<EvidencePackMetadata[] | null>(null);
+  const [evidencePacksError, setEvidencePacksError] = createSignal<string | null>(null);
+  const [evidencePacksLoading, setEvidencePacksLoading] = createSignal(false);
+  const [evidencePacksSourceId, setEvidencePacksSourceId] = createSignal("");
   const [artifactManifest, setArtifactManifest] = createSignal<AnswerArtifactExportManifest | null>(null);
   const [artifactManifestError, setArtifactManifestError] = createSignal<string | null>(null);
   const [artifactManifestLoading, setArtifactManifestLoading] = createSignal(false);
@@ -635,6 +652,41 @@ export default function App() {
     }
   }
 
+  async function loadEvidencePacksBySourceId(trimmedSourceId: string) {
+    if (!trimmedSourceId) {
+      return;
+    }
+    if (evidencePacksLoading()) {
+      return;
+    }
+    setEvidencePacksLoading(true);
+    setEvidencePacksError(null);
+    setEvidencePacksSourceId(trimmedSourceId);
+    try {
+      const result = await invoke<EvidencePackMetadata[]>("list_evidence_packs", {
+        root: ".",
+        source_id: trimmedSourceId,
+      });
+      setEvidencePacks(result);
+    } catch (err) {
+      setEvidencePacks(null);
+      setEvidencePacksError(sanitizeBackendError(err));
+    } finally {
+      setEvidencePacksLoading(false);
+    }
+  }
+
+  async function loadEvidencePacks() {
+    const selectedSourceId = selectedEvidencePackSourceId();
+    if (!selectedSourceId) {
+      setEvidencePacks(null);
+      setEvidencePacksError(null);
+      setEvidencePacksSourceId("");
+      return;
+    }
+    await loadEvidencePacksBySourceId(selectedSourceId);
+  }
+
   async function loadArtifactManifest() {
     if (artifactManifestLoading()) {
       return;
@@ -712,12 +764,21 @@ export default function App() {
   }
 
   function diagnosticsAreLoading() {
-    return retrievalIndexLoading() || artifactSourcesLoading() || artifactHealthLoading() || artifactIssuesLoading();
+    return retrievalIndexLoading() || artifactSourcesLoading() || artifactHealthLoading() || artifactIssuesLoading() || evidencePacksLoading();
   }
 
   function selectedAnswerArtifactSourceId() {
     const trimmedSourceId = sourceId().trim();
     return artifactSources().some((item) => item.source_id === trimmedSourceId) ? trimmedSourceId : "";
+  }
+
+  function selectedEvidencePackSourceId() {
+    const retrievalSourceId = retrievalSearchSourceId().trim();
+    if (retrievalSearchSourceIds().includes(retrievalSourceId)) {
+      return retrievalSourceId;
+    }
+    const answerSourceId = selectedAnswerArtifactSourceId();
+    return answerSourceId || "";
   }
 
   function selectedFinalAnswerDetail() {
@@ -773,11 +834,13 @@ export default function App() {
 
   async function refreshDiagnostics() {
     const sourceIdForRetrieval = sourceId().trim() || retrievalIndex()?.source_id?.trim() || "";
+    const sourceIdForEvidence = selectedEvidencePackSourceId();
     await Promise.all([
       sourceIdForRetrieval ? loadRetrievalIndex(true, sourceIdForRetrieval) : Promise.resolve(),
       loadArtifactSources(true),
       loadArtifactHealth(true),
       loadArtifactIssues(true),
+      sourceIdForEvidence ? loadEvidencePacksBySourceId(sourceIdForEvidence) : Promise.resolve(),
     ]);
   }
 
@@ -1448,6 +1511,59 @@ export default function App() {
             )
           ) : (
             <p>Select an answer artifact source to load final answers.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Evidence packs</h3>
+          <p class="muted">Read-only evidence-pack metadata for the selected retrieval or answer-artifact source.</p>
+          {selectedEvidencePackSourceId() ? (
+            <>
+              <div class="hero-actions">
+                <button onClick={() => loadEvidencePacks()} disabled={evidencePacksLoading()}>
+                  {evidencePacksLoading() ? "Loading..." : "Load evidence packs"}
+                </button>
+              </div>
+              {evidencePacksError() && evidencePacksSourceId() === selectedEvidencePackSourceId() && (
+                <p class="error">{evidencePacksError()}</p>
+              )}
+              {evidencePacksSourceId() === selectedEvidencePackSourceId() ? (
+                evidencePacks() ? (
+                  <>
+                    <div class="contract-meta">
+                      <div><span>Source ID</span><strong>{selectedEvidencePackSourceId()}</strong></div>
+                      <div><span>Packs</span><strong>{evidencePacks()!.length}</strong></div>
+                    </div>
+                    {evidencePacks()!.length > 0 ? (
+                      <ul class="final-answer-list-items">
+                        {evidencePacks()!.map((item) => (
+                          <li>
+                            <div class="final-answer-list-item">
+                              <span>{item.evidence_pack_id}</span>
+                              <small>
+                                version={item.version_id} | created={item.created_at} | items={item.item_count} | results={item.result_count} | warnings={item.warning_count}
+                              </small>
+                              <small>
+                                query={item.query} | retrieval_index_version={item.retrieval_index_version} | pack_version={item.evidence_pack_version}
+                              </small>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>No evidence packs listed yet for this source.</p>
+                    )}
+                  </>
+                ) : evidencePacksLoading() ? (
+                  <p>Loading evidence packs...</p>
+                ) : evidencePacksError() ? null : (
+                  <p>No evidence packs loaded yet for this source.</p>
+                )
+              ) : (
+                <p>No evidence packs loaded yet for this source.</p>
+              )}
+            </>
+          ) : (
+            <p>Select a retrieval or answer-artifact source to load evidence packs.</p>
           )}
         </div>
         <div class="artifact-overview">
