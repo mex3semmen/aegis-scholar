@@ -1122,6 +1122,24 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 77 — Draft Output to Grounding Inspection Convenience
+
+Phase 77.0 adds a small UI convenience action that copies the draft inference stdout preview into the draft grounding inspection textarea.
+It remains frontend-only, keeps the stdout preview diagnostic, and does not run grounding inspection automatically or broaden backend behavior.
+
+Do not implement:
+
+- grounded answer generation
+- final answer generation
+- Evidence Pack building
+- runtime execution changes
+- LLM calls outside preview
+- chat history persistence
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
