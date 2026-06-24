@@ -1140,6 +1140,24 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 78 — Grounded Draft Readiness Preview
+
+Phase 78.0 adds a preview-only grounded-draft readiness diagnostic that composes the existing draft grounding inspection preview and summarizes whether the current draft looks ready for a future grounded-answer path.
+It remains diagnostic-only and does not create grounded answers, final answers, Evidence Packs, runtime execution, or persistence.
+
+Do not implement:
+
+- grounded answer generation
+- final answer generation
+- Evidence Pack building
+- runtime execution changes
+- LLM calls outside preview
+- chat history persistence
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.

@@ -46,12 +46,14 @@ use scholar_chat::{
     preview_scholar_chat_evidence_plan as preview_scholar_chat_evidence_plan_impl,
     preview_scholar_chat_prompt_pack as preview_scholar_chat_prompt_pack_impl,
     preview_scholar_chat_retrieval as preview_scholar_chat_retrieval_impl,
+    preview_scholar_chat_grounded_draft_readiness as preview_scholar_chat_grounded_draft_readiness_impl,
     ScholarChatAnswerReadinessPreview,
     ScholarChatAnswerReadinessRequest,
     ScholarChatDraftInferencePreview,
     ScholarChatDraftInferenceRequest,
     ScholarChatDraftGroundingInspectionPreview,
     ScholarChatDraftGroundingInspectionRequest,
+    ScholarChatGroundedDraftReadinessPreview,
     ScholarChatRequest,
     ScholarChatEvidencePlanResponse,
     ScholarChatPromptPackPreviewResponse,
@@ -300,6 +302,15 @@ fn preview_scholar_chat_draft_grounding_inspection(
 }
 
 #[tauri::command]
+fn preview_scholar_chat_grounded_draft_readiness(
+    root: String,
+    request: ScholarChatDraftGroundingInspectionRequest,
+) -> Result<ScholarChatGroundedDraftReadinessPreview, String> {
+    preview_scholar_chat_grounded_draft_readiness_impl(root, request)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
 fn preview_scholar_chat_retrieval(root: String, request: ScholarChatRequest) -> Result<ScholarChatRetrievalPreviewResponse, String> {
     preview_scholar_chat_retrieval_impl(root, request)
         .map_err(to_user_error)
@@ -384,6 +395,7 @@ pub fn run() {
             preview_scholar_chat_answer_readiness,
             preview_scholar_chat_draft_inference,
             preview_scholar_chat_draft_grounding_inspection,
+            preview_scholar_chat_grounded_draft_readiness,
             preview_scholar_chat_retrieval,
             preview_scholar_chat_evidence_plan,
             preview_scholar_chat_prompt_pack,
