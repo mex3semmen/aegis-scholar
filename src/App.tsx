@@ -238,6 +238,34 @@ type LocalRuntimeInvocationPlanPreview = {
   plan: LocalRuntimeInvocationPlan;
 };
 
+type LocalRuntimeProbeStatus = "blocked" | "completed" | "timed_out";
+
+type LocalRuntimeProbeWarning = {
+  kind: string;
+  message: string;
+};
+
+type LocalRuntimeProbeRequest = {
+  executable_path: string | null;
+  allow_execution: boolean;
+  timeout_ms: number | null;
+};
+
+type LocalRuntimeProbeResult = {
+  status: LocalRuntimeProbeStatus;
+  allow_execution: boolean;
+  execution_attempted: boolean;
+  probe_argument: string;
+  timeout_ms: number;
+  duration_ms: number;
+  safe_executable_file_name?: string | null;
+  exit_code?: number | null;
+  stdout_preview: string;
+  stderr_preview: string;
+  blockers: LocalRuntimeProbeWarning[];
+  warnings: LocalRuntimeProbeWarning[];
+};
+
 type LocalRuntimeInvocationPlanRequest = {
   runtime_config: LocalModelRuntimeConfig;
   prompt_text: string | null;
@@ -677,6 +705,13 @@ export default function App() {
   const [localRuntimeInvocationValidationError, setLocalRuntimeInvocationValidationError] = createSignal<string | null>(null);
   const [localRuntimeInvocationLoading, setLocalRuntimeInvocationLoading] = createSignal(false);
   const [localRuntimeInvocationHasRun, setLocalRuntimeInvocationHasRun] = createSignal(false);
+  const [localRuntimeProbeAllowExecution, setLocalRuntimeProbeAllowExecution] = createSignal(false);
+  const [localRuntimeProbeTimeoutMs, setLocalRuntimeProbeTimeoutMs] = createSignal("1500");
+  const [localRuntimeProbeResult, setLocalRuntimeProbeResult] = createSignal<LocalRuntimeProbeResult | null>(null);
+  const [localRuntimeProbeError, setLocalRuntimeProbeError] = createSignal<string | null>(null);
+  const [localRuntimeProbeValidationError, setLocalRuntimeProbeValidationError] = createSignal<string | null>(null);
+  const [localRuntimeProbeLoading, setLocalRuntimeProbeLoading] = createSignal(false);
+  const [localRuntimeProbeHasRun, setLocalRuntimeProbeHasRun] = createSignal(false);
   const [sourceId, setSourceId] = createSignal("");
   const [finalAnswerId, setFinalAnswerId] = createSignal("");
   const [finalAnswer, setFinalAnswer] = createSignal<FinalAnswer | null>(null);
@@ -1171,6 +1206,13 @@ export default function App() {
     setLocalRuntimeInvocationHasRun(false);
   }
 
+  function clearLocalRuntimeProbePreview() {
+    setLocalRuntimeProbeResult(null);
+    setLocalRuntimeProbeError(null);
+    setLocalRuntimeProbeValidationError(null);
+    setLocalRuntimeProbeHasRun(false);
+  }
+
   function normalizeOptionalTextInput(value: string) {
     const trimmed = value.trim();
     return trimmed ? trimmed : null;
@@ -1232,6 +1274,25 @@ export default function App() {
       return null;
     }
     return currentFinalAnswer;
+  }
+
+  function safeFileNameFromPathInput(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const normalized = trimmed.replace(/\\/g, "/");
+    const fileName = normalized.split("/").filter(Boolean).pop();
+    return fileName || null;
+  }
+
+  function localRuntimeProbeExecutableSummary() {
+    const executablePath = localRuntimeExecutablePath().trim();
+    if (!executablePath) {
+      return "No executable path configured yet.";
+    }
+    const fileName = safeFileNameFromPathInput(executablePath);
+    return fileName ? `Configured executable: ${fileName}` : "Configured executable: not readable yet.";
   }
 
   function answerArtifactSourceTotals() {
@@ -1574,6 +1635,44 @@ export default function App() {
       setLocalRuntimeInvocationError(sanitizeBackendError(err));
     } finally {
       setLocalRuntimeInvocationLoading(false);
+    }
+  }
+
+  async function previewLocalRuntimeVersionProbe() {
+    const timeoutMs = parseOptionalIntegerInput(
+      localRuntimeProbeTimeoutMs(),
+      "Probe timeout",
+      setLocalRuntimeProbeValidationError,
+    );
+    if (timeoutMs === undefined) {
+      setLocalRuntimeProbeHasRun(true);
+      setLocalRuntimeProbeResult(null);
+      setLocalRuntimeProbeError(null);
+      return;
+    }
+    if (localRuntimeProbeLoading()) {
+      return;
+    }
+
+    setLocalRuntimeProbeHasRun(true);
+    setLocalRuntimeProbeLoading(true);
+    setLocalRuntimeProbeError(null);
+    setLocalRuntimeProbeValidationError(null);
+    setLocalRuntimeProbeResult(null);
+    try {
+      const result = await invoke<LocalRuntimeProbeResult>("probe_local_runtime_version", {
+        root: ".",
+        request: {
+          executable_path: normalizeOptionalTextInput(localRuntimeExecutablePath()),
+          allow_execution: localRuntimeProbeAllowExecution(),
+          timeout_ms: timeoutMs,
+        } satisfies LocalRuntimeProbeRequest,
+      });
+      setLocalRuntimeProbeResult(result);
+    } catch (err) {
+      setLocalRuntimeProbeError(sanitizeBackendError(err));
+    } finally {
+      setLocalRuntimeProbeLoading(false);
     }
   }
 
@@ -2045,6 +2144,7 @@ export default function App() {
                   setLocalRuntimeExecutablePath(event.currentTarget.value);
                   clearLocalRuntimePreview();
                   clearLocalRuntimeInvocationPreview();
+                  clearLocalRuntimeProbePreview();
                 }}
                 placeholder="E:\\bin\\llama-server.exe"
               />
@@ -2215,6 +2315,112 @@ export default function App() {
             )
           ) : (
             <p>No runtime invocation plan preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Runtime version probe</h3>
+          <p class="muted">
+            Read-only version/help probe for the configured executable. It uses a fixed <code>--version</code> argument, does not load a model, and does not send a prompt or generate an answer.
+          </p>
+          <div class="form-row">
+            <label class="inline-field">
+              Allow execution
+              <input
+                type="checkbox"
+                checked={localRuntimeProbeAllowExecution()}
+                onChange={(event) => {
+                  setLocalRuntimeProbeAllowExecution(event.currentTarget.checked);
+                  clearLocalRuntimeProbePreview();
+                }}
+              />
+            </label>
+            <label>
+              Timeout ms
+              <input
+                type="number"
+                value={localRuntimeProbeTimeoutMs()}
+                onInput={(event) => {
+                  setLocalRuntimeProbeTimeoutMs(event.currentTarget.value);
+                  clearLocalRuntimeProbePreview();
+                }}
+                placeholder="1500"
+              />
+            </label>
+          </div>
+          <p class="muted">{localRuntimeProbeExecutableSummary()}</p>
+          <div class="hero-actions">
+            <button onClick={previewLocalRuntimeVersionProbe} disabled={localRuntimeProbeLoading()}>
+              {localRuntimeProbeLoading() ? "Probing..." : "Run version probe"}
+            </button>
+          </div>
+          <p class="muted">No model is loaded. No prompt is sent. No answer is generated.</p>
+          {localRuntimeProbeValidationError() && <p class="error">{localRuntimeProbeValidationError()}</p>}
+          {localRuntimeProbeError() && <p class="error">{localRuntimeProbeError()}</p>}
+          {localRuntimeProbeLoading() ? (
+            <p>Running version probe...</p>
+          ) : localRuntimeProbeHasRun() ? (
+            localRuntimeProbeResult() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(localRuntimeProbeResult()!.status) },
+                  { label: "Allow execution", value: localRuntimeProbeResult()!.allow_execution ? "yes" : "no" },
+                  { label: "Execution attempted", value: localRuntimeProbeResult()!.execution_attempted ? "yes" : "no" },
+                  { label: "Timeout ms", value: localRuntimeProbeResult()!.timeout_ms },
+                  { label: "Duration ms", value: localRuntimeProbeResult()!.duration_ms },
+                  { label: "Exit code", value: localRuntimeProbeResult()!.exit_code ?? "missing" },
+                ])}
+                <div class="contract-meta">
+                  <div><span>Executable file</span><strong>{localRuntimeProbeResult()!.safe_executable_file_name ?? "not configured"}</strong></div>
+                  <div><span>Probe argument</span><strong>{localRuntimeProbeResult()!.probe_argument}</strong></div>
+                </div>
+                <h4>Stdout preview</h4>
+                {localRuntimeProbeResult()!.stdout_preview ? (
+                  <pre>{localRuntimeProbeResult()!.stdout_preview}</pre>
+                ) : (
+                  <p>No stdout captured.</p>
+                )}
+                <h4>Stderr preview</h4>
+                {localRuntimeProbeResult()!.stderr_preview ? (
+                  <pre>{localRuntimeProbeResult()!.stderr_preview}</pre>
+                ) : (
+                  <p>No stderr captured.</p>
+                )}
+                {localRuntimeProbeResult()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {localRuntimeProbeResult()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No probe blockers.</p>
+                )}
+                {localRuntimeProbeResult()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {localRuntimeProbeResult()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No probe warnings.</p>
+                )}
+              </>
+            ) : (
+              <p>No runtime version probe preview loaded yet.</p>
+            )
+          ) : (
+            <p>No runtime version probe preview loaded yet.</p>
           )}
         </div>
       </section>

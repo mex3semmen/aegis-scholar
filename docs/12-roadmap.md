@@ -959,6 +959,26 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 71 — Local Runtime Version Probe
+
+Guarded process-probe slice.
+
+Phase 71.0 adds the preview-only `probe_local_runtime_version` command and a compact runtime version probe card.
+It performs an explicit allow-execution version probe only, stays read-only and path-free, and does not load a model, run inference, stream tokens, generate answers, persist config, or download/install models.
+
+Do not implement:
+
+- local model inference/runtime execution
+- LLM calls
+- streaming tokens
+- answer generation
+- config persistence
+- model download/install behavior
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
