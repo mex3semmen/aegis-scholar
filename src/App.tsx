@@ -472,8 +472,8 @@ export default function App() {
     await loadArtifactOverviewBySourceId(sourceId().trim());
   }
 
-  async function loadRetrievalIndex() {
-    const trimmedSourceId = sourceId().trim();
+  async function loadRetrievalIndex(preserveSelection = false, sourceIdOverride?: string) {
+    const trimmedSourceId = (sourceIdOverride ?? sourceId()).trim();
     if (!trimmedSourceId) {
       setRetrievalIndexError("Source ID is required to load the retrieval index.");
       return;
@@ -490,18 +490,24 @@ export default function App() {
       });
       setRetrievalIndex(result);
       const sourceIds = Array.from(new Set(result.entries.map((entry) => entry.source_id))).sort();
-      setRetrievalSearchSourceId(sourceIds[0] ?? "");
+      if (preserveSelection && sourceIds.includes(retrievalSearchSourceId().trim())) {
+        setRetrievalSearchSourceId(retrievalSearchSourceId().trim());
+      } else {
+        setRetrievalSearchSourceId(sourceIds[0] ?? "");
+      }
       setRetrievalSearch(null);
       setRetrievalSearchHasRun(false);
       setRetrievalSearchError(null);
       setRetrievalSearchValidationError(null);
     } catch (err) {
-      setRetrievalSearchSourceId("");
-      setRetrievalSearch(null);
-      setRetrievalSearchHasRun(false);
-      setRetrievalSearchError(null);
-      setRetrievalSearchValidationError(null);
-      setRetrievalIndex(null);
+      if (!preserveSelection) {
+        setRetrievalSearchSourceId("");
+        setRetrievalSearch(null);
+        setRetrievalSearchHasRun(false);
+        setRetrievalSearchError(null);
+        setRetrievalSearchValidationError(null);
+        setRetrievalIndex(null);
+      }
       setRetrievalIndexError(sanitizeBackendError(err));
     } finally {
       setRetrievalIndexLoading(false);
@@ -560,7 +566,7 @@ export default function App() {
     setRetrievalSearchValidationError(null);
   }
 
-  async function loadArtifactSources() {
+  async function loadArtifactSources(preserveExisting = false) {
     if (artifactSourcesLoading()) {
       return;
     }
@@ -572,14 +578,16 @@ export default function App() {
       });
       setArtifactSources(result);
     } catch (err) {
-      setArtifactSources([]);
+      if (!preserveExisting) {
+        setArtifactSources([]);
+      }
       setArtifactSourcesError(sanitizeBackendError(err));
     } finally {
       setArtifactSourcesLoading(false);
     }
   }
 
-  async function loadArtifactHealth() {
+  async function loadArtifactHealth(preserveExisting = false) {
     if (artifactHealthLoading()) {
       return;
     }
@@ -591,14 +599,16 @@ export default function App() {
       });
       setArtifactHealth(result);
     } catch (err) {
-      setArtifactHealth(null);
+      if (!preserveExisting) {
+        setArtifactHealth(null);
+      }
       setArtifactHealthError(sanitizeBackendError(err));
     } finally {
       setArtifactHealthLoading(false);
     }
   }
 
-  async function loadArtifactIssues() {
+  async function loadArtifactIssues(preserveExisting = false) {
     if (artifactIssuesLoading()) {
       return;
     }
@@ -611,7 +621,9 @@ export default function App() {
       });
       setArtifactIssues(result);
     } catch (err) {
-      setArtifactIssues([]);
+      if (!preserveExisting) {
+        setArtifactIssues([]);
+      }
       setArtifactIssuesError(sanitizeBackendError(err));
     } finally {
       setArtifactIssuesLoading(false);
@@ -691,6 +703,10 @@ export default function App() {
     await loadArtifactOverviewBySourceId(item.source_id);
   }
 
+  function diagnosticsAreLoading() {
+    return retrievalIndexLoading() || artifactSourcesLoading() || artifactHealthLoading() || artifactIssuesLoading();
+  }
+
   function answerArtifactSourceTotals() {
     return artifactSources().reduce(
       (totals, item) => ({
@@ -727,6 +743,16 @@ export default function App() {
         source_ids: [] as string[],
       },
     );
+  }
+
+  async function refreshDiagnostics() {
+    const sourceIdForRetrieval = sourceId().trim() || retrievalIndex()?.source_id?.trim() || "";
+    await Promise.all([
+      sourceIdForRetrieval ? loadRetrievalIndex(true, sourceIdForRetrieval) : Promise.resolve(),
+      loadArtifactSources(true),
+      loadArtifactHealth(true),
+      loadArtifactIssues(true),
+    ]);
   }
 
   async function selectArtifactSourceId(source_id: string) {
@@ -819,14 +845,17 @@ export default function App() {
           <button onClick={loadArtifactOverview} disabled={artifactOverviewLoading()}>
             {artifactOverviewLoading() ? "Loading..." : "Load artifact overview"}
           </button>
-          <button onClick={loadArtifactSources} disabled={artifactSourcesLoading()}>
+          <button onClick={() => loadArtifactSources()} disabled={artifactSourcesLoading()}>
             {artifactSourcesLoading() ? "Loading..." : "Load source index"}
           </button>
-          <button onClick={loadArtifactHealth} disabled={artifactHealthLoading()}>
+          <button onClick={() => loadArtifactHealth()} disabled={artifactHealthLoading()}>
             {artifactHealthLoading() ? "Loading..." : "Load answer artifacts"}
           </button>
-          <button onClick={loadArtifactIssues} disabled={artifactIssuesLoading()}>
+          <button onClick={() => loadArtifactIssues()} disabled={artifactIssuesLoading()}>
             {artifactIssuesLoading() ? "Loading..." : "Load artifact issues"}
+          </button>
+          <button onClick={() => refreshDiagnostics()} disabled={diagnosticsAreLoading()}>
+            {diagnosticsAreLoading() ? "Refreshing..." : "Refresh diagnostics"}
           </button>
           <button onClick={loadArtifactManifest} disabled={artifactManifestLoading()}>
             {artifactManifestLoading() ? "Loading..." : "Load export manifest"}
@@ -931,27 +960,27 @@ export default function App() {
                 <div><span>Unsupported</span><strong>{answerArtifactIssueTotals().unsupported_statement_count}</strong></div>
               </div>
               {artifactIssues().length > 0 ? (
-              <ul class="final-answer-list-items">
-                {artifactIssues().map((item) => (
-                  <li>
-                    <div class="final-answer-list-item">
-                      <span>
-                        <button class="link-button" onClick={() => selectArtifactSourceId(item.source_id)}>
-                          {item.source_id}
-                        </button>
-                      </span>
-                      <small>
-                        {item.issue_kind}
-                        {item.final_answer_id ? ` | ${item.final_answer_id}` : ""}
-                        {item.statement_index !== null && item.statement_index !== undefined ? ` | statement=${item.statement_index}` : ""}
-                        {item.statement_status ? ` | status=${item.statement_status}` : ""}
-                        {item.grounded_answer_id ? ` | grounded=${item.grounded_answer_id}` : ""}
-                      </small>
-                      <p>{item.message}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                <ul class="final-answer-list-items">
+                  {artifactIssues().map((item) => (
+                    <li>
+                      <div class="final-answer-list-item">
+                        <span>
+                          <button class="link-button" onClick={() => selectArtifactSourceId(item.source_id)}>
+                            {item.source_id}
+                          </button>
+                        </span>
+                        <small>
+                          {item.issue_kind}
+                          {item.final_answer_id ? ` | ${item.final_answer_id}` : ""}
+                          {item.statement_index !== null && item.statement_index !== undefined ? ` | statement=${item.statement_index}` : ""}
+                          {item.statement_status ? ` | status=${item.statement_status}` : ""}
+                          {item.grounded_answer_id ? ` | grounded=${item.grounded_answer_id}` : ""}
+                        </small>
+                        <p>{item.message}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               ) : (
                 <p>No answer artifact issues reported.</p>
               )}
@@ -1332,7 +1361,7 @@ export default function App() {
           <h3>Retrieval index</h3>
           <p class="muted">Read-only retrieval metadata for the source ID above.</p>
           <div class="hero-actions">
-            <button onClick={loadRetrievalIndex} disabled={retrievalIndexLoading()}>
+            <button onClick={() => loadRetrievalIndex()} disabled={retrievalIndexLoading()}>
               {retrievalIndexLoading() ? "Loading..." : "Load retrieval index"}
             </button>
           </div>

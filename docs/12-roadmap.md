@@ -641,6 +641,26 @@ Do not implement:
 - share/upload/download
 - report-writing/export-writing
 
+## Phase 56 — Diagnostic UI Refresh Controls
+
+Frontend-only refinement.
+
+Phase 56.0 adds a small read-only refresh control for the existing diagnostic cards using already-exposed read-only commands.
+It refreshes displayed diagnostics without changing backend semantics.
+
+Do not implement:
+
+- generation
+- claim inference
+- evidence rewriting
+- semantic ranking
+- editing
+- import
+- repair
+- migration
+- share/upload/download
+- report-writing/export-writing
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
