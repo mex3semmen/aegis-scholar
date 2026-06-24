@@ -178,6 +178,9 @@ pub enum AegisError {
     #[error("Scholar chat invalid source id")]
     ScholarChatInvalidSourceId,
 
+    #[error("Local model runtime invalid path")]
+    LocalModelRuntimeInvalidPath,
+
 }
 
 pub type AegisResult<T> = Result<T, AegisError>;
