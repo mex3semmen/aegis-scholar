@@ -62,6 +62,28 @@ type ScholarChatResponse = {
   warnings: string[];
 };
 
+type ScholarChatRetrievalCandidate = {
+  source_id: string;
+  version_id: string;
+  chunk_id: string;
+  score: number;
+  matched_terms: string[];
+  preview: string;
+  locator: CitationLocator;
+};
+
+type ScholarChatRetrievalPreviewResponse = {
+  status: "preview_only";
+  normalized_prompt: string;
+  mode: ScholarChatMode;
+  grounding_policy: GroundingPolicy;
+  selected_source_ids: string[];
+  selected_source_count: number;
+  candidate_count: number;
+  candidates: ScholarChatRetrievalCandidate[];
+  warnings: string[];
+};
+
 type RetrievalIndexEntry = {
   chunk_id: string;
   source_id: string;
@@ -458,6 +480,10 @@ export default function App() {
   const [scholarChatError, setScholarChatError] = createSignal<string | null>(null);
   const [scholarChatValidationError, setScholarChatValidationError] = createSignal<string | null>(null);
   const [scholarChatLoading, setScholarChatLoading] = createSignal(false);
+  const [scholarChatRetrievalPreview, setScholarChatRetrievalPreview] = createSignal<ScholarChatRetrievalPreviewResponse | null>(null);
+  const [scholarChatRetrievalError, setScholarChatRetrievalError] = createSignal<string | null>(null);
+  const [scholarChatRetrievalLoading, setScholarChatRetrievalLoading] = createSignal(false);
+  const [scholarChatRetrievalHasRun, setScholarChatRetrievalHasRun] = createSignal(false);
   const [sourceId, setSourceId] = createSignal("");
   const [finalAnswerId, setFinalAnswerId] = createSignal("");
   const [finalAnswer, setFinalAnswer] = createSignal<FinalAnswer | null>(null);
@@ -978,6 +1004,40 @@ export default function App() {
     }
   }
 
+  async function previewScholarChatRetrieval() {
+    const trimmedPrompt = scholarChatPrompt().trim();
+    if (!trimmedPrompt) {
+      setScholarChatRetrievalPreview(null);
+      setScholarChatRetrievalError(null);
+      setScholarChatValidationError("Prompt is required to preview Scholar Chat retrieval candidates.");
+      return;
+    }
+    if (scholarChatRetrievalLoading()) {
+      return;
+    }
+    setScholarChatRetrievalHasRun(true);
+    setScholarChatRetrievalLoading(true);
+    setScholarChatRetrievalError(null);
+    setScholarChatValidationError(null);
+    setScholarChatRetrievalPreview(null);
+    try {
+      const result = await invoke<ScholarChatRetrievalPreviewResponse>("preview_scholar_chat_retrieval", {
+        root: ".",
+        request: {
+          prompt: trimmedPrompt,
+          mode: scholarChatMode(),
+          grounding_policy: scholarChatGroundingPolicy(),
+          selected_source_ids: selectedScholarChatSourceIds(),
+        },
+      });
+      setScholarChatRetrievalPreview(result);
+    } catch (err) {
+      setScholarChatRetrievalError(sanitizeBackendError(err));
+    } finally {
+      setScholarChatRetrievalLoading(false);
+    }
+  }
+
   return (
     <main class="app-shell">
       <section class="hero">
@@ -1005,7 +1065,7 @@ export default function App() {
       <section class="card">
         <h2>Scholar Chat</h2>
         <p class="muted">
-          Preview-only request shell for the future local-first Scholar Chat workflow. No retrieval, Evidence Pack build, model call, or answer generation runs here.
+          Preview-only request shell for the future local-first Scholar Chat workflow. It can preview grounding plans and retrieval candidates from existing local data, but it does not run answer generation, model calls, or Evidence Pack builds.
         </p>
         <div class="form-row">
           <label>
@@ -1092,6 +1152,70 @@ export default function App() {
         ) : (
           <p>No Scholar Chat preview loaded yet.</p>
         )}
+        <div class="artifact-overview">
+          <h3>Retrieval preview</h3>
+          <p class="muted">
+            Read-only retrieval candidate preview for the selected source context. It does not build indexes or generate answers.
+          </p>
+          <div class="hero-actions">
+            <button onClick={previewScholarChatRetrieval} disabled={scholarChatRetrievalLoading()}>
+              {scholarChatRetrievalLoading() ? "Previewing..." : "Preview retrieval candidates"}
+            </button>
+          </div>
+          {scholarChatRetrievalError() && <p class="error">{scholarChatRetrievalError()}</p>}
+          {scholarChatRetrievalLoading() ? (
+            <p>Previewing retrieval candidates...</p>
+          ) : scholarChatRetrievalHasRun() ? (
+            scholarChatRetrievalPreview() ? (
+              <>
+                <div class="contract-meta">
+                  <div><span>Status</span><strong>{scholarChatRetrievalPreview()!.status}</strong></div>
+                  <div><span>Mode</span><strong>{scholarChatRetrievalPreview()!.mode}</strong></div>
+                  <div><span>Grounding policy</span><strong>{scholarChatRetrievalPreview()!.grounding_policy}</strong></div>
+                  <div><span>Selected sources</span><strong>{scholarChatRetrievalPreview()!.selected_source_count}</strong></div>
+                  <div><span>Candidates</span><strong>{scholarChatRetrievalPreview()!.candidate_count}</strong></div>
+                </div>
+                <p><strong>Prompt:</strong> {scholarChatRetrievalPreview()!.normalized_prompt}</p>
+                {scholarChatRetrievalPreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {scholarChatRetrievalPreview()!.warnings.map((warning) => (
+                        <li>{warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {scholarChatRetrievalPreview()!.candidates.length > 0 ? (
+                  <ul class="final-answer-list-items">
+                    {scholarChatRetrievalPreview()!.candidates.map((item) => (
+                      <li>
+                        <div class="final-answer-list-item">
+                          <span>{item.chunk_id}</span>
+                          <small>
+                            source={item.source_id} | version={item.version_id} | score={item.score.toFixed(3)} | matched={item.matched_terms.join(", ") || "none"}
+                          </small>
+                          <small>{locatorSummary(item.locator)}</small>
+                          <p>{item.preview}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>
+                    {scholarChatRetrievalPreview()!.selected_source_count > 0
+                      ? "No retrieval candidates matched the selected context."
+                      : "No source selected yet; preview was unscoped."}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p>No Scholar Chat retrieval preview loaded yet.</p>
+            )
+          ) : (
+            <p>No Scholar Chat retrieval preview loaded yet.</p>
+          )}
+        </div>
       </section>
 
       <section class="card">

@@ -130,14 +130,7 @@ impl RetrievalService {
 
     pub fn read_index(&self, source_id: &str) -> AegisResult<RetrievalIndex> {
         self.paths.ensure_layout()?;
-        let registry = SourceRegistry::load(&self.paths.registry_path())?;
-        let record = registry.get_source(source_id)?;
-        let path = self.index_path(&record.source_id, &record.version_id);
-        if !path.exists() {
-            return Err(AegisError::RetrievalIndexMissing);
-        }
-        let content = fs::read_to_string(&path).map_err(|_| AegisError::RetrievalIndexReadFailed)?;
-        serde_json::from_str(&content).map_err(|_| AegisError::RetrievalIndexReadFailed)
+        self.read_existing_index(source_id)
     }
 
     pub fn search_source(&self, source_id: &str, query: &str, max_results: usize) -> AegisResult<RetrievalResponse> {
@@ -151,12 +144,51 @@ impl RetrievalService {
         }
         let registry = SourceRegistry::load(&self.paths.registry_path())?;
         let record = registry.get_source(source_id)?;
-        let index = match self.read_index(source_id) {
+        let index = match self.read_existing_index(source_id) {
             Ok(index) => index,
             Err(AegisError::RetrievalIndexMissing) => self.build_index(source_id)?,
             Err(error) => return Err(error),
         };
-        let chunk_report = ChunkingService::new(self.paths.root.clone()).read_chunking_report(source_id)?;
+        let chunk_report = self.read_existing_chunking_report(&record.source_id, &record.version_id)?;
+        let results = self.search_with_index(index, chunk_report, &query_terms, max_results)?;
+
+        let _ = record;
+        Ok(RetrievalResponse {
+            query: query.to_string(),
+            normalized_query_terms: query_terms,
+            result_count: results.len(),
+            results,
+        })
+    }
+
+    pub fn preview_search_source(&self, source_id: &str, query: &str, max_results: usize) -> AegisResult<RetrievalResponse> {
+        if max_results == 0 {
+            return Err(AegisError::RetrievalInvalidLimit);
+        }
+        let query_terms = normalize_terms(query);
+        if query.trim().is_empty() || query_terms.is_empty() {
+            return Err(AegisError::RetrievalQueryEmpty);
+        }
+        let registry = SourceRegistry::load(&self.paths.registry_path())?;
+        let record = registry.get_source(source_id)?;
+        let index = self.read_existing_index(source_id)?;
+        let chunk_report = self.read_existing_chunking_report(&record.source_id, &record.version_id)?;
+        let results = self.search_with_index(index, chunk_report, &query_terms, max_results)?;
+        Ok(RetrievalResponse {
+            query: query.to_string(),
+            normalized_query_terms: query_terms,
+            result_count: results.len(),
+            results,
+        })
+    }
+
+    fn search_with_index(
+        &self,
+        index: RetrievalIndex,
+        chunk_report: crate::chunking::ChunkingReport,
+        query_terms: &[String],
+        max_results: usize,
+    ) -> AegisResult<Vec<RetrievalResult>> {
         let chunk_map = chunk_report
             .chunks
             .iter()
@@ -194,21 +226,36 @@ impl RetrievalService {
             })
             .collect::<Vec<_>>();
 
-        results.sort_by(|a, b| {
-            match b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal) {
-                Ordering::Equal => a.chunk_id.cmp(&b.chunk_id),
-                other => other,
-            }
+        results.sort_by(|a, b| match b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal) {
+            Ordering::Equal => a.chunk_id.cmp(&b.chunk_id),
+            other => other,
         });
         results.truncate(max_results);
+        Ok(results)
+    }
 
-        let _ = record;
-        Ok(RetrievalResponse {
-            query: query.to_string(),
-            normalized_query_terms: query_terms,
-            result_count: results.len(),
-            results,
-        })
+    fn read_existing_index(&self, source_id: &str) -> AegisResult<RetrievalIndex> {
+        let registry = SourceRegistry::load(&self.paths.registry_path())?;
+        let record = registry.get_source(source_id)?;
+        let path = self.index_path(&record.source_id, &record.version_id);
+        if !path.exists() {
+            return Err(AegisError::RetrievalIndexMissing);
+        }
+        let content = fs::read_to_string(&path).map_err(|_| AegisError::RetrievalIndexReadFailed)?;
+        serde_json::from_str(&content).map_err(|_| AegisError::RetrievalIndexReadFailed)
+    }
+
+    fn read_existing_chunking_report(&self, source_id: &str, version_id: &str) -> AegisResult<crate::chunking::ChunkingReport> {
+        let path = self
+            .paths
+            .source_version_dir(source_id, version_id)
+            .join("chunks")
+            .join("chunks.json");
+        if !path.exists() {
+            return Err(AegisError::ChunkingReportMissing);
+        }
+        let content = fs::read_to_string(&path).map_err(|_| AegisError::ChunkingReportReadFailed)?;
+        serde_json::from_str(&content).map_err(|_| AegisError::ChunkingReportReadFailed)
     }
 
     fn write_index(&self, index: &RetrievalIndex) -> AegisResult<()> {
@@ -523,6 +570,28 @@ mod tests {
         let source = CorpusAuthority::new(temp.path()).register_source(&source_path, valid_metadata()).unwrap();
         let result = RetrievalService::new(temp.path()).read_index(&source.source_id);
         assert!(matches!(result, Err(AegisError::RetrievalIndexMissing)));
+    }
+
+    #[test]
+    fn preview_search_does_not_build_index_on_missing_index() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source(&temp, "alpha beta\n");
+        let service = RetrievalService::new(temp.path());
+        let version_id = CorpusAuthority::new(temp.path()).get_source(&source_id).unwrap().version_id;
+        let index_path = temp
+            .path()
+            .join(".aegis")
+            .join("corpus")
+            .join("sources")
+            .join(&source_id)
+            .join("versions")
+            .join(&version_id)
+            .join("retrieval")
+            .join("index.json");
+        assert!(!index_path.exists());
+        let result = service.preview_search_source(&source_id, "alpha", 10);
+        assert!(matches!(result, Err(AegisError::RetrievalIndexMissing)));
+        assert!(!index_path.exists());
     }
 
     #[test]
