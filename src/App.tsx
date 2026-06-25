@@ -764,6 +764,66 @@ type LocalModelRuntimeConfig = {
   temperature: number | null;
 };
 
+type LocalRuntimeAdapterKind = "llama_cpp";
+
+type LocalRuntimeAdapterContractStatus =
+  | "blocked"
+  | "needs_review"
+  | "contract_ready_later";
+
+type LocalRuntimeAdapterContractBlocker = {
+  kind: string;
+  message: string;
+};
+
+type LocalRuntimeAdapterContractWarning = {
+  kind: string;
+  message: string;
+};
+
+type LocalRuntimeAdapterContractPreviewRequest = {
+  adapter_kind: LocalRuntimeAdapterKind;
+  executable_path: string | null;
+  model_path: string | null;
+  model_family: string | null;
+  model_format: string | null;
+  context_window_tokens: number | null;
+  gpu_layers: number | null;
+  threads: number | null;
+  batch_size: number | null;
+  chat_template: string | null;
+};
+
+type LocalRuntimeAdapterContractPreview = {
+  status: LocalRuntimeAdapterContractStatus;
+  adapter_kind: LocalRuntimeAdapterKind;
+  normalized_model_family: string | null;
+  normalized_model_format: string;
+  executable_path_present: boolean;
+  model_path_present: boolean;
+  context_window_tokens: number | null;
+  gpu_layers: number | null;
+  threads: number | null;
+  batch_size: number | null;
+  chat_template_present: boolean;
+  required_inputs: string[];
+  missing_inputs: string[];
+  contract_reasons: string[];
+  blockers: LocalRuntimeAdapterContractBlocker[];
+  warnings: LocalRuntimeAdapterContractWarning[];
+  next_required_actions: string[];
+  summary: string;
+  preview_only: boolean;
+  no_process_spawn: boolean;
+  no_model_load: boolean;
+  no_llm_call: boolean;
+  no_runtime_execution: boolean;
+  no_persistence: boolean;
+  no_artifact_write: boolean;
+  no_registry_status_change: boolean;
+  no_audit_write: boolean;
+};
+
 type LocalModelRuntimeHealthPreview = {
   status: LocalModelRuntimeHealthStatus;
   runtime_kind: LocalModelRuntimeKind;
@@ -1389,6 +1449,20 @@ export default function App() {
   const [localRuntimeContextWindow, setLocalRuntimeContextWindow] = createSignal("");
   const [localRuntimeGpuLayers, setLocalRuntimeGpuLayers] = createSignal("");
   const [localRuntimeTemperature, setLocalRuntimeTemperature] = createSignal("");
+  const [localRuntimeAdapterExecutablePath, setLocalRuntimeAdapterExecutablePath] = createSignal("");
+  const [localRuntimeAdapterModelPath, setLocalRuntimeAdapterModelPath] = createSignal("");
+  const [localRuntimeAdapterModelFamily, setLocalRuntimeAdapterModelFamily] = createSignal("");
+  const [localRuntimeAdapterModelFormat, setLocalRuntimeAdapterModelFormat] = createSignal("");
+  const [localRuntimeAdapterContextWindowTokens, setLocalRuntimeAdapterContextWindowTokens] = createSignal("");
+  const [localRuntimeAdapterGpuLayers, setLocalRuntimeAdapterGpuLayers] = createSignal("");
+  const [localRuntimeAdapterThreads, setLocalRuntimeAdapterThreads] = createSignal("");
+  const [localRuntimeAdapterBatchSize, setLocalRuntimeAdapterBatchSize] = createSignal("");
+  const [localRuntimeAdapterChatTemplate, setLocalRuntimeAdapterChatTemplate] = createSignal("");
+  const [localRuntimeAdapterPreview, setLocalRuntimeAdapterPreview] = createSignal<LocalRuntimeAdapterContractPreview | null>(null);
+  const [localRuntimeAdapterError, setLocalRuntimeAdapterError] = createSignal<string | null>(null);
+  const [localRuntimeAdapterValidationError, setLocalRuntimeAdapterValidationError] = createSignal<string | null>(null);
+  const [localRuntimeAdapterLoading, setLocalRuntimeAdapterLoading] = createSignal(false);
+  const [localRuntimeAdapterHasRun, setLocalRuntimeAdapterHasRun] = createSignal(false);
   const [localRuntimePreview, setLocalRuntimePreview] = createSignal<LocalModelRuntimeHealthPreview | null>(null);
   const [localRuntimeError, setLocalRuntimeError] = createSignal<string | null>(null);
   const [localRuntimeValidationError, setLocalRuntimeValidationError] = createSignal<string | null>(null);
@@ -1938,6 +2012,13 @@ export default function App() {
     setLocalRuntimeSmokeError(null);
     setLocalRuntimeSmokeValidationError(null);
     setLocalRuntimeSmokeHasRun(false);
+  }
+
+  function clearLocalRuntimeAdapterContractPreview() {
+    setLocalRuntimeAdapterPreview(null);
+    setLocalRuntimeAdapterError(null);
+    setLocalRuntimeAdapterValidationError(null);
+    setLocalRuntimeAdapterHasRun(false);
   }
 
   function clearScholarChatAnswerReadinessPreview() {
@@ -2915,6 +2996,82 @@ export default function App() {
       setLocalRuntimeInvocationError(sanitizeBackendError(err));
     } finally {
       setLocalRuntimeInvocationLoading(false);
+    }
+  }
+
+  function buildLocalRuntimeAdapterContractPreviewRequest(): LocalRuntimeAdapterContractPreviewRequest | null {
+    const contextWindowTokens = parseOptionalIntegerInput(
+      localRuntimeAdapterContextWindowTokens(),
+      "Context window tokens",
+      setLocalRuntimeAdapterValidationError,
+    );
+    const gpuLayers = parseOptionalIntegerInput(
+      localRuntimeAdapterGpuLayers(),
+      "GPU layers",
+      setLocalRuntimeAdapterValidationError,
+    );
+    const threads = parseOptionalIntegerInput(
+      localRuntimeAdapterThreads(),
+      "Threads",
+      setLocalRuntimeAdapterValidationError,
+    );
+    const batchSize = parseOptionalIntegerInput(
+      localRuntimeAdapterBatchSize(),
+      "Batch size",
+      setLocalRuntimeAdapterValidationError,
+    );
+
+    if (
+      contextWindowTokens === undefined ||
+      gpuLayers === undefined ||
+      threads === undefined ||
+      batchSize === undefined
+    ) {
+      return null;
+    }
+
+    return {
+      adapter_kind: "llama_cpp",
+      executable_path: normalizeOptionalTextInput(localRuntimeAdapterExecutablePath()),
+      model_path: normalizeOptionalTextInput(localRuntimeAdapterModelPath()),
+      model_family: normalizeOptionalTextInput(localRuntimeAdapterModelFamily()),
+      model_format: normalizeOptionalTextInput(localRuntimeAdapterModelFormat()),
+      context_window_tokens: contextWindowTokens,
+      gpu_layers: gpuLayers,
+      threads,
+      batch_size: batchSize,
+      chat_template: normalizeOptionalTextInput(localRuntimeAdapterChatTemplate()),
+    };
+  }
+
+  async function previewLocalRuntimeAdapterContract() {
+    if (localRuntimeAdapterLoading()) {
+      return;
+    }
+
+    const request = buildLocalRuntimeAdapterContractPreviewRequest();
+    if (!request) {
+      setLocalRuntimeAdapterHasRun(true);
+      setLocalRuntimeAdapterPreview(null);
+      setLocalRuntimeAdapterError(null);
+      return;
+    }
+
+    setLocalRuntimeAdapterHasRun(true);
+    setLocalRuntimeAdapterLoading(true);
+    setLocalRuntimeAdapterError(null);
+    setLocalRuntimeAdapterValidationError(null);
+    setLocalRuntimeAdapterPreview(null);
+    try {
+      const result = await invoke<LocalRuntimeAdapterContractPreview>("preview_llama_runtime_adapter_contract", {
+        root: ".",
+        request,
+      });
+      setLocalRuntimeAdapterPreview(result);
+    } catch (err) {
+      setLocalRuntimeAdapterError(sanitizeBackendError(err));
+    } finally {
+      setLocalRuntimeAdapterLoading(false);
     }
   }
 
@@ -5079,6 +5236,242 @@ export default function App() {
             )
           ) : (
             <p>No local model runtime preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>llama.cpp adapter contract</h3>
+          <p class="muted">
+            Adapter contract preview only - no process was started, no model was loaded, no runtime execution or LLM call occurred, and no settings or artifacts were persisted.
+          </p>
+          <p class="muted">Previews a future llama.cpp / GGUF adapter contract only. Gemma and other families remain preview metadata, not bundled models.</p>
+          <div class="form-row">
+            <label>
+              Executable path
+              <input
+                type="text"
+                value={localRuntimeAdapterExecutablePath()}
+                onInput={(event) => {
+                  setLocalRuntimeAdapterExecutablePath(event.currentTarget.value);
+                  clearLocalRuntimeAdapterContractPreview();
+                }}
+                placeholder="E:\\bin\\llama-server.exe"
+              />
+            </label>
+            <label>
+              Model path
+              <input
+                type="text"
+                value={localRuntimeAdapterModelPath()}
+                onInput={(event) => {
+                  setLocalRuntimeAdapterModelPath(event.currentTarget.value);
+                  clearLocalRuntimeAdapterContractPreview();
+                }}
+                placeholder="E:\\models\\scholar.gguf"
+              />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>
+              Model family
+              <input
+                type="text"
+                value={localRuntimeAdapterModelFamily()}
+                onInput={(event) => {
+                  setLocalRuntimeAdapterModelFamily(event.currentTarget.value);
+                  clearLocalRuntimeAdapterContractPreview();
+                }}
+                placeholder="gemma"
+              />
+            </label>
+            <label>
+              Model format
+              <input
+                type="text"
+                value={localRuntimeAdapterModelFormat()}
+                onInput={(event) => {
+                  setLocalRuntimeAdapterModelFormat(event.currentTarget.value);
+                  clearLocalRuntimeAdapterContractPreview();
+                }}
+                placeholder="gguf"
+              />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>
+              Context window tokens
+              <input
+                type="number"
+                value={localRuntimeAdapterContextWindowTokens()}
+                onInput={(event) => {
+                  setLocalRuntimeAdapterContextWindowTokens(event.currentTarget.value);
+                  clearLocalRuntimeAdapterContractPreview();
+                }}
+                placeholder="8192"
+              />
+            </label>
+            <label>
+              GPU layers
+              <input
+                type="number"
+                value={localRuntimeAdapterGpuLayers()}
+                onInput={(event) => {
+                  setLocalRuntimeAdapterGpuLayers(event.currentTarget.value);
+                  clearLocalRuntimeAdapterContractPreview();
+                }}
+                placeholder="0"
+              />
+            </label>
+            <label>
+              Threads
+              <input
+                type="number"
+                value={localRuntimeAdapterThreads()}
+                onInput={(event) => {
+                  setLocalRuntimeAdapterThreads(event.currentTarget.value);
+                  clearLocalRuntimeAdapterContractPreview();
+                }}
+                placeholder="8"
+              />
+            </label>
+            <label>
+              Batch size
+              <input
+                type="number"
+                value={localRuntimeAdapterBatchSize()}
+                onInput={(event) => {
+                  setLocalRuntimeAdapterBatchSize(event.currentTarget.value);
+                  clearLocalRuntimeAdapterContractPreview();
+                }}
+                placeholder="256"
+              />
+            </label>
+          </div>
+          <label>
+            Chat template
+            <textarea
+              value={localRuntimeAdapterChatTemplate()}
+              onInput={(event) => {
+                setLocalRuntimeAdapterChatTemplate(event.currentTarget.value);
+                clearLocalRuntimeAdapterContractPreview();
+              }}
+              rows={3}
+              placeholder="<start_of_turn>user ...</start_of_turn>"
+            />
+          </label>
+          <div class="hero-actions">
+            <button onClick={previewLocalRuntimeAdapterContract} disabled={localRuntimeAdapterLoading()}>
+              {localRuntimeAdapterLoading() ? "Previewing..." : "Preview llama.cpp adapter contract"}
+            </button>
+          </div>
+          <p class="muted">No process is executed. No model is loaded. No settings or artifacts are persisted.</p>
+          {localRuntimeAdapterValidationError() && <p class="error">{localRuntimeAdapterValidationError()}</p>}
+          {localRuntimeAdapterError() && <p class="error">{localRuntimeAdapterError()}</p>}
+          {localRuntimeAdapterLoading() ? (
+            <p>Previewing llama.cpp adapter contract...</p>
+          ) : localRuntimeAdapterHasRun() ? (
+            localRuntimeAdapterPreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(localRuntimeAdapterPreview()!.status) },
+                  { label: "Adapter kind", value: formatSnakeCaseLabel(localRuntimeAdapterPreview()!.adapter_kind) },
+                  { label: "Normalized model family", value: localRuntimeAdapterPreview()!.normalized_model_family ?? "missing" },
+                  { label: "Normalized model format", value: localRuntimeAdapterPreview()!.normalized_model_format },
+                  { label: "Executable path present", value: localRuntimeAdapterPreview()!.executable_path_present ? "yes" : "no" },
+                  { label: "Model path present", value: localRuntimeAdapterPreview()!.model_path_present ? "yes" : "no" },
+                  { label: "Context window tokens", value: localRuntimeAdapterPreview()!.context_window_tokens ?? "missing" },
+                  { label: "GPU layers", value: localRuntimeAdapterPreview()!.gpu_layers ?? "missing" },
+                  { label: "Threads", value: localRuntimeAdapterPreview()!.threads ?? "missing" },
+                  { label: "Batch size", value: localRuntimeAdapterPreview()!.batch_size ?? "missing" },
+                  { label: "Chat template present", value: localRuntimeAdapterPreview()!.chat_template_present ? "yes" : "no" },
+                ])}
+                {localRuntimeAdapterPreview()!.summary && <p><strong>Summary:</strong> {localRuntimeAdapterPreview()!.summary}</p>}
+                <div class="contract-meta">
+                  <div><span>Preview only</span><strong>{localRuntimeAdapterPreview()!.preview_only ? "yes" : "no"}</strong></div>
+                  <div><span>No process spawn</span><strong>{localRuntimeAdapterPreview()!.no_process_spawn ? "yes" : "no"}</strong></div>
+                  <div><span>No model load</span><strong>{localRuntimeAdapterPreview()!.no_model_load ? "yes" : "no"}</strong></div>
+                  <div><span>No runtime execution</span><strong>{localRuntimeAdapterPreview()!.no_runtime_execution ? "yes" : "no"}</strong></div>
+                  <div><span>No LLM call</span><strong>{localRuntimeAdapterPreview()!.no_llm_call ? "yes" : "no"}</strong></div>
+                  <div><span>No persistence</span><strong>{localRuntimeAdapterPreview()!.no_persistence ? "yes" : "no"}</strong></div>
+                  <div><span>No artifact write</span><strong>{localRuntimeAdapterPreview()!.no_artifact_write ? "yes" : "no"}</strong></div>
+                  <div><span>No registry status change</span><strong>{localRuntimeAdapterPreview()!.no_registry_status_change ? "yes" : "no"}</strong></div>
+                  <div><span>No audit write</span><strong>{localRuntimeAdapterPreview()!.no_audit_write ? "yes" : "no"}</strong></div>
+                </div>
+                <h4>Required inputs</h4>
+                {localRuntimeAdapterPreview()!.required_inputs.length > 0 ? (
+                  <ul>
+                    {localRuntimeAdapterPreview()!.required_inputs.map((item) => (
+                      <li>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No required inputs.</p>
+                )}
+                <h4>Missing inputs</h4>
+                {localRuntimeAdapterPreview()!.missing_inputs.length > 0 ? (
+                  <ul>
+                    {localRuntimeAdapterPreview()!.missing_inputs.map((item) => (
+                      <li>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No missing inputs.</p>
+                )}
+                <h4>Contract reasons</h4>
+                {localRuntimeAdapterPreview()!.contract_reasons.length > 0 ? (
+                  <ul>
+                    {localRuntimeAdapterPreview()!.contract_reasons.map((item) => (
+                      <li>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No contract reasons.</p>
+                )}
+                {localRuntimeAdapterPreview()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {localRuntimeAdapterPreview()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No adapter blockers.</p>
+                )}
+                {localRuntimeAdapterPreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {localRuntimeAdapterPreview()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No adapter warnings.</p>
+                )}
+                <h4>Next required actions</h4>
+                {localRuntimeAdapterPreview()!.next_required_actions.length > 0 ? (
+                  <ul>
+                    {localRuntimeAdapterPreview()!.next_required_actions.map((item) => (
+                      <li>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No next required actions.</p>
+                )}
+              </>
+            ) : (
+              <p>No llama.cpp adapter contract preview loaded yet.</p>
+            )
+          ) : (
+            <p>No llama.cpp adapter contract preview loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">
