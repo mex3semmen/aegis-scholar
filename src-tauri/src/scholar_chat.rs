@@ -521,6 +521,44 @@ pub struct ScholarChatGroundedAnswerCandidatePreview {
     pub next_required_actions: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatGroundedAnswerWriteEligibilityStatus {
+    Blocked,
+    NeedsReview,
+    WriteEligibleLater,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatGroundedAnswerWriteEligibilityPreview {
+    pub status: ScholarChatGroundedAnswerWriteEligibilityStatus,
+    pub candidate_status: ScholarChatGroundedAnswerCandidateStatus,
+    pub normalized_prompt: String,
+    pub selected_source_count: usize,
+    pub evidence_candidate_count: usize,
+    pub inspected_item_count: usize,
+    pub supported_item_count: usize,
+    pub weakly_supported_item_count: usize,
+    pub unsupported_item_count: usize,
+    pub candidate_statement_count: usize,
+    pub eligibility_reasons: Vec<String>,
+    pub blockers: Vec<ScholarChatDraftGroundingInspectionBlocker>,
+    pub warnings: Vec<ScholarChatDraftGroundingInspectionWarning>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub not_answer_draft: bool,
+    pub not_grounded_answer: bool,
+    pub not_final_answer: bool,
+    pub no_answer_artifact_created: bool,
+    pub no_evidence_pack_built: bool,
+    pub no_persistence: bool,
+    pub no_llm_call: bool,
+    pub no_runtime_execution: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
 enum ScholarChatPreviewKind {
     Request,
     Retrieval,
@@ -1504,6 +1542,15 @@ pub fn preview_scholar_chat_grounded_answer_candidate(
     })
 }
 
+pub fn preview_scholar_chat_grounded_answer_write_eligibility(
+    root: impl Into<PathBuf>,
+    request: ScholarChatDraftGroundingInspectionRequest,
+) -> AegisResult<ScholarChatGroundedAnswerWriteEligibilityPreview> {
+    let root = root.into();
+    let candidate_preview = preview_scholar_chat_grounded_answer_candidate(&root, request)?;
+    Ok(grounded_answer_write_eligibility_preview_from_candidate_preview(candidate_preview))
+}
+
 const SCHOLAR_CHAT_DRAFT_GROUNDING_INSPECTION_LIMIT: usize = 8;
 
 struct DraftGroundingInspectionItems {
@@ -1818,6 +1865,204 @@ fn grounded_answer_candidate_items_from_inspection(
             matched_evidence_count: item.matched_evidence_count,
         })
         .collect()
+}
+
+fn grounded_answer_write_eligibility_status(
+    candidate_preview: &ScholarChatGroundedAnswerCandidatePreview,
+) -> ScholarChatGroundedAnswerWriteEligibilityStatus {
+    match candidate_preview.status {
+        ScholarChatGroundedAnswerCandidateStatus::Blocked => {
+            ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked
+        }
+        ScholarChatGroundedAnswerCandidateStatus::NeedsReview => {
+            ScholarChatGroundedAnswerWriteEligibilityStatus::NeedsReview
+        }
+        ScholarChatGroundedAnswerCandidateStatus::CandidateReadyLater => {
+            if candidate_preview.candidate_statement_count > 0 {
+                ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater
+            } else {
+                ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked
+            }
+        }
+    }
+}
+
+fn grounded_answer_write_eligibility_summary(
+    status: &ScholarChatGroundedAnswerWriteEligibilityStatus,
+    candidate_preview: &ScholarChatGroundedAnswerCandidatePreview,
+) -> String {
+    match status {
+        ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked => {
+            match candidate_preview.status {
+                ScholarChatGroundedAnswerCandidateStatus::Blocked => {
+                    "Grounded-answer write eligibility is blocked because grounded-answer candidate preview is blocked.".to_string()
+                }
+                ScholarChatGroundedAnswerCandidateStatus::NeedsReview => {
+                    "Grounded-answer write eligibility is blocked because grounded-answer candidate preview still needs review.".to_string()
+                }
+                ScholarChatGroundedAnswerCandidateStatus::CandidateReadyLater => {
+                    if candidate_preview.candidate_statement_count == 0 {
+                        "Grounded-answer write eligibility is blocked because no candidate statements were available.".to_string()
+                    } else {
+                        "Grounded-answer write eligibility is blocked until the candidate preview is available.".to_string()
+                    }
+                }
+            }
+        }
+        ScholarChatGroundedAnswerWriteEligibilityStatus::NeedsReview => {
+            "The draft is not yet ready for a grounded-answer write because weakly supported or unsupported items remain.".to_string()
+        }
+        ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater => {
+            "All inspected items were supported by local evidence. A future GroundedAnswer write can be added later.".to_string()
+        }
+    }
+}
+
+fn grounded_answer_write_eligibility_reasons(
+    status: &ScholarChatGroundedAnswerWriteEligibilityStatus,
+    candidate_preview: &ScholarChatGroundedAnswerCandidatePreview,
+) -> Vec<String> {
+    let mut reasons = vec![
+        format!("Candidate status: {:?}", candidate_preview.status),
+        format!("Candidate statements: {}", candidate_preview.candidate_statement_count),
+    ];
+    match status {
+        ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked => match candidate_preview.status {
+            ScholarChatGroundedAnswerCandidateStatus::Blocked => {
+                reasons.push("Grounded-answer candidate preview is blocked.".to_string());
+            }
+            ScholarChatGroundedAnswerCandidateStatus::NeedsReview => {
+                reasons.push("Grounded-answer candidate preview still needs review.".to_string());
+            }
+            ScholarChatGroundedAnswerCandidateStatus::CandidateReadyLater => {
+                if candidate_preview.candidate_statement_count == 0 {
+                    reasons.push("No candidate statements were available.".to_string());
+                } else {
+                    reasons.push("Grounded-answer write eligibility is still blocked.".to_string());
+                }
+            }
+        },
+        ScholarChatGroundedAnswerWriteEligibilityStatus::NeedsReview => {
+            reasons.push("Weakly supported or unsupported draft items remain.".to_string());
+        }
+        ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater => {
+            reasons.push("All inspected items were supported by local evidence.".to_string());
+            reasons.push(
+                "A future GroundedAnswer write can be added later after an explicit implementation phase."
+                    .to_string(),
+            );
+        }
+    }
+    reasons
+}
+
+fn grounded_answer_write_eligibility_next_required_actions(
+    status: &ScholarChatGroundedAnswerWriteEligibilityStatus,
+    candidate_preview: &ScholarChatGroundedAnswerCandidatePreview,
+) -> Vec<String> {
+    let mut next_required_actions = candidate_preview.next_required_actions.clone();
+    match status {
+        ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Resolve grounded-answer candidate blockers before any GroundedAnswer write implementation.",
+            );
+        }
+        ScholarChatGroundedAnswerWriteEligibilityStatus::NeedsReview => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Review weakly supported and unsupported draft items before any GroundedAnswer write implementation.",
+            );
+        }
+        ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater => {
+            push_unique_text(
+                &mut next_required_actions,
+                "A GroundedAnswer write implementation can be added later without changing this preview.",
+            );
+        }
+    }
+    next_required_actions
+}
+
+fn grounded_answer_write_eligibility_preview_from_candidate_preview(
+    candidate_preview: ScholarChatGroundedAnswerCandidatePreview,
+) -> ScholarChatGroundedAnswerWriteEligibilityPreview {
+    let status = grounded_answer_write_eligibility_status(&candidate_preview);
+    let mut blockers = candidate_preview.blockers.clone();
+    let mut warnings = candidate_preview.warnings.clone();
+
+    push_grounding_inspection_warning(
+        &mut warnings,
+        "boundary",
+        "This is a grounded-answer write-eligibility preview only; it is not an AnswerDraft, GroundedAnswer, FinalAnswer, Evidence Pack, or persisted artifact.",
+    );
+
+    match status {
+        ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked => {
+            if blockers.is_empty() {
+                push_grounding_inspection_blocker(
+                    &mut blockers,
+                    "write_eligibility_blocked",
+                    "Grounded-answer write eligibility is blocked until grounded-answer candidate preview is available.",
+                );
+            }
+            if candidate_preview.candidate_statement_count == 0 {
+                push_grounding_inspection_blocker(
+                    &mut blockers,
+                    "candidate_statements_missing",
+                    "No candidate statements were available for write eligibility.",
+                );
+            }
+        }
+        ScholarChatGroundedAnswerWriteEligibilityStatus::NeedsReview => {
+            push_grounding_inspection_warning(
+                &mut warnings,
+                "needs_review",
+                "Weakly supported or unsupported draft items remain and need review before a future GroundedAnswer write is added.",
+            );
+        }
+        ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater => {
+            push_grounding_inspection_warning(
+                &mut warnings,
+                "write_eligible_later",
+                "All inspected items were supported by local evidence. This is still only a write-eligibility preview.",
+            );
+        }
+    }
+
+    let summary = grounded_answer_write_eligibility_summary(&status, &candidate_preview);
+    let eligibility_reasons = grounded_answer_write_eligibility_reasons(&status, &candidate_preview);
+    let next_required_actions =
+        grounded_answer_write_eligibility_next_required_actions(&status, &candidate_preview);
+
+    ScholarChatGroundedAnswerWriteEligibilityPreview {
+        status,
+        candidate_status: candidate_preview.status,
+        normalized_prompt: candidate_preview.normalized_prompt,
+        selected_source_count: candidate_preview.selected_source_count,
+        evidence_candidate_count: candidate_preview.evidence_candidate_count,
+        inspected_item_count: candidate_preview.inspected_item_count,
+        supported_item_count: candidate_preview.supported_item_count,
+        weakly_supported_item_count: candidate_preview.weakly_supported_item_count,
+        unsupported_item_count: candidate_preview.unsupported_item_count,
+        candidate_statement_count: candidate_preview.candidate_statement_count,
+        eligibility_reasons,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        not_answer_draft: true,
+        not_grounded_answer: true,
+        not_final_answer: true,
+        no_answer_artifact_created: true,
+        no_evidence_pack_built: true,
+        no_persistence: true,
+        no_llm_call: true,
+        no_runtime_execution: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+    }
 }
 
 fn normalize_optional_draft_text(draft_text: Option<String>) -> Option<String> {
@@ -2571,6 +2816,23 @@ mod tests {
         }
     }
 
+    fn grounding_request(
+        prompt: &str,
+        draft_text: Option<&str>,
+        selected_source_ids: Vec<String>,
+    ) -> ScholarChatDraftGroundingInspectionRequest {
+        ScholarChatDraftGroundingInspectionRequest {
+            scholar_chat_request: ScholarChatRequest {
+                prompt: prompt.to_string(),
+                mode: ScholarChatMode::LectureLearning,
+                grounding_policy: GroundingPolicy::LocalFirst,
+                selected_source_ids,
+            },
+            draft_text: draft_text.map(|value| value.to_string()),
+            max_items: Some(4),
+        }
+    }
+
     #[test]
     fn scholar_chat_preview_rejects_empty_prompt() {
         let temp = tempfile::tempdir().unwrap();
@@ -2918,6 +3180,22 @@ fn main() {
         assert!(preview.no_runtime_execution);
     }
 
+    fn assert_grounded_answer_write_eligibility_boundary_fields(
+        preview: &ScholarChatGroundedAnswerWriteEligibilityPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.not_answer_draft);
+        assert!(preview.not_grounded_answer);
+        assert!(preview.not_final_answer);
+        assert!(preview.no_answer_artifact_created);
+        assert!(preview.no_evidence_pack_built);
+        assert!(preview.no_persistence);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_runtime_execution);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
     fn assert_grounded_answer_build_plan_deterministic_and_path_free(
         temp: &tempfile::TempDir,
         request: ScholarChatDraftGroundingInspectionRequest,
@@ -2956,6 +3234,27 @@ fn main() {
             assert!(!debug.contains(temp_path.as_ref()));
             assert!(!json.contains(temp_path.as_ref()));
             assert_grounded_answer_candidate_boundary_fields(preview);
+        }
+        first
+    }
+
+    fn assert_grounded_answer_write_eligibility_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatDraftGroundingInspectionRequest,
+    ) -> ScholarChatGroundedAnswerWriteEligibilityPreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let first = preview_scholar_chat_grounded_answer_write_eligibility(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_grounded_answer_write_eligibility(temp.path(), request).unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_grounded_answer_write_eligibility_boundary_fields(preview);
         }
         first
     }
@@ -4618,5 +4917,211 @@ fn main() {
             assert_eq!(candidate_item.source_ids, inspection_item.source_ids);
             assert_eq!(candidate_item.locator_previews, inspection_item.locator_previews);
         }
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_write_eligibility_rejects_empty_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_grounded_answer_write_eligibility(
+            temp.path(),
+            grounding_request("   ", Some("Alpha beta."), vec![]),
+        );
+        assert!(matches!(result, Err(AegisError::ScholarChatPromptEmpty)));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_write_eligibility_blocks_without_selected_sources() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_grounded_answer_write_eligibility_deterministic_and_path_free(
+            &temp,
+            grounding_request("alpha grounded evidence", Some("Alpha beta."), vec![]),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::Blocked);
+        assert_eq!(result.candidate_statement_count, 0);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "needs_sources"));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("Select Scholar Chat source context")));
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_write_eligibility_rejects_invalid_source_ids_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["", " ", "..", "../evil", "evil/source", "evil\\source"] {
+            let result = preview_scholar_chat_grounded_answer_write_eligibility(
+                temp.path(),
+                grounding_request("alpha grounded evidence", Some("Alpha beta."), vec![invalid.to_string()]),
+            );
+            assert!(matches!(result, Err(AegisError::ScholarChatInvalidSourceId)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_write_eligibility_blocks_without_draft_text() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = assert_grounded_answer_write_eligibility_deterministic_and_path_free(
+            &temp,
+            grounding_request("alpha grounded evidence", Some("   "), vec![source_id]),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::Blocked);
+        assert_eq!(result.candidate_statement_count, 0);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "draft_text_missing"));
+        assert!(result.summary.contains("blocked"));
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_write_eligibility_blocks_without_evidence_candidates() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("note-no-index.md");
+        fs::write(&source_path, "alpha beta\n").unwrap();
+        let authority = crate::corpus_authority::CorpusAuthority::new(temp.path());
+        let source = authority
+            .register_source(
+                &source_path,
+                crate::source_metadata::SourceMetadataInput {
+                    title: "Notes".to_string(),
+                    source_type: crate::source_metadata::SourceType::MarkdownNote,
+                    discipline: "psychology".to_string(),
+                    subdiscipline: Some("statistics".to_string()),
+                    language: "en".to_string(),
+                    tags: vec!["study".to_string()],
+                    reliability_notes: None,
+                },
+            )
+            .unwrap();
+        crate::extraction::ExtractionService::new(temp.path())
+            .extract_source(&source.source_id)
+            .unwrap();
+        crate::chunking::ChunkingService::new(temp.path())
+            .chunk_source(&source.source_id)
+            .unwrap();
+
+        let result = assert_grounded_answer_write_eligibility_deterministic_and_path_free(
+            &temp,
+            grounding_request(
+                "alpha grounded evidence",
+                Some("Alpha beta."),
+                vec![source.source_id.clone()],
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::Blocked);
+        assert_eq!(result.candidate_statement_count, 0);
+        assert_eq!(result.evidence_candidate_count, 0);
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "needs_evidence_candidates"));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("Add local evidence candidates")));
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_write_eligibility_needs_review_when_candidate_needs_review() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = assert_grounded_answer_write_eligibility_deterministic_and_path_free(
+            &temp,
+            grounding_request(
+                "alpha grounded evidence",
+                Some("The alpha."),
+                vec![source_id],
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerWriteEligibilityStatus::NeedsReview);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::NeedsReview);
+        assert_eq!(result.candidate_statement_count, 0);
+        assert_eq!(result.supported_item_count, 0);
+        assert_eq!(result.weakly_supported_item_count, 1);
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.kind == "needs_review"));
+        assert!(result
+            .eligibility_reasons
+            .iter()
+            .any(|reason| reason.contains("Weakly supported or unsupported")));
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_write_eligibility_is_ready_only_when_candidate_ready_later_and_statements_exist() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let request = grounding_request(
+            "alpha grounded evidence",
+            Some("Alpha beta. Alpha beta gamma."),
+            vec![source_id.clone()],
+        );
+        let candidate_preview = assert_grounded_answer_candidate_deterministic_and_path_free(&temp, request.clone());
+        let write_eligibility_preview = assert_grounded_answer_write_eligibility_deterministic_and_path_free(&temp, request);
+        assert_eq!(candidate_preview.status, ScholarChatGroundedAnswerCandidateStatus::CandidateReadyLater);
+        assert_eq!(write_eligibility_preview.status, ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater);
+        assert_eq!(write_eligibility_preview.candidate_status, ScholarChatGroundedAnswerCandidateStatus::CandidateReadyLater);
+        assert!(write_eligibility_preview.candidate_statement_count > 0);
+        assert_eq!(write_eligibility_preview.candidate_statement_count, candidate_preview.candidate_statement_count);
+        assert_eq!(write_eligibility_preview.selected_source_count, candidate_preview.selected_source_count);
+        assert_eq!(write_eligibility_preview.evidence_candidate_count, candidate_preview.evidence_candidate_count);
+        assert_eq!(write_eligibility_preview.inspected_item_count, candidate_preview.inspected_item_count);
+        assert_eq!(write_eligibility_preview.supported_item_count, candidate_preview.supported_item_count);
+        assert_eq!(write_eligibility_preview.weakly_supported_item_count, candidate_preview.weakly_supported_item_count);
+        assert_eq!(write_eligibility_preview.unsupported_item_count, candidate_preview.unsupported_item_count);
+        assert!(write_eligibility_preview
+            .eligibility_reasons
+            .iter()
+            .any(|reason| reason.contains("All inspected items were supported by local evidence")));
+        assert!(write_eligibility_preview
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("A GroundedAnswer write implementation can be added later")));
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_write_eligibility_rejects_zero_candidate_statements_even_when_candidate_status_is_ready_later() {
+        let candidate_preview = ScholarChatGroundedAnswerCandidatePreview {
+            status: ScholarChatGroundedAnswerCandidateStatus::CandidateReadyLater,
+            normalized_prompt: "alpha grounded evidence".to_string(),
+            selected_source_count: 1,
+            evidence_candidate_count: 1,
+            inspected_item_count: 1,
+            supported_item_count: 1,
+            weakly_supported_item_count: 0,
+            unsupported_item_count: 0,
+            candidate_statement_count: 0,
+            summary: "candidate preview".to_string(),
+            candidate_items: Vec::new(),
+            preview_only: true,
+            not_answer_draft: true,
+            not_grounded_answer: true,
+            not_final_answer: true,
+            no_answer_artifact_created: true,
+            no_evidence_pack_built: true,
+            no_persistence: true,
+            no_llm_call: true,
+            no_runtime_execution: true,
+            blockers: Vec::new(),
+            warnings: Vec::new(),
+            next_required_actions: Vec::new(),
+        };
+        let preview = grounded_answer_write_eligibility_preview_from_candidate_preview(candidate_preview);
+        assert_eq!(preview.status, ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked);
+        assert_eq!(preview.candidate_status, ScholarChatGroundedAnswerCandidateStatus::CandidateReadyLater);
+        assert_eq!(preview.candidate_statement_count, 0);
+        assert!(preview
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "candidate_statements_missing"));
+        assert!(preview
+            .eligibility_reasons
+            .iter()
+            .any(|reason| reason.contains("No candidate statements were available")));
+        assert_grounded_answer_write_eligibility_boundary_fields(&preview);
     }
 }

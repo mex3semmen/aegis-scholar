@@ -456,6 +456,40 @@ type ScholarChatGroundedAnswerCandidatePreview = {
   next_required_actions: string[];
 };
 
+type ScholarChatGroundedAnswerWriteEligibilityStatus =
+  | "blocked"
+  | "needs_review"
+  | "write_eligible_later";
+
+type ScholarChatGroundedAnswerWriteEligibilityPreview = {
+  status: ScholarChatGroundedAnswerWriteEligibilityStatus;
+  candidate_status: ScholarChatGroundedAnswerCandidateStatus;
+  normalized_prompt: string;
+  selected_source_count: number;
+  evidence_candidate_count: number;
+  inspected_item_count: number;
+  supported_item_count: number;
+  weakly_supported_item_count: number;
+  unsupported_item_count: number;
+  candidate_statement_count: number;
+  eligibility_reasons: string[];
+  blockers: ScholarChatDraftGroundingInspectionBlocker[];
+  warnings: ScholarChatDraftGroundingInspectionWarning[];
+  next_required_actions: string[];
+  summary: string;
+  preview_only: boolean;
+  not_answer_draft: boolean;
+  not_grounded_answer: boolean;
+  not_final_answer: boolean;
+  no_answer_artifact_created: boolean;
+  no_evidence_pack_built: boolean;
+  no_persistence: boolean;
+  no_llm_call: boolean;
+  no_runtime_execution: boolean;
+  no_registry_status_change: boolean;
+  no_audit_write: boolean;
+};
+
 type LocalModelRuntimeKind = "llama_cpp" | "none";
 
 type LocalModelRuntimeHealthStatus =
@@ -1067,6 +1101,11 @@ export default function App() {
   const [scholarChatGroundedAnswerCandidateValidationError, setScholarChatGroundedAnswerCandidateValidationError] = createSignal<string | null>(null);
   const [scholarChatGroundedAnswerCandidateLoading, setScholarChatGroundedAnswerCandidateLoading] = createSignal(false);
   const [scholarChatGroundedAnswerCandidateHasRun, setScholarChatGroundedAnswerCandidateHasRun] = createSignal(false);
+  const [scholarChatGroundedAnswerWriteEligibilityPreview, setScholarChatGroundedAnswerWriteEligibilityPreview] = createSignal<ScholarChatGroundedAnswerWriteEligibilityPreview | null>(null);
+  const [scholarChatGroundedAnswerWriteEligibilityError, setScholarChatGroundedAnswerWriteEligibilityError] = createSignal<string | null>(null);
+  const [scholarChatGroundedAnswerWriteEligibilityValidationError, setScholarChatGroundedAnswerWriteEligibilityValidationError] = createSignal<string | null>(null);
+  const [scholarChatGroundedAnswerWriteEligibilityLoading, setScholarChatGroundedAnswerWriteEligibilityLoading] = createSignal(false);
+  const [scholarChatGroundedAnswerWriteEligibilityHasRun, setScholarChatGroundedAnswerWriteEligibilityHasRun] = createSignal(false);
   const [localRuntimeKind, setLocalRuntimeKind] = createSignal<LocalModelRuntimeKind>("none");
   const [localRuntimeModelPath, setLocalRuntimeModelPath] = createSignal("");
   const [localRuntimeExecutablePath, setLocalRuntimeExecutablePath] = createSignal("");
@@ -1655,6 +1694,10 @@ export default function App() {
     setScholarChatGroundedAnswerCandidateError(null);
     setScholarChatGroundedAnswerCandidateValidationError(null);
     setScholarChatGroundedAnswerCandidateHasRun(false);
+    setScholarChatGroundedAnswerWriteEligibilityPreview(null);
+    setScholarChatGroundedAnswerWriteEligibilityError(null);
+    setScholarChatGroundedAnswerWriteEligibilityValidationError(null);
+    setScholarChatGroundedAnswerWriteEligibilityHasRun(false);
   }
 
   function normalizeOptionalTextInput(value: string) {
@@ -2212,6 +2255,36 @@ export default function App() {
       setScholarChatGroundedAnswerCandidateError(sanitizeBackendError(err));
     } finally {
       setScholarChatGroundedAnswerCandidateLoading(false);
+    }
+  }
+
+  async function previewScholarChatGroundedAnswerWriteEligibility() {
+    const trimmedPrompt = scholarChatPrompt().trim();
+    if (!trimmedPrompt) {
+      setScholarChatGroundedAnswerWriteEligibilityPreview(null);
+      setScholarChatGroundedAnswerWriteEligibilityError(null);
+      setScholarChatGroundedAnswerWriteEligibilityValidationError("Prompt is required to preview grounded answer write eligibility.");
+      return;
+    }
+    if (scholarChatGroundedAnswerWriteEligibilityLoading()) {
+      return;
+    }
+
+    setScholarChatGroundedAnswerWriteEligibilityHasRun(true);
+    setScholarChatGroundedAnswerWriteEligibilityLoading(true);
+    setScholarChatGroundedAnswerWriteEligibilityError(null);
+    setScholarChatGroundedAnswerWriteEligibilityValidationError(null);
+    setScholarChatGroundedAnswerWriteEligibilityPreview(null);
+    try {
+      const result = await invoke<ScholarChatGroundedAnswerWriteEligibilityPreview>("preview_scholar_chat_grounded_answer_write_eligibility", {
+        root: ".",
+        request: buildScholarChatDraftGroundingInspectionRequest(trimmedPrompt),
+      });
+      setScholarChatGroundedAnswerWriteEligibilityPreview(result);
+    } catch (err) {
+      setScholarChatGroundedAnswerWriteEligibilityError(sanitizeBackendError(err));
+    } finally {
+      setScholarChatGroundedAnswerWriteEligibilityLoading(false);
     }
   }
 
@@ -3478,6 +3551,113 @@ export default function App() {
             )
           ) : (
             <p>No grounded answer candidate preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Grounded answer write eligibility</h3>
+          <p class="muted">
+            Eligibility only - no GroundedAnswer was written. No Evidence Pack, final answer, persistence, registry status change, audit write, runtime execution, or LLM call occurred.
+          </p>
+          <p class="muted">{scholarChatSelectedSourceIdsSummary()}</p>
+          <p class="muted">Uses the current Scholar Chat request and the draft text from the inspection card above.</p>
+          <div class="hero-actions">
+            <button onClick={previewScholarChatGroundedAnswerWriteEligibility} disabled={scholarChatGroundedAnswerWriteEligibilityLoading()}>
+              {scholarChatGroundedAnswerWriteEligibilityLoading() ? "Previewing..." : "Preview grounded answer write eligibility"}
+            </button>
+          </div>
+          {scholarChatGroundedAnswerWriteEligibilityValidationError() && <p class="error">{scholarChatGroundedAnswerWriteEligibilityValidationError()}</p>}
+          {scholarChatGroundedAnswerWriteEligibilityError() && <p class="error">{scholarChatGroundedAnswerWriteEligibilityError()}</p>}
+          {scholarChatGroundedAnswerWriteEligibilityLoading() ? (
+            <p>Previewing grounded answer write eligibility...</p>
+          ) : scholarChatGroundedAnswerWriteEligibilityHasRun() ? (
+            scholarChatGroundedAnswerWriteEligibilityPreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(scholarChatGroundedAnswerWriteEligibilityPreview()!.status) },
+                  { label: "Candidate status", value: formatSnakeCaseLabel(scholarChatGroundedAnswerWriteEligibilityPreview()!.candidate_status) },
+                  { label: "Selected sources", value: scholarChatGroundedAnswerWriteEligibilityPreview()!.selected_source_count },
+                  { label: "Evidence candidates", value: scholarChatGroundedAnswerWriteEligibilityPreview()!.evidence_candidate_count },
+                  { label: "Inspected items", value: scholarChatGroundedAnswerWriteEligibilityPreview()!.inspected_item_count },
+                  { label: "Supported items", value: scholarChatGroundedAnswerWriteEligibilityPreview()!.supported_item_count },
+                  { label: "Weakly supported items", value: scholarChatGroundedAnswerWriteEligibilityPreview()!.weakly_supported_item_count },
+                  { label: "Unsupported items", value: scholarChatGroundedAnswerWriteEligibilityPreview()!.unsupported_item_count },
+                  { label: "Candidate statements", value: scholarChatGroundedAnswerWriteEligibilityPreview()!.candidate_statement_count },
+                ])}
+                <p><strong>Prompt:</strong> {scholarChatGroundedAnswerWriteEligibilityPreview()!.normalized_prompt}</p>
+                <p>{scholarChatGroundedAnswerWriteEligibilityPreview()!.summary}</p>
+                <div class="contract-meta">
+                  <div><span>Preview only</span><strong>{scholarChatGroundedAnswerWriteEligibilityPreview()!.preview_only ? "yes" : "no"}</strong></div>
+                  <div><span>Not answer draft</span><strong>{scholarChatGroundedAnswerWriteEligibilityPreview()!.not_answer_draft ? "yes" : "no"}</strong></div>
+                  <div><span>Not grounded answer</span><strong>{scholarChatGroundedAnswerWriteEligibilityPreview()!.not_grounded_answer ? "yes" : "no"}</strong></div>
+                  <div><span>Not final answer</span><strong>{scholarChatGroundedAnswerWriteEligibilityPreview()!.not_final_answer ? "yes" : "no"}</strong></div>
+                  <div><span>No answer artifact created</span><strong>{scholarChatGroundedAnswerWriteEligibilityPreview()!.no_answer_artifact_created ? "yes" : "no"}</strong></div>
+                  <div><span>No Evidence Pack built</span><strong>{scholarChatGroundedAnswerWriteEligibilityPreview()!.no_evidence_pack_built ? "yes" : "no"}</strong></div>
+                  <div><span>No persistence</span><strong>{scholarChatGroundedAnswerWriteEligibilityPreview()!.no_persistence ? "yes" : "no"}</strong></div>
+                  <div><span>No LLM call</span><strong>{scholarChatGroundedAnswerWriteEligibilityPreview()!.no_llm_call ? "yes" : "no"}</strong></div>
+                  <div><span>No runtime execution</span><strong>{scholarChatGroundedAnswerWriteEligibilityPreview()!.no_runtime_execution ? "yes" : "no"}</strong></div>
+                  <div><span>No registry status change</span><strong>{scholarChatGroundedAnswerWriteEligibilityPreview()!.no_registry_status_change ? "yes" : "no"}</strong></div>
+                  <div><span>No audit write</span><strong>{scholarChatGroundedAnswerWriteEligibilityPreview()!.no_audit_write ? "yes" : "no"}</strong></div>
+                </div>
+                {scholarChatGroundedAnswerWriteEligibilityPreview()!.eligibility_reasons.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Eligibility reasons</h4>
+                    <ul>
+                      {scholarChatGroundedAnswerWriteEligibilityPreview()!.eligibility_reasons.map((reason) => (
+                        <li>{reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No eligibility reasons.</p>
+                )}
+                {scholarChatGroundedAnswerWriteEligibilityPreview()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {scholarChatGroundedAnswerWriteEligibilityPreview()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No grounded answer write eligibility blockers.</p>
+                )}
+                {scholarChatGroundedAnswerWriteEligibilityPreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {scholarChatGroundedAnswerWriteEligibilityPreview()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No grounded answer write eligibility warnings.</p>
+                )}
+                {scholarChatGroundedAnswerWriteEligibilityPreview()!.next_required_actions.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Next required actions</h4>
+                    <ul>
+                      {scholarChatGroundedAnswerWriteEligibilityPreview()!.next_required_actions.map((action) => (
+                        <li>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No next required actions.</p>
+                )}
+              </>
+            ) : (
+              <p>No grounded answer write eligibility preview loaded yet.</p>
+            )
+          ) : (
+            <p>No grounded answer write eligibility preview loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">
