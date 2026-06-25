@@ -579,6 +579,56 @@ type ScholarChatGroundedAnswerBuildRequestPreview = {
   no_grounded_answer_service_call: boolean;
 };
 
+type ScholarChatGroundedAnswerBuildPreflightStatus =
+  | "blocked"
+  | "needs_review"
+  | "preflight_ready_later";
+
+type ScholarChatGroundedAnswerBuildPreflightPreviewRequest = {
+  build_request_preview_request: ScholarChatGroundedAnswerBuildRequestPreviewRequest;
+};
+
+type ScholarChatGroundedAnswerBuildPreflightPreview = {
+  status: ScholarChatGroundedAnswerBuildPreflightStatus;
+  build_request_status: ScholarChatGroundedAnswerBuildRequestStatus;
+  build_intent_status: ScholarChatGroundedAnswerBuildIntentStatus;
+  write_eligibility_status: ScholarChatGroundedAnswerWriteEligibilityStatus;
+  candidate_status: ScholarChatGroundedAnswerCandidateStatus;
+  normalized_prompt: string;
+  selected_source_count: number;
+  evidence_candidate_count: number;
+  inspected_item_count: number;
+  supported_item_count: number;
+  weakly_supported_item_count: number;
+  unsupported_item_count: number;
+  candidate_statement_count: number;
+  answer_draft_id: string | null;
+  selected_source_ids: string[];
+  answer_draft_present: boolean;
+  answer_draft_readable: boolean;
+  answer_draft_claim_count: number;
+  required_inputs: string[];
+  missing_inputs: string[];
+  preflight_reasons: string[];
+  blockers: ScholarChatDraftGroundingInspectionBlocker[];
+  warnings: ScholarChatDraftGroundingInspectionWarning[];
+  next_required_actions: string[];
+  summary: string;
+  preview_only: boolean;
+  not_answer_draft: boolean;
+  not_grounded_answer: boolean;
+  not_final_answer: boolean;
+  no_answer_artifact_created: boolean;
+  no_evidence_pack_built: boolean;
+  no_persistence: boolean;
+  no_llm_call: boolean;
+  no_runtime_execution: boolean;
+  no_registry_status_change: boolean;
+  no_audit_write: boolean;
+  no_grounded_answer_service_call: boolean;
+  no_grounded_answer_write: boolean;
+};
+
 type LocalModelRuntimeKind = "llama_cpp" | "none";
 
 type LocalModelRuntimeHealthStatus =
@@ -1207,6 +1257,11 @@ export default function App() {
   const [scholarChatGroundedAnswerBuildRequestValidationError, setScholarChatGroundedAnswerBuildRequestValidationError] = createSignal<string | null>(null);
   const [scholarChatGroundedAnswerBuildRequestLoading, setScholarChatGroundedAnswerBuildRequestLoading] = createSignal(false);
   const [scholarChatGroundedAnswerBuildRequestHasRun, setScholarChatGroundedAnswerBuildRequestHasRun] = createSignal(false);
+  const [scholarChatGroundedAnswerBuildPreflightPreview, setScholarChatGroundedAnswerBuildPreflightPreview] = createSignal<ScholarChatGroundedAnswerBuildPreflightPreview | null>(null);
+  const [scholarChatGroundedAnswerBuildPreflightError, setScholarChatGroundedAnswerBuildPreflightError] = createSignal<string | null>(null);
+  const [scholarChatGroundedAnswerBuildPreflightValidationError, setScholarChatGroundedAnswerBuildPreflightValidationError] = createSignal<string | null>(null);
+  const [scholarChatGroundedAnswerBuildPreflightLoading, setScholarChatGroundedAnswerBuildPreflightLoading] = createSignal(false);
+  const [scholarChatGroundedAnswerBuildPreflightHasRun, setScholarChatGroundedAnswerBuildPreflightHasRun] = createSignal(false);
   const [localRuntimeKind, setLocalRuntimeKind] = createSignal<LocalModelRuntimeKind>("none");
   const [localRuntimeModelPath, setLocalRuntimeModelPath] = createSignal("");
   const [localRuntimeExecutablePath, setLocalRuntimeExecutablePath] = createSignal("");
@@ -1816,6 +1871,14 @@ export default function App() {
     setScholarChatGroundedAnswerBuildRequestError(null);
     setScholarChatGroundedAnswerBuildRequestValidationError(null);
     setScholarChatGroundedAnswerBuildRequestHasRun(false);
+    clearScholarChatGroundedAnswerBuildPreflightPreview();
+  }
+
+  function clearScholarChatGroundedAnswerBuildPreflightPreview() {
+    setScholarChatGroundedAnswerBuildPreflightPreview(null);
+    setScholarChatGroundedAnswerBuildPreflightError(null);
+    setScholarChatGroundedAnswerBuildPreflightValidationError(null);
+    setScholarChatGroundedAnswerBuildPreflightHasRun(false);
   }
 
   function normalizeOptionalTextInput(value: string) {
@@ -1854,6 +1917,14 @@ export default function App() {
   ): ScholarChatGroundedAnswerBuildRequestPreviewRequest {
     return {
       build_intent_request: buildScholarChatGroundedAnswerBuildIntentRequest(trimmedPrompt),
+    };
+  }
+
+  function buildScholarChatGroundedAnswerBuildPreflightRequest(
+    trimmedPrompt: string,
+  ): ScholarChatGroundedAnswerBuildPreflightPreviewRequest {
+    return {
+      build_request_preview_request: buildScholarChatGroundedAnswerBuildRequestRequest(trimmedPrompt),
     };
   }
 
@@ -2471,6 +2542,7 @@ export default function App() {
     setScholarChatGroundedAnswerBuildRequestError(null);
     setScholarChatGroundedAnswerBuildRequestValidationError(null);
     setScholarChatGroundedAnswerBuildRequestPreview(null);
+    clearScholarChatGroundedAnswerBuildPreflightPreview();
     try {
       const result = await invoke<ScholarChatGroundedAnswerBuildRequestPreview>("preview_scholar_chat_grounded_answer_build_request", {
         root: ".",
@@ -2481,6 +2553,36 @@ export default function App() {
       setScholarChatGroundedAnswerBuildRequestError(sanitizeBackendError(err));
     } finally {
       setScholarChatGroundedAnswerBuildRequestLoading(false);
+    }
+  }
+
+  async function previewScholarChatGroundedAnswerBuildPreflight() {
+    const trimmedPrompt = scholarChatPrompt().trim();
+    if (!trimmedPrompt) {
+      setScholarChatGroundedAnswerBuildPreflightPreview(null);
+      setScholarChatGroundedAnswerBuildPreflightError(null);
+      setScholarChatGroundedAnswerBuildPreflightValidationError("Prompt is required to preview grounded answer build preflight.");
+      return;
+    }
+    if (scholarChatGroundedAnswerBuildPreflightLoading()) {
+      return;
+    }
+
+    setScholarChatGroundedAnswerBuildPreflightHasRun(true);
+    setScholarChatGroundedAnswerBuildPreflightLoading(true);
+    setScholarChatGroundedAnswerBuildPreflightError(null);
+    setScholarChatGroundedAnswerBuildPreflightValidationError(null);
+    setScholarChatGroundedAnswerBuildPreflightPreview(null);
+    try {
+      const result = await invoke<ScholarChatGroundedAnswerBuildPreflightPreview>("preview_scholar_chat_grounded_answer_build_preflight", {
+        root: ".",
+        request: buildScholarChatGroundedAnswerBuildPreflightRequest(trimmedPrompt),
+      });
+      setScholarChatGroundedAnswerBuildPreflightPreview(result);
+    } catch (err) {
+      setScholarChatGroundedAnswerBuildPreflightError(sanitizeBackendError(err));
+    } finally {
+      setScholarChatGroundedAnswerBuildPreflightLoading(false);
     }
   }
 
@@ -4148,6 +4250,148 @@ export default function App() {
             )
           ) : (
             <p>No grounded answer build request preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Grounded answer build preflight</h3>
+          <p class="muted">
+            Preflight only - no GroundedAnswer service call was made. Not an AnswerDraft, GroundedAnswer, FinalAnswer, Evidence Pack, or persisted artifact. No registry status change, audit write, runtime execution, or LLM call occurred.
+          </p>
+          <p class="muted">{scholarChatSelectedSourceIdsSummary()}</p>
+          <p class="muted">Uses the current Scholar Chat request, the draft text from the inspection card above, and the build request preview inputs.</p>
+          <div class="hero-actions">
+            <button onClick={previewScholarChatGroundedAnswerBuildPreflight} disabled={scholarChatGroundedAnswerBuildPreflightLoading()}>
+              {scholarChatGroundedAnswerBuildPreflightLoading() ? "Previewing..." : "Preview grounded answer build preflight"}
+            </button>
+          </div>
+          <p class="muted">Preflight preview only - not a verified grounded answer. No AnswerDraft, GroundedAnswer, FinalAnswer, Evidence Pack, persistence, runtime execution, or LLM call was created.</p>
+          {scholarChatGroundedAnswerBuildPreflightValidationError() && <p class="error">{scholarChatGroundedAnswerBuildPreflightValidationError()}</p>}
+          {scholarChatGroundedAnswerBuildPreflightError() && <p class="error">{scholarChatGroundedAnswerBuildPreflightError()}</p>}
+          {scholarChatGroundedAnswerBuildPreflightLoading() ? (
+            <p>Previewing grounded answer build preflight...</p>
+          ) : scholarChatGroundedAnswerBuildPreflightHasRun() ? (
+            scholarChatGroundedAnswerBuildPreflightPreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(scholarChatGroundedAnswerBuildPreflightPreview()!.status) },
+                  { label: "Build request status", value: formatSnakeCaseLabel(scholarChatGroundedAnswerBuildPreflightPreview()!.build_request_status) },
+                  { label: "Build intent status", value: formatSnakeCaseLabel(scholarChatGroundedAnswerBuildPreflightPreview()!.build_intent_status) },
+                  { label: "Write eligibility status", value: formatSnakeCaseLabel(scholarChatGroundedAnswerBuildPreflightPreview()!.write_eligibility_status) },
+                  { label: "Candidate status", value: formatSnakeCaseLabel(scholarChatGroundedAnswerBuildPreflightPreview()!.candidate_status) },
+                  { label: "Selected sources", value: scholarChatGroundedAnswerBuildPreflightPreview()!.selected_source_count },
+                  { label: "Evidence candidates", value: scholarChatGroundedAnswerBuildPreflightPreview()!.evidence_candidate_count },
+                  { label: "Inspected items", value: scholarChatGroundedAnswerBuildPreflightPreview()!.inspected_item_count },
+                  { label: "Supported items", value: scholarChatGroundedAnswerBuildPreflightPreview()!.supported_item_count },
+                  { label: "Weakly supported items", value: scholarChatGroundedAnswerBuildPreflightPreview()!.weakly_supported_item_count },
+                  { label: "Unsupported items", value: scholarChatGroundedAnswerBuildPreflightPreview()!.unsupported_item_count },
+                  { label: "Candidate statements", value: scholarChatGroundedAnswerBuildPreflightPreview()!.candidate_statement_count },
+                  { label: "Answer draft claims", value: scholarChatGroundedAnswerBuildPreflightPreview()!.answer_draft_claim_count },
+                ])}
+                <p><strong>Prompt:</strong> {scholarChatGroundedAnswerBuildPreflightPreview()!.normalized_prompt}</p>
+                <p><strong>Answer draft ID:</strong> {scholarChatGroundedAnswerBuildPreflightPreview()!.answer_draft_id ?? "none"}</p>
+                <p><strong>Selected source IDs:</strong> {scholarChatGroundedAnswerBuildPreflightPreview()!.selected_source_ids.length > 0 ? scholarChatGroundedAnswerBuildPreflightPreview()!.selected_source_ids.join(", ") : "none"}</p>
+                <p>{scholarChatGroundedAnswerBuildPreflightPreview()!.summary}</p>
+                <div class="contract-meta">
+                  <div><span>Preview only</span><strong>{scholarChatGroundedAnswerBuildPreflightPreview()!.preview_only ? "yes" : "no"}</strong></div>
+                  <div><span>Not answer draft</span><strong>{scholarChatGroundedAnswerBuildPreflightPreview()!.not_answer_draft ? "yes" : "no"}</strong></div>
+                  <div><span>Not grounded answer</span><strong>{scholarChatGroundedAnswerBuildPreflightPreview()!.not_grounded_answer ? "yes" : "no"}</strong></div>
+                  <div><span>Not final answer</span><strong>{scholarChatGroundedAnswerBuildPreflightPreview()!.not_final_answer ? "yes" : "no"}</strong></div>
+                  <div><span>No answer artifact created</span><strong>{scholarChatGroundedAnswerBuildPreflightPreview()!.no_answer_artifact_created ? "yes" : "no"}</strong></div>
+                  <div><span>No Evidence Pack built</span><strong>{scholarChatGroundedAnswerBuildPreflightPreview()!.no_evidence_pack_built ? "yes" : "no"}</strong></div>
+                  <div><span>No persistence</span><strong>{scholarChatGroundedAnswerBuildPreflightPreview()!.no_persistence ? "yes" : "no"}</strong></div>
+                  <div><span>No LLM call</span><strong>{scholarChatGroundedAnswerBuildPreflightPreview()!.no_llm_call ? "yes" : "no"}</strong></div>
+                  <div><span>No runtime execution</span><strong>{scholarChatGroundedAnswerBuildPreflightPreview()!.no_runtime_execution ? "yes" : "no"}</strong></div>
+                  <div><span>No registry status change</span><strong>{scholarChatGroundedAnswerBuildPreflightPreview()!.no_registry_status_change ? "yes" : "no"}</strong></div>
+                  <div><span>No audit write</span><strong>{scholarChatGroundedAnswerBuildPreflightPreview()!.no_audit_write ? "yes" : "no"}</strong></div>
+                  <div><span>No grounded answer service call</span><strong>{scholarChatGroundedAnswerBuildPreflightPreview()!.no_grounded_answer_service_call ? "yes" : "no"}</strong></div>
+                  <div><span>No grounded answer write</span><strong>{scholarChatGroundedAnswerBuildPreflightPreview()!.no_grounded_answer_write ? "yes" : "no"}</strong></div>
+                  <div><span>Answer draft present</span><strong>{scholarChatGroundedAnswerBuildPreflightPreview()!.answer_draft_present ? "yes" : "no"}</strong></div>
+                  <div><span>Answer draft readable</span><strong>{scholarChatGroundedAnswerBuildPreflightPreview()!.answer_draft_readable ? "yes" : "no"}</strong></div>
+                </div>
+                {scholarChatGroundedAnswerBuildPreflightPreview()!.required_inputs.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Required inputs</h4>
+                    <ul>
+                      {scholarChatGroundedAnswerBuildPreflightPreview()!.required_inputs.map((input) => (
+                        <li>{input}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No required inputs.</p>
+                )}
+                {scholarChatGroundedAnswerBuildPreflightPreview()!.missing_inputs.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Missing inputs</h4>
+                    <ul>
+                      {scholarChatGroundedAnswerBuildPreflightPreview()!.missing_inputs.map((input) => (
+                        <li>{input}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No missing inputs.</p>
+                )}
+                {scholarChatGroundedAnswerBuildPreflightPreview()!.preflight_reasons.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Preflight reasons</h4>
+                    <ul>
+                      {scholarChatGroundedAnswerBuildPreflightPreview()!.preflight_reasons.map((reason) => (
+                        <li>{reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No preflight reasons.</p>
+                )}
+                {scholarChatGroundedAnswerBuildPreflightPreview()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {scholarChatGroundedAnswerBuildPreflightPreview()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No grounded answer build preflight blockers.</p>
+                )}
+                {scholarChatGroundedAnswerBuildPreflightPreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {scholarChatGroundedAnswerBuildPreflightPreview()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No grounded answer build preflight warnings.</p>
+                )}
+                {scholarChatGroundedAnswerBuildPreflightPreview()!.next_required_actions.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Next required actions</h4>
+                    <ul>
+                      {scholarChatGroundedAnswerBuildPreflightPreview()!.next_required_actions.map((action) => (
+                        <li>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No next required actions.</p>
+                )}
+              </>
+            ) : (
+              <p>No grounded answer build preflight preview loaded yet.</p>
+            )
+          ) : (
+            <p>No grounded answer build preflight preview loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">

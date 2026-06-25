@@ -1267,6 +1267,29 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 84 - Grounded Answer Build Preflight Preview
+
+Phase 84.0 adds a preview-only grounded-answer build preflight that composes the grounded-answer build-request preview and checks whether an existing AnswerDraft is readable without creating one.
+It remains preview-only and does not create an AnswerDraft, GroundedAnswer, FinalAnswer, Evidence Pack, persisted artifact, registry change, audit write, runtime execution, or LLM call, and it does not create directories or files.
+
+Do not implement:
+
+- grounded answer generation
+- AnswerDraft creation
+- GroundedAnswer creation
+- FinalAnswer creation
+- Evidence Pack building
+- artifact writes
+- registry status changes
+- audit writes
+- runtime execution changes
+- LLM calls outside preview
+- chat history persistence
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
