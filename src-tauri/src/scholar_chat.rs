@@ -6076,6 +6076,25 @@ fn main() {
     }
 
     #[test]
+    fn scholar_chat_grounded_answer_build_request_rejects_invalid_source_ids_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["..", "../evil", "evil/source", "evil\\source"] {
+            let result = preview_scholar_chat_grounded_answer_build_request(
+                temp.path(),
+                build_request_request(
+                    "alpha grounded evidence",
+                    Some("Alpha beta."),
+                    vec![invalid.to_string()],
+                    Some("draft-1"),
+                    true,
+                ),
+            );
+            assert!(matches!(result, Err(AegisError::ScholarChatInvalidSourceId)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
+    }
+
+    #[test]
     fn scholar_chat_grounded_answer_build_request_blocks_without_selected_sources() {
         let temp = tempfile::tempdir().unwrap();
         let result = assert_grounded_answer_build_request_deterministic_and_path_free(
@@ -6184,6 +6203,29 @@ fn main() {
             .iter()
             .any(|reason| reason.contains("ready later for a future GroundedAnswer service call")));
         assert_grounded_answer_build_request_boundary_fields(&first);
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_request_allows_missing_answer_draft_file_when_ready_later() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = assert_grounded_answer_build_request_deterministic_and_path_free(
+            &temp,
+            build_request_request(
+                "alpha grounded evidence",
+                Some("Alpha beta. Alpha beta gamma."),
+                vec![source_id],
+                Some("missing-draft-1"),
+                true,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerBuildRequestStatus::RequestReadyLater);
+        assert_eq!(result.build_intent_status, ScholarChatGroundedAnswerBuildIntentStatus::IntentReadyLater);
+        assert_eq!(result.write_eligibility_status, ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::CandidateReadyLater);
+        assert_eq!(result.answer_draft_id.as_deref(), Some("missing-draft-1"));
+        assert!(result.missing_inputs.contains(&"answer_draft_id".to_string()) == false);
+        assert_grounded_answer_build_request_boundary_fields(&result);
     }
 
     #[test]
