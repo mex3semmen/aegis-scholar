@@ -1244,6 +1244,29 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 83 — Grounded Answer Build Request Preview
+
+Phase 83.0 adds a preview-only grounded-answer build-request diagnostic that composes the grounded-answer build-intent preview and explains what would still be required before a future GroundedAnswer request could proceed.
+It remains request-preview only and does not create an AnswerDraft, GroundedAnswer, FinalAnswer, Evidence Pack, persisted artifact, registry change, audit write, runtime execution, or LLM call.
+
+Do not implement:
+
+- grounded answer generation
+- AnswerDraft creation
+- GroundedAnswer creation
+- FinalAnswer creation
+- Evidence Pack building
+- artifact writes
+- registry status changes
+- audit writes
+- runtime execution changes
+- LLM calls outside preview
+- chat history persistence
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
