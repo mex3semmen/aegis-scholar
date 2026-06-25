@@ -47,6 +47,7 @@ use scholar_chat::{
     preview_scholar_chat_grounded_answer_candidate as preview_scholar_chat_grounded_answer_candidate_impl,
     preview_scholar_chat_grounded_answer_build_intent as preview_scholar_chat_grounded_answer_build_intent_impl,
     preview_scholar_chat_grounded_answer_build_request as preview_scholar_chat_grounded_answer_build_request_impl,
+    preview_scholar_chat_grounded_answer_execution_readiness as preview_scholar_chat_grounded_answer_execution_readiness_impl,
     preview_scholar_chat_grounded_answer_write_eligibility as preview_scholar_chat_grounded_answer_write_eligibility_impl,
     preview_scholar_chat_request as preview_scholar_chat_request_impl,
     preview_scholar_chat_evidence_plan as preview_scholar_chat_evidence_plan_impl,
@@ -333,6 +334,15 @@ fn preview_scholar_chat_grounded_answer_build_preflight(
 }
 
 #[tauri::command]
+fn preview_scholar_chat_grounded_answer_execution_readiness(
+    root: String,
+    request: scholar_chat::ScholarChatGroundedAnswerExecutionReadinessPreviewRequest,
+) -> Result<scholar_chat::ScholarChatGroundedAnswerExecutionReadinessPreview, String> {
+    preview_scholar_chat_grounded_answer_execution_readiness_impl(root, request)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
 fn preview_scholar_chat_grounded_answer_build_plan(
     root: String,
     request: ScholarChatDraftGroundingInspectionRequest,
@@ -464,6 +474,7 @@ pub fn run() {
             preview_scholar_chat_draft_grounding_inspection,
             preview_scholar_chat_grounded_draft_readiness,
             preview_scholar_chat_grounded_answer_build_preflight,
+            preview_scholar_chat_grounded_answer_execution_readiness,
             preview_scholar_chat_grounded_answer_build_plan,
             preview_scholar_chat_grounded_answer_candidate,
             preview_scholar_chat_grounded_answer_build_intent,

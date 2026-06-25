@@ -716,6 +716,64 @@ pub struct ScholarChatGroundedAnswerBuildPreflightPreview {
     pub no_grounded_answer_write: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatGroundedAnswerExecutionReadinessStatus {
+    Blocked,
+    NeedsReview,
+    ExecutionReadyLater,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatGroundedAnswerExecutionReadinessPreviewRequest {
+    pub build_preflight_preview_request: ScholarChatGroundedAnswerBuildPreflightPreviewRequest,
+    pub execution_consent: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatGroundedAnswerExecutionReadinessPreview {
+    pub status: ScholarChatGroundedAnswerExecutionReadinessStatus,
+    pub build_preflight_status: ScholarChatGroundedAnswerBuildPreflightStatus,
+    pub build_request_status: ScholarChatGroundedAnswerBuildRequestStatus,
+    pub build_intent_status: ScholarChatGroundedAnswerBuildIntentStatus,
+    pub write_eligibility_status: ScholarChatGroundedAnswerWriteEligibilityStatus,
+    pub candidate_status: ScholarChatGroundedAnswerCandidateStatus,
+    pub normalized_prompt: String,
+    pub answer_draft_id: Option<String>,
+    pub selected_source_ids: Vec<String>,
+    pub selected_source_count: usize,
+    pub evidence_candidate_count: usize,
+    pub inspected_item_count: usize,
+    pub supported_item_count: usize,
+    pub weakly_supported_item_count: usize,
+    pub unsupported_item_count: usize,
+    pub candidate_statement_count: usize,
+    pub answer_draft_present: bool,
+    pub answer_draft_readable: bool,
+    pub answer_draft_claim_count: usize,
+    pub execution_consent: bool,
+    pub required_inputs: Vec<String>,
+    pub missing_inputs: Vec<String>,
+    pub readiness_reasons: Vec<String>,
+    pub blockers: Vec<ScholarChatDraftGroundingInspectionBlocker>,
+    pub warnings: Vec<ScholarChatDraftGroundingInspectionWarning>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub not_answer_draft: bool,
+    pub not_grounded_answer: bool,
+    pub not_final_answer: bool,
+    pub no_answer_artifact_created: bool,
+    pub no_evidence_pack_built: bool,
+    pub no_persistence: bool,
+    pub no_llm_call: bool,
+    pub no_runtime_execution: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+    pub no_grounded_answer_service_call: bool,
+    pub no_grounded_answer_write: bool,
+}
+
 enum ScholarChatPreviewKind {
     Request,
     Retrieval,
@@ -2486,6 +2544,129 @@ pub fn preview_scholar_chat_grounded_answer_build_preflight(
     })
 }
 
+pub fn preview_scholar_chat_grounded_answer_execution_readiness(
+    root: impl Into<PathBuf>,
+    request: ScholarChatGroundedAnswerExecutionReadinessPreviewRequest,
+) -> AegisResult<ScholarChatGroundedAnswerExecutionReadinessPreview> {
+    let root = root.into();
+    let build_preflight_preview =
+        preview_scholar_chat_grounded_answer_build_preflight(&root, request.build_preflight_preview_request)?;
+    let normalized_prompt = build_preflight_preview.normalized_prompt.clone();
+    let answer_draft_id = build_preflight_preview.answer_draft_id.clone();
+    let selected_source_ids = build_preflight_preview.selected_source_ids.clone();
+    let answer_draft_present = build_preflight_preview.answer_draft_present;
+    let answer_draft_readable = build_preflight_preview.answer_draft_readable;
+    let answer_draft_claim_count = build_preflight_preview.answer_draft_claim_count;
+    let build_preflight_status = build_preflight_preview.status.clone();
+    let mut blockers = build_preflight_preview.blockers.clone();
+    let mut warnings = build_preflight_preview.warnings.clone();
+
+    push_grounding_inspection_warning(
+        &mut warnings,
+        "boundary",
+        "This is an execution-readiness preview only; it is not an AnswerDraft, GroundedAnswer, FinalAnswer, Evidence Pack, or persisted artifact.",
+    );
+    if !request.execution_consent {
+        push_grounding_inspection_blocker(
+            &mut blockers,
+            "execution_consent_missing",
+            "Execution consent was not given.",
+        );
+    }
+
+    let status = match build_preflight_status {
+        ScholarChatGroundedAnswerBuildPreflightStatus::Blocked => ScholarChatGroundedAnswerExecutionReadinessStatus::Blocked,
+        ScholarChatGroundedAnswerBuildPreflightStatus::NeedsReview => ScholarChatGroundedAnswerExecutionReadinessStatus::NeedsReview,
+        ScholarChatGroundedAnswerBuildPreflightStatus::PreflightReadyLater => {
+            if request.execution_consent {
+                ScholarChatGroundedAnswerExecutionReadinessStatus::ExecutionReadyLater
+            } else {
+                ScholarChatGroundedAnswerExecutionReadinessStatus::Blocked
+            }
+        }
+    };
+
+    if matches!(status, ScholarChatGroundedAnswerExecutionReadinessStatus::NeedsReview) {
+        push_grounding_inspection_warning(
+            &mut warnings,
+            "needs_review",
+            "The grounded-answer build preflight still needs review before execution readiness can be accepted.",
+        );
+    }
+    if matches!(status, ScholarChatGroundedAnswerExecutionReadinessStatus::ExecutionReadyLater) {
+        push_grounding_inspection_warning(
+            &mut warnings,
+            "execution_ready_later",
+            "Execution consent is given and the build preflight is ready later. This is still only a preview.",
+        );
+    }
+
+    let required_inputs = grounded_answer_execution_readiness_required_inputs();
+    let missing_inputs = grounded_answer_execution_readiness_missing_inputs(
+        &build_preflight_status,
+        answer_draft_readable,
+        request.execution_consent,
+    );
+    let readiness_reasons = grounded_answer_execution_readiness_reasons(
+        &build_preflight_preview,
+        request.execution_consent,
+        &status,
+    );
+    let next_required_actions = grounded_answer_execution_readiness_next_required_actions(
+        &status,
+        &build_preflight_preview,
+        request.execution_consent,
+    );
+    let summary = grounded_answer_execution_readiness_summary(
+        &status,
+        &build_preflight_preview,
+        request.execution_consent,
+    );
+
+    Ok(ScholarChatGroundedAnswerExecutionReadinessPreview {
+        status,
+        build_preflight_status,
+        build_request_status: build_preflight_preview.build_request_status,
+        build_intent_status: build_preflight_preview.build_intent_status,
+        write_eligibility_status: build_preflight_preview.write_eligibility_status,
+        candidate_status: build_preflight_preview.candidate_status,
+        normalized_prompt,
+        answer_draft_id,
+        selected_source_ids,
+        selected_source_count: build_preflight_preview.selected_source_count,
+        evidence_candidate_count: build_preflight_preview.evidence_candidate_count,
+        inspected_item_count: build_preflight_preview.inspected_item_count,
+        supported_item_count: build_preflight_preview.supported_item_count,
+        weakly_supported_item_count: build_preflight_preview.weakly_supported_item_count,
+        unsupported_item_count: build_preflight_preview.unsupported_item_count,
+        candidate_statement_count: build_preflight_preview.candidate_statement_count,
+        answer_draft_present,
+        answer_draft_readable,
+        answer_draft_claim_count,
+        execution_consent: request.execution_consent,
+        required_inputs,
+        missing_inputs,
+        readiness_reasons,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        not_answer_draft: true,
+        not_grounded_answer: true,
+        not_final_answer: true,
+        no_answer_artifact_created: true,
+        no_evidence_pack_built: true,
+        no_persistence: true,
+        no_llm_call: true,
+        no_runtime_execution: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+        no_grounded_answer_service_call: true,
+        no_grounded_answer_write: true,
+    })
+}
+
 fn grounded_answer_build_preflight_required_inputs() -> Vec<String> {
     vec![
         "build_request_ready_later".to_string(),
@@ -2649,6 +2830,155 @@ fn grounded_answer_build_preflight_next_required_actions(
             push_unique_text(
                 &mut next_required_actions,
                 "A future GroundedAnswer service call can be added later without changing this preview.",
+            );
+        }
+    }
+    next_required_actions
+}
+
+fn grounded_answer_execution_readiness_required_inputs() -> Vec<String> {
+    vec![
+        "build_preflight_ready_later".to_string(),
+        "answer_draft_readable".to_string(),
+        "execution_consent".to_string(),
+    ]
+}
+
+fn grounded_answer_execution_readiness_missing_inputs(
+    build_preflight_status: &ScholarChatGroundedAnswerBuildPreflightStatus,
+    answer_draft_readable: bool,
+    execution_consent: bool,
+) -> Vec<String> {
+    let mut missing_inputs = Vec::new();
+    if !matches!(
+        build_preflight_status,
+        ScholarChatGroundedAnswerBuildPreflightStatus::PreflightReadyLater
+    ) {
+        missing_inputs.push("build_preflight_ready_later".to_string());
+    }
+    if !answer_draft_readable {
+        missing_inputs.push("answer_draft_readable".to_string());
+    }
+    if !execution_consent {
+        missing_inputs.push("execution_consent".to_string());
+    }
+    missing_inputs
+}
+
+fn grounded_answer_execution_readiness_summary(
+    status: &ScholarChatGroundedAnswerExecutionReadinessStatus,
+    build_preflight_preview: &ScholarChatGroundedAnswerBuildPreflightPreview,
+    execution_consent: bool,
+) -> String {
+    match status {
+        ScholarChatGroundedAnswerExecutionReadinessStatus::Blocked => {
+            if !matches!(
+                build_preflight_preview.status,
+                ScholarChatGroundedAnswerBuildPreflightStatus::PreflightReadyLater
+            ) {
+                format!(
+                    "Execution-readiness preview is blocked because the grounded-answer build preflight is {:?}.",
+                    build_preflight_preview.status
+                )
+            } else if !build_preflight_preview.answer_draft_readable {
+                "Execution-readiness preview is blocked because the referenced AnswerDraft artifact is unreadable."
+                    .to_string()
+            } else if !execution_consent {
+                "Execution-readiness preview is blocked until execution consent is given.".to_string()
+            } else {
+                "Execution-readiness preview is blocked until the request is ready later.".to_string()
+            }
+        }
+        ScholarChatGroundedAnswerExecutionReadinessStatus::NeedsReview => {
+            "Execution-readiness preview needs review because the grounded-answer build preflight still needs review."
+                .to_string()
+        }
+        ScholarChatGroundedAnswerExecutionReadinessStatus::ExecutionReadyLater => {
+            "The execution-readiness preview is ready later: the build preflight is ready later, the referenced AnswerDraft is readable, and execution consent is true."
+                .to_string()
+        }
+    }
+}
+
+fn grounded_answer_execution_readiness_reasons(
+    build_preflight_preview: &ScholarChatGroundedAnswerBuildPreflightPreview,
+    execution_consent: bool,
+    status: &ScholarChatGroundedAnswerExecutionReadinessStatus,
+) -> Vec<String> {
+    let mut reasons = vec![
+        format!("Build preflight status: {:?}", build_preflight_preview.status),
+        format!("Build request status: {:?}", build_preflight_preview.build_request_status),
+        format!("Build intent status: {:?}", build_preflight_preview.build_intent_status),
+        format!("Write eligibility status: {:?}", build_preflight_preview.write_eligibility_status),
+        format!("Candidate status: {:?}", build_preflight_preview.candidate_status),
+        format!("Answer draft present: {}", build_preflight_preview.answer_draft_present),
+        format!("Answer draft readable: {}", build_preflight_preview.answer_draft_readable),
+        format!("Answer draft claim count: {}", build_preflight_preview.answer_draft_claim_count),
+        format!("Execution consent: {}", execution_consent),
+    ];
+    match status {
+        ScholarChatGroundedAnswerExecutionReadinessStatus::Blocked => {
+            push_unique_text(
+                &mut reasons,
+                "The execution-readiness preview is blocked until the build preflight is ready later, the referenced AnswerDraft is readable, and execution consent is given.",
+            );
+        }
+        ScholarChatGroundedAnswerExecutionReadinessStatus::NeedsReview => {
+            push_unique_text(
+                &mut reasons,
+                "The build preflight still needs review before execution readiness can be accepted.",
+            );
+        }
+        ScholarChatGroundedAnswerExecutionReadinessStatus::ExecutionReadyLater => {
+            push_unique_text(
+                &mut reasons,
+                "The referenced AnswerDraft is readable, execution consent is true, and the execution-readiness preview is ready later.",
+            );
+        }
+    }
+    reasons
+}
+
+fn grounded_answer_execution_readiness_next_required_actions(
+    status: &ScholarChatGroundedAnswerExecutionReadinessStatus,
+    build_preflight_preview: &ScholarChatGroundedAnswerBuildPreflightPreview,
+    execution_consent: bool,
+) -> Vec<String> {
+    let mut next_required_actions = Vec::new();
+    match status {
+        ScholarChatGroundedAnswerExecutionReadinessStatus::Blocked => {
+            if !matches!(
+                build_preflight_preview.status,
+                ScholarChatGroundedAnswerBuildPreflightStatus::PreflightReadyLater
+            ) {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Bring the grounded-answer build preflight to preflight_ready_later first.",
+                );
+            }
+            if !build_preflight_preview.answer_draft_readable {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Create or repair the referenced AnswerDraft artifact before execution readiness can proceed.",
+                );
+            }
+            if !execution_consent {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Confirm execution consent before a future grounded-answer build can proceed.",
+                );
+            }
+        }
+        ScholarChatGroundedAnswerExecutionReadinessStatus::NeedsReview => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Review the grounded-answer build preflight before checking execution readiness again.",
+            );
+        }
+        ScholarChatGroundedAnswerExecutionReadinessStatus::ExecutionReadyLater => {
+            push_unique_text(
+                &mut next_required_actions,
+                "A future GroundedAnswer service call can be added later when execution is enabled.",
             );
         }
     }
@@ -4057,6 +4387,26 @@ mod tests {
         }
     }
 
+    fn execution_readiness_request(
+        prompt: &str,
+        draft_text: Option<&str>,
+        selected_source_ids: Vec<String>,
+        answer_draft_id: Option<&str>,
+        explicit_user_intent: bool,
+        execution_consent: bool,
+    ) -> ScholarChatGroundedAnswerExecutionReadinessPreviewRequest {
+        ScholarChatGroundedAnswerExecutionReadinessPreviewRequest {
+            build_preflight_preview_request: build_preflight_request(
+                prompt,
+                draft_text,
+                selected_source_ids,
+                answer_draft_id,
+                explicit_user_intent,
+            ),
+            execution_consent,
+        }
+    }
+
     #[test]
     fn scholar_chat_preview_rejects_empty_prompt() {
         let temp = tempfile::tempdir().unwrap();
@@ -4483,6 +4833,24 @@ fn main() {
         assert!(preview.no_grounded_answer_write);
     }
 
+    fn assert_grounded_answer_execution_readiness_boundary_fields(
+        preview: &ScholarChatGroundedAnswerExecutionReadinessPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.not_answer_draft);
+        assert!(preview.not_grounded_answer);
+        assert!(preview.not_final_answer);
+        assert!(preview.no_answer_artifact_created);
+        assert!(preview.no_evidence_pack_built);
+        assert!(preview.no_persistence);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_runtime_execution);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+        assert!(preview.no_grounded_answer_service_call);
+        assert!(preview.no_grounded_answer_write);
+    }
+
     fn assert_grounded_answer_build_plan_deterministic_and_path_free(
         temp: &tempfile::TempDir,
         request: ScholarChatDraftGroundingInspectionRequest,
@@ -4563,6 +4931,27 @@ fn main() {
             assert!(!debug.contains(temp_path.as_ref()));
             assert!(!json.contains(temp_path.as_ref()));
             assert_grounded_answer_build_intent_boundary_fields(preview);
+        }
+        first
+    }
+
+    fn assert_grounded_answer_execution_readiness_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatGroundedAnswerExecutionReadinessPreviewRequest,
+    ) -> ScholarChatGroundedAnswerExecutionReadinessPreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let first = preview_scholar_chat_grounded_answer_execution_readiness(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_grounded_answer_execution_readiness(temp.path(), request).unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_grounded_answer_execution_readiness_boundary_fields(preview);
         }
         first
     }
@@ -6962,6 +7351,220 @@ fn main() {
             .warnings
             .iter()
             .any(|warning| warning.kind == "preflight_ready_later"));
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_execution_readiness_rejects_empty_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_grounded_answer_execution_readiness(
+            temp.path(),
+            execution_readiness_request(
+                "   ",
+                Some("Alpha beta."),
+                vec!["src_demo".to_string()],
+                Some("draft-1"),
+                true,
+                true,
+            ),
+        );
+        assert!(matches!(result, Err(AegisError::ScholarChatPromptEmpty)));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_execution_readiness_rejects_invalid_ids_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["..", "../evil", "evil/draft", "evil\\draft"] {
+            let result = preview_scholar_chat_grounded_answer_execution_readiness(
+                temp.path(),
+                execution_readiness_request(
+                    "alpha grounded evidence",
+                    Some("Alpha beta."),
+                    vec!["src_demo".to_string()],
+                    Some(invalid),
+                    true,
+                    true,
+                ),
+            );
+            assert!(matches!(result, Err(AegisError::AnswerDraftInvalidId)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
+        for invalid in ["", " ", "..", "../evil", "evil/source", "evil\\source"] {
+            let result = preview_scholar_chat_grounded_answer_execution_readiness(
+                temp.path(),
+                execution_readiness_request(
+                    "alpha grounded evidence",
+                    Some("Alpha beta."),
+                    vec![invalid.to_string()],
+                    Some("draft-1"),
+                    true,
+                    true,
+                ),
+            );
+            assert!(matches!(result, Err(AegisError::ScholarChatInvalidSourceId)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_execution_readiness_blocks_when_build_preflight_is_blocked() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_grounded_answer_execution_readiness_deterministic_and_path_free(
+            &temp,
+            execution_readiness_request(
+                "alpha grounded evidence",
+                Some("Alpha beta. Alpha beta gamma."),
+                vec![],
+                Some("draft-1"),
+                true,
+                true,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerExecutionReadinessStatus::Blocked);
+        assert_eq!(result.build_preflight_status, ScholarChatGroundedAnswerBuildPreflightStatus::Blocked);
+        assert_eq!(result.build_request_status, ScholarChatGroundedAnswerBuildRequestStatus::Blocked);
+        assert_eq!(result.build_intent_status, ScholarChatGroundedAnswerBuildIntentStatus::Blocked);
+        assert_eq!(result.write_eligibility_status, ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::Blocked);
+        assert!(result.missing_inputs.contains(&"build_preflight_ready_later".to_string()));
+        assert!(!result.answer_draft_present);
+        assert!(!result.answer_draft_readable);
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_execution_readiness_needs_review_when_build_preflight_needs_review() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = assert_grounded_answer_execution_readiness_deterministic_and_path_free(
+            &temp,
+            execution_readiness_request(
+                "alpha grounded evidence",
+                Some("The alpha."),
+                vec![source_id],
+                Some("draft-1"),
+                true,
+                true,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerExecutionReadinessStatus::NeedsReview);
+        assert_eq!(result.build_preflight_status, ScholarChatGroundedAnswerBuildPreflightStatus::NeedsReview);
+        assert_eq!(result.build_request_status, ScholarChatGroundedAnswerBuildRequestStatus::NeedsReview);
+        assert_eq!(result.build_intent_status, ScholarChatGroundedAnswerBuildIntentStatus::NeedsReview);
+        assert_eq!(result.write_eligibility_status, ScholarChatGroundedAnswerWriteEligibilityStatus::NeedsReview);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::NeedsReview);
+        assert!(result
+            .readiness_reasons
+            .iter()
+            .any(|reason| reason.contains("needs review")));
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_execution_readiness_blocks_when_answer_draft_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, answer_draft_id, version_id, _claim_count) = build_readable_answer_draft_fixture(&temp);
+        let draft_path = crate::corpus_paths::CorpusPaths::new(temp.path())
+            .source_version_dir(&source_id, &version_id)
+            .join("answer_drafts")
+            .join(format!("{answer_draft_id}.json"));
+        fs::remove_file(&draft_path).unwrap();
+        let result = assert_grounded_answer_execution_readiness_deterministic_and_path_free(
+            &temp,
+            execution_readiness_request(
+                "alpha grounded evidence",
+                Some("Alpha beta. Alpha beta gamma."),
+                vec![format!("  {source_id}  ")],
+                Some(&format!("  {answer_draft_id}  ")),
+                true,
+                true,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerExecutionReadinessStatus::Blocked);
+        assert_eq!(result.build_preflight_status, ScholarChatGroundedAnswerBuildPreflightStatus::Blocked);
+        assert!(!result.answer_draft_present);
+        assert!(!result.answer_draft_readable);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "answer_draft_missing"));
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_execution_readiness_blocks_when_answer_draft_malformed() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, answer_draft_id, version_id, _claim_count) = build_readable_answer_draft_fixture(&temp);
+        let draft_path = crate::corpus_paths::CorpusPaths::new(temp.path())
+            .source_version_dir(&source_id, &version_id)
+            .join("answer_drafts")
+            .join(format!("{answer_draft_id}.json"));
+        fs::write(&draft_path, "{not valid json").unwrap();
+        let result = assert_grounded_answer_execution_readiness_deterministic_and_path_free(
+            &temp,
+            execution_readiness_request(
+                "alpha grounded evidence",
+                Some("Alpha beta. Alpha beta gamma."),
+                vec![format!("  {source_id}  ")],
+                Some(&format!("  {answer_draft_id}  ")),
+                true,
+                true,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerExecutionReadinessStatus::Blocked);
+        assert_eq!(result.build_preflight_status, ScholarChatGroundedAnswerBuildPreflightStatus::Blocked);
+        assert!(result.answer_draft_present);
+        assert!(!result.answer_draft_readable);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "answer_draft_unreadable"));
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_execution_readiness_blocks_without_execution_consent() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, answer_draft_id, _version_id, claim_count) = build_readable_answer_draft_fixture(&temp);
+        let result = assert_grounded_answer_execution_readiness_deterministic_and_path_free(
+            &temp,
+            execution_readiness_request(
+                "  alpha grounded evidence  ",
+                Some("  Alpha beta. Alpha beta gamma.  "),
+                vec![format!("  {source_id}  ")],
+                Some(&format!("  {answer_draft_id}  ")),
+                true,
+                false,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerExecutionReadinessStatus::Blocked);
+        assert_eq!(result.build_preflight_status, ScholarChatGroundedAnswerBuildPreflightStatus::PreflightReadyLater);
+        assert_eq!(result.answer_draft_id.as_deref(), Some(answer_draft_id.as_str()));
+        assert_eq!(result.selected_source_ids, vec![source_id]);
+        assert_eq!(result.answer_draft_claim_count, claim_count);
+        assert_eq!(result.missing_inputs, vec!["execution_consent".to_string()]);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "execution_consent_missing"));
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_execution_readiness_is_ready_later_only_when_execution_consent_is_given() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, answer_draft_id, _version_id, claim_count) = build_readable_answer_draft_fixture(&temp);
+        let result = assert_grounded_answer_execution_readiness_deterministic_and_path_free(
+            &temp,
+            execution_readiness_request(
+                "  alpha grounded evidence  ",
+                Some("  Alpha beta. Alpha beta gamma.  "),
+                vec![format!("  {source_id}  ")],
+                Some(&format!("  {answer_draft_id}  ")),
+                true,
+                true,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerExecutionReadinessStatus::ExecutionReadyLater);
+        assert_eq!(result.build_preflight_status, ScholarChatGroundedAnswerBuildPreflightStatus::PreflightReadyLater);
+        assert_eq!(result.answer_draft_id.as_deref(), Some(answer_draft_id.as_str()));
+        assert_eq!(result.selected_source_ids, vec![source_id]);
+        assert_eq!(result.answer_draft_claim_count, claim_count);
+        assert!(result.missing_inputs.is_empty());
+        assert!(result
+            .readiness_reasons
+            .iter()
+            .any(|reason| reason.contains("Execution consent: true")));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("future GroundedAnswer service call")));
     }
 
     #[test]
