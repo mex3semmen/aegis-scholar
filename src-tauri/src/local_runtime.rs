@@ -26,6 +26,77 @@ pub struct LocalModelRuntimeConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum LocalRuntimeAdapterKind {
+    LlamaCpp,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LocalRuntimeAdapterContractStatus {
+    Blocked,
+    NeedsReview,
+    ContractReadyLater,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LocalRuntimeAdapterContractBlocker {
+    pub kind: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LocalRuntimeAdapterContractWarning {
+    pub kind: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeAdapterContractPreviewRequest {
+    pub adapter_kind: LocalRuntimeAdapterKind,
+    pub executable_path: Option<String>,
+    pub model_path: Option<String>,
+    pub model_family: Option<String>,
+    pub model_format: Option<String>,
+    pub context_window_tokens: Option<u32>,
+    pub gpu_layers: Option<i32>,
+    pub threads: Option<u32>,
+    pub batch_size: Option<u32>,
+    pub chat_template: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeAdapterContractPreview {
+    pub status: LocalRuntimeAdapterContractStatus,
+    pub adapter_kind: LocalRuntimeAdapterKind,
+    pub normalized_model_family: Option<String>,
+    pub normalized_model_format: String,
+    pub executable_path_present: bool,
+    pub model_path_present: bool,
+    pub context_window_tokens: Option<u32>,
+    pub gpu_layers: Option<i32>,
+    pub threads: Option<u32>,
+    pub batch_size: Option<u32>,
+    pub chat_template_present: bool,
+    pub required_inputs: Vec<String>,
+    pub missing_inputs: Vec<String>,
+    pub contract_reasons: Vec<String>,
+    pub blockers: Vec<LocalRuntimeAdapterContractBlocker>,
+    pub warnings: Vec<LocalRuntimeAdapterContractWarning>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub no_process_spawn: bool,
+    pub no_model_load: bool,
+    pub no_llm_call: bool,
+    pub no_runtime_execution: bool,
+    pub no_persistence: bool,
+    pub no_artifact_write: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum LocalModelRuntimeHealthStatus {
     NotConfigured,
     ConfigPresent,
@@ -454,6 +525,175 @@ pub fn preview_local_runtime_invocation_plan(
             blockers,
             warnings,
         },
+    })
+}
+
+pub fn preview_llama_runtime_adapter_contract(
+    root: impl Into<PathBuf>,
+    request: LocalRuntimeAdapterContractPreviewRequest,
+) -> AegisResult<LocalRuntimeAdapterContractPreview> {
+    let _root = root.into();
+    let executable_path = normalize_optional_path(request.executable_path)?;
+    let model_path = normalize_optional_path(request.model_path)?;
+    let normalized_model_family = normalize_llama_runtime_adapter_model_family(request.model_family);
+    let (normalized_model_format, model_format_supported) =
+        normalize_llama_runtime_adapter_model_format(request.model_format);
+    let chat_template_present = normalize_optional_text(request.chat_template).is_some();
+
+    let mut blockers = Vec::new();
+    let mut warnings = Vec::new();
+
+    let executable_path_present = executable_path.is_some();
+    if !executable_path_present {
+        push_adapter_contract_blocker(
+            &mut blockers,
+            "executable_path_missing",
+            "An executable_path is required for the llama.cpp adapter contract.",
+        );
+    }
+
+    let model_path_present = model_path.is_some();
+    if !model_path_present {
+        push_adapter_contract_blocker(
+            &mut blockers,
+            "model_path_missing",
+            "A model_path is required for the llama.cpp adapter contract.",
+        );
+    }
+
+    if let Some(context_window_tokens) = request.context_window_tokens {
+        if context_window_tokens < LOCAL_RUNTIME_ADAPTER_MIN_CONTEXT_WINDOW_TOKENS
+            || context_window_tokens > LOCAL_RUNTIME_ADAPTER_MAX_CONTEXT_WINDOW_TOKENS
+        {
+            push_adapter_contract_blocker(
+                &mut blockers,
+                "context_window_tokens_out_of_range",
+                "context_window_tokens must be a positive value within the safe preview range.",
+            );
+        }
+    }
+
+    if let Some(gpu_layers) = request.gpu_layers {
+        if gpu_layers < -1 {
+            push_adapter_contract_blocker(
+                &mut blockers,
+                "gpu_layers_out_of_range",
+                "gpu_layers must be -1 or a non-negative value.",
+            );
+        }
+    }
+
+    if let Some(threads) = request.threads {
+        if threads == 0 {
+            push_adapter_contract_blocker(
+                &mut blockers,
+                "threads_out_of_range",
+                "threads must be a positive value.",
+            );
+        }
+    }
+
+    if let Some(batch_size) = request.batch_size {
+        if batch_size == 0 {
+            push_adapter_contract_blocker(
+                &mut blockers,
+                "batch_size_out_of_range",
+                "batch_size must be a positive value.",
+            );
+        }
+    }
+
+    if !model_format_supported {
+        push_adapter_contract_blocker(
+            &mut blockers,
+            "model_format_unsupported",
+            "Only gguf model_format is supported for the llama.cpp adapter preview.",
+        );
+    }
+
+    if let Some(model_family) = normalized_model_family.as_deref() {
+        if !is_known_llama_runtime_adapter_model_family(model_family) {
+            push_adapter_contract_warning(
+                &mut warnings,
+                "model_family_needs_review",
+                "The model family is not one of the previewed common families and needs review.",
+            );
+        }
+    }
+
+    if normalized_model_family.as_deref() == Some("gemma") {
+        if !chat_template_present {
+            push_adapter_contract_warning(
+                &mut warnings,
+                "chat_template_missing_for_gemma",
+                "Gemma adapters usually need a chat template before a future runtime implementation.",
+            );
+        }
+    }
+    let status = if !blockers.is_empty() {
+        LocalRuntimeAdapterContractStatus::Blocked
+    } else if warnings.is_empty() {
+        LocalRuntimeAdapterContractStatus::ContractReadyLater
+    } else {
+        LocalRuntimeAdapterContractStatus::NeedsReview
+    };
+    let contract_reasons = llama_runtime_adapter_contract_reasons(
+        &status,
+        &normalized_model_family,
+        &normalized_model_format,
+        chat_template_present,
+        &blockers,
+        &warnings,
+    );
+    let required_inputs = llama_runtime_adapter_contract_required_inputs();
+    let missing_inputs = llama_runtime_adapter_contract_missing_inputs(
+        executable_path_present,
+        model_path_present,
+        &blockers,
+    );
+    let next_required_actions = llama_runtime_adapter_contract_next_required_actions(
+        &status,
+        executable_path_present,
+        model_path_present,
+        &warnings,
+    );
+    let summary = llama_runtime_adapter_contract_summary(
+        &status,
+        executable_path_present,
+        model_path_present,
+        &normalized_model_family,
+        &normalized_model_format,
+        chat_template_present,
+    );
+
+    Ok(LocalRuntimeAdapterContractPreview {
+        status,
+        adapter_kind: request.adapter_kind,
+        normalized_model_family,
+        normalized_model_format,
+        executable_path_present,
+        model_path_present,
+        context_window_tokens: request.context_window_tokens,
+        gpu_layers: request.gpu_layers,
+        threads: request.threads,
+        batch_size: request.batch_size,
+        chat_template_present,
+        required_inputs,
+        missing_inputs,
+        contract_reasons,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        no_process_spawn: true,
+        no_model_load: true,
+        no_llm_call: true,
+        no_runtime_execution: true,
+        no_persistence: true,
+        no_artifact_write: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
     })
 }
 
@@ -1062,6 +1302,254 @@ fn normalize_optional_text_list(values: Option<Vec<String>>) -> Vec<String> {
     normalized.sort();
     normalized.dedup();
     normalized
+}
+
+fn normalize_llama_runtime_adapter_model_family(model_family: Option<String>) -> Option<String> {
+    let Some(model_family) = normalize_optional_text(model_family) else {
+        return None;
+    };
+    let compact = model_family
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .map(|ch| ch.to_ascii_lowercase())
+        .collect::<String>();
+    let normalized = if compact.starts_with("gemma") {
+        "gemma"
+    } else if compact.starts_with("llama") {
+        "llama"
+    } else if compact.starts_with("qwen") {
+        "qwen"
+    } else if compact.starts_with("mistral") {
+        "mistral"
+    } else {
+        return Some(model_family.to_ascii_lowercase());
+    };
+    Some(normalized.to_string())
+}
+
+fn is_known_llama_runtime_adapter_model_family(model_family: &str) -> bool {
+    matches!(model_family, "gemma" | "llama" | "qwen" | "mistral")
+}
+
+fn normalize_llama_runtime_adapter_model_format(model_format: Option<String>) -> (String, bool) {
+    let Some(model_format) = normalize_optional_text(model_format) else {
+        return ("gguf".to_string(), true);
+    };
+    let normalized = model_format.to_ascii_lowercase();
+    let supported = normalized == "gguf";
+    (if normalized.is_empty() { "gguf".to_string() } else { normalized }, supported)
+}
+
+const LOCAL_RUNTIME_ADAPTER_MIN_CONTEXT_WINDOW_TOKENS: u32 = 1;
+const LOCAL_RUNTIME_ADAPTER_MAX_CONTEXT_WINDOW_TOKENS: u32 = 131_072;
+
+fn push_adapter_contract_warning(
+    warnings: &mut Vec<LocalRuntimeAdapterContractWarning>,
+    kind: &str,
+    message: &str,
+) {
+    if !warnings
+        .iter()
+        .any(|warning| warning.kind == kind && warning.message == message)
+    {
+        warnings.push(LocalRuntimeAdapterContractWarning {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        });
+    }
+}
+
+fn push_adapter_contract_blocker(
+    blockers: &mut Vec<LocalRuntimeAdapterContractBlocker>,
+    kind: &str,
+    message: &str,
+) {
+    if !blockers
+        .iter()
+        .any(|blocker| blocker.kind == kind && blocker.message == message)
+    {
+        blockers.push(LocalRuntimeAdapterContractBlocker {
+            kind: kind.to_string(),
+            message: message.to_string(),
+        });
+    }
+}
+
+fn push_unique_text(items: &mut Vec<String>, value: &str) {
+    if !items.iter().any(|item| item == value) {
+        items.push(value.to_string());
+    }
+}
+
+fn llama_runtime_adapter_contract_required_inputs() -> Vec<String> {
+    vec!["executable_path".to_string(), "model_path".to_string()]
+}
+
+fn llama_runtime_adapter_contract_missing_inputs(
+    executable_path_present: bool,
+    model_path_present: bool,
+    blockers: &[LocalRuntimeAdapterContractBlocker],
+) -> Vec<String> {
+    let mut missing_inputs = Vec::new();
+    if !executable_path_present
+        && blockers.iter().any(|blocker| blocker.kind == "executable_path_missing")
+    {
+        missing_inputs.push("executable_path".to_string());
+    }
+    if !model_path_present && blockers.iter().any(|blocker| blocker.kind == "model_path_missing") {
+        missing_inputs.push("model_path".to_string());
+    }
+    missing_inputs
+}
+
+fn llama_runtime_adapter_contract_next_required_actions(
+    status: &LocalRuntimeAdapterContractStatus,
+    executable_path_present: bool,
+    model_path_present: bool,
+    warnings: &[LocalRuntimeAdapterContractWarning],
+) -> Vec<String> {
+    let mut next_required_actions = Vec::new();
+    match status {
+        LocalRuntimeAdapterContractStatus::Blocked => {
+            if !executable_path_present {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Provide an executable_path for the future llama.cpp adapter.",
+                );
+            }
+            if !model_path_present {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Provide a model_path for the future llama.cpp adapter.",
+                );
+            }
+            if warnings.iter().any(|warning| warning.kind == "chat_template_missing_for_gemma") {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Provide a chat_template before treating Gemma as ready for a future adapter.",
+                );
+            }
+        }
+        LocalRuntimeAdapterContractStatus::NeedsReview => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Review the model family and adapter metadata before wiring execution.",
+            );
+            if warnings.iter().any(|warning| warning.kind == "chat_template_missing_for_gemma") {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Provide a chat_template before treating Gemma as ready for a future adapter.",
+                );
+            }
+        }
+        LocalRuntimeAdapterContractStatus::ContractReadyLater => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Implement the future llama.cpp adapter later without changing this preview.",
+            );
+        }
+    }
+    next_required_actions
+}
+
+fn llama_runtime_adapter_contract_summary(
+    status: &LocalRuntimeAdapterContractStatus,
+    executable_path_present: bool,
+    model_path_present: bool,
+    normalized_model_family: &Option<String>,
+    normalized_model_format: &str,
+    chat_template_present: bool,
+) -> String {
+    match status {
+        LocalRuntimeAdapterContractStatus::Blocked => {
+            let mut missing = Vec::new();
+            if !executable_path_present {
+                missing.push("executable_path".to_string());
+            }
+            if !model_path_present {
+                missing.push("model_path".to_string());
+            }
+            if missing.is_empty() {
+                "The llama.cpp adapter contract preview is blocked.".to_string()
+            } else {
+                format!(
+                    "The llama.cpp adapter contract preview is blocked until {} are provided.",
+                    missing.join(" and ")
+                )
+            }
+        }
+        LocalRuntimeAdapterContractStatus::NeedsReview => {
+            let mut parts = vec!["The llama.cpp adapter contract preview needs review.".to_string()];
+            if let Some(model_family) = normalized_model_family.as_deref() {
+                parts.push(format!("Model family: {model_family}."));
+            }
+            if normalized_model_format != "gguf" {
+                parts.push("Only gguf is supported for the preview.".to_string());
+            }
+            if !chat_template_present && normalized_model_family.as_deref() == Some("gemma") {
+                parts.push("Gemma usually needs a chat template.".to_string());
+            }
+            parts.join(" ")
+        }
+        LocalRuntimeAdapterContractStatus::ContractReadyLater => {
+            let family_text = normalized_model_family
+                .as_deref()
+                .map(|value| format!("Model family: {value}. "))
+                .unwrap_or_default();
+            let template_text = if chat_template_present {
+                "A chat template is present. "
+            } else {
+                ""
+            };
+            format!(
+                "The llama.cpp adapter contract preview is ready later. {family_text}{template_text}Normalized model format: {normalized_model_format}. No process was started, no model was loaded, and nothing was persisted."
+            )
+        }
+    }
+}
+
+fn llama_runtime_adapter_contract_reasons(
+    status: &LocalRuntimeAdapterContractStatus,
+    normalized_model_family: &Option<String>,
+    normalized_model_format: &str,
+    chat_template_present: bool,
+    blockers: &[LocalRuntimeAdapterContractBlocker],
+    warnings: &[LocalRuntimeAdapterContractWarning],
+) -> Vec<String> {
+    let mut contract_reasons = Vec::new();
+    push_unique_text(
+        &mut contract_reasons,
+        "This is a preview-only llama.cpp adapter contract; no process was started and no model was loaded.",
+    );
+    if let Some(model_family) = normalized_model_family.as_deref() {
+        push_unique_text(
+            &mut contract_reasons,
+            &format!("Normalized model family: {model_family}."),
+        );
+    }
+    push_unique_text(
+        &mut contract_reasons,
+        &format!("Normalized model format: {normalized_model_format}."),
+    );
+    if chat_template_present {
+        push_unique_text(
+            &mut contract_reasons,
+            "A chat template was provided for the preview.",
+        );
+    }
+    for blocker in blockers {
+        push_unique_text(&mut contract_reasons, &format!("Blocker: {}", blocker.message));
+    }
+    for warning in warnings {
+        push_unique_text(&mut contract_reasons, &format!("Warning: {}", warning.message));
+    }
+    if matches!(status, LocalRuntimeAdapterContractStatus::ContractReadyLater) {
+        push_unique_text(
+            &mut contract_reasons,
+            "The contract preview is ready later for a future llama.cpp adapter implementation.",
+        );
+    }
+    contract_reasons
 }
 
 fn validate_runtime_path(path: &str) -> AegisResult<()> {
@@ -1824,6 +2312,74 @@ fn main() {
         }
     }
 
+    fn llama_runtime_adapter_contract_request(
+        executable_path: Option<&str>,
+        model_path: Option<&str>,
+        model_family: Option<&str>,
+        model_format: Option<&str>,
+        context_window_tokens: Option<u32>,
+        gpu_layers: Option<i32>,
+        threads: Option<u32>,
+        batch_size: Option<u32>,
+        chat_template: Option<&str>,
+    ) -> LocalRuntimeAdapterContractPreviewRequest {
+        LocalRuntimeAdapterContractPreviewRequest {
+            adapter_kind: LocalRuntimeAdapterKind::LlamaCpp,
+            executable_path: executable_path.map(|value| value.to_string()),
+            model_path: model_path.map(|value| value.to_string()),
+            model_family: model_family.map(|value| value.to_string()),
+            model_format: model_format.map(|value| value.to_string()),
+            context_window_tokens,
+            gpu_layers,
+            threads,
+            batch_size,
+            chat_template: chat_template.map(|value| value.to_string()),
+        }
+    }
+
+    fn assert_llama_runtime_adapter_contract_boundary_fields(
+        preview: &LocalRuntimeAdapterContractPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.no_process_spawn);
+        assert!(preview.no_model_load);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_runtime_execution);
+        assert!(preview.no_persistence);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
+    fn assert_llama_runtime_adapter_contract_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: LocalRuntimeAdapterContractPreviewRequest,
+    ) -> LocalRuntimeAdapterContractPreview {
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let first = preview_llama_runtime_adapter_contract(temp.path(), request.clone()).unwrap();
+        let second = preview_llama_runtime_adapter_contract(temp.path(), request).unwrap();
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_llama_runtime_adapter_contract_boundary_fields(preview);
+            assert!(preview.no_process_spawn);
+            assert!(preview.no_model_load);
+            assert!(preview.no_llm_call);
+            assert!(preview.no_runtime_execution);
+            assert!(preview.no_persistence);
+            assert!(preview.no_artifact_write);
+            assert!(preview.no_registry_status_change);
+            assert!(preview.no_audit_write);
+        }
+        first
+    }
+
     #[test]
     fn local_runtime_invocation_plan_preview_is_not_configured_for_default_config() {
         let temp = tempfile::tempdir().unwrap();
@@ -1985,6 +2541,202 @@ fn main() {
                     None,
                     None,
                     None,
+                ),
+            );
+            assert!(matches!(result, Err(AegisError::LocalModelRuntimeInvalidPath)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
+    }
+
+    #[test]
+    fn local_runtime_adapter_contract_preview_blocks_when_executable_path_is_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_llama_runtime_adapter_contract_deterministic_and_path_free(
+            &temp,
+            llama_runtime_adapter_contract_request(
+                None,
+                Some("adapter-model.gguf"),
+                None,
+                Some("gguf"),
+                Some(8192),
+                Some(0),
+                Some(8),
+                Some(256),
+                Some("template"),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeAdapterContractStatus::Blocked);
+        assert!(!result.executable_path_present);
+        assert!(result.model_path_present);
+        assert!(result.missing_inputs.contains(&"executable_path".to_string()));
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "executable_path_missing"));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("executable_path")));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn local_runtime_adapter_contract_preview_blocks_when_model_path_is_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_llama_runtime_adapter_contract_deterministic_and_path_free(
+            &temp,
+            llama_runtime_adapter_contract_request(
+                Some("llama-cli.exe"),
+                None,
+                None,
+                Some("gguf"),
+                Some(8192),
+                Some(0),
+                Some(8),
+                Some(256),
+                Some("template"),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeAdapterContractStatus::Blocked);
+        assert!(result.executable_path_present);
+        assert!(!result.model_path_present);
+        assert!(result.missing_inputs.contains(&"model_path".to_string()));
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "model_path_missing"));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn local_runtime_adapter_contract_preview_normalizes_gguf_and_can_be_ready_later() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_llama_runtime_adapter_contract_deterministic_and_path_free(
+            &temp,
+            llama_runtime_adapter_contract_request(
+                Some("llama-cli.exe"),
+                Some("model.gguf"),
+                Some("gemma-2"),
+                Some("  GGUF  "),
+                Some(8192),
+                Some(0),
+                Some(8),
+                Some(256),
+                Some("template"),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeAdapterContractStatus::ContractReadyLater);
+        assert_eq!(result.normalized_model_family.as_deref(), Some("gemma"));
+        assert_eq!(result.normalized_model_format, "gguf");
+        assert!(result.missing_inputs.is_empty());
+        assert!(result.contract_reasons.iter().any(|reason| reason.contains("Normalized model family: gemma")));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn local_runtime_adapter_contract_preview_marks_unknown_model_family_for_review() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_llama_runtime_adapter_contract_deterministic_and_path_free(
+            &temp,
+            llama_runtime_adapter_contract_request(
+                Some("llama-cli.exe"),
+                Some("model.gguf"),
+                Some("experimental-family"),
+                Some("gguf"),
+                Some(8192),
+                Some(0),
+                Some(8),
+                Some(256),
+                Some("template"),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeAdapterContractStatus::NeedsReview);
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.kind == "model_family_needs_review"));
+        assert!(result
+            .contract_reasons
+            .iter()
+            .any(|reason| reason.contains("needs review")));
+    }
+
+    #[test]
+    fn local_runtime_adapter_contract_preview_marks_gemma_without_chat_template_for_review() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_llama_runtime_adapter_contract_deterministic_and_path_free(
+            &temp,
+            llama_runtime_adapter_contract_request(
+                Some("llama-cli.exe"),
+                Some("model.gguf"),
+                Some("gemma"),
+                Some("gguf"),
+                Some(8192),
+                Some(0),
+                Some(8),
+                Some(256),
+                None,
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeAdapterContractStatus::NeedsReview);
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.kind == "chat_template_missing_for_gemma"));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("chat_template")));
+    }
+
+    #[test]
+    fn local_runtime_adapter_contract_preview_rejects_out_of_range_numeric_inputs() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_llama_runtime_adapter_contract_deterministic_and_path_free(
+            &temp,
+            llama_runtime_adapter_contract_request(
+                Some("llama-cli.exe"),
+                Some("model.gguf"),
+                Some("llama"),
+                Some("gguf"),
+                Some(0),
+                Some(-2),
+                Some(0),
+                Some(0),
+                Some("template"),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeAdapterContractStatus::Blocked);
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "context_window_tokens_out_of_range"));
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "gpu_layers_out_of_range"));
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "threads_out_of_range"));
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "batch_size_out_of_range"));
+    }
+
+    #[test]
+    fn local_runtime_adapter_contract_preview_rejects_traversal_like_paths_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["..", "../llama-server.exe", "nested/../llama-server.exe", "nested\\..\\llama-server.exe"] {
+            let result = preview_llama_runtime_adapter_contract(
+                temp.path(),
+                llama_runtime_adapter_contract_request(
+                    Some(invalid),
+                    Some("model.gguf"),
+                    Some("llama"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
                 ),
             );
             assert!(matches!(result, Err(AegisError::LocalModelRuntimeInvalidPath)));

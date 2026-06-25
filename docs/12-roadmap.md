@@ -1336,6 +1336,26 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 87 - Llama Runtime Adapter Contract Preview
+
+Phase 87.0 adds a preview-only llama.cpp adapter contract diagnostic for future GGUF model support. It validates adapter metadata and safe configuration hints only; it does not run llama.cpp, load a model, start a process, call an LLM, or persist settings. Gemma, GGUF, and related model-family/config values remain future adapter metadata, not bundled models.
+
+Do not implement:
+
+- llama.cpp execution
+- model loading
+- process spawning
+- binary probing
+- LLM calls
+- settings persistence
+- artifact writes
+- registry status changes
+- audit writes
+- Gemma download or bundling
+- model import
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
