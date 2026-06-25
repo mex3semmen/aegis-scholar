@@ -1178,6 +1178,26 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 80 — Grounded Answer Candidate Preview
+
+Phase 80.0 adds a preview-only grounded-answer candidate diagnostic that composes the grounded-answer build-plan preview and surfaces deterministic candidate items for a future GroundedAnswer path.
+It remains candidate-only and does not create an AnswerDraft, GroundedAnswer, FinalAnswer, Evidence Pack, persisted artifact, runtime execution, or LLM call.
+
+Do not implement:
+
+- grounded answer generation
+- AnswerDraft creation
+- GroundedAnswer creation
+- FinalAnswer creation
+- Evidence Pack building
+- runtime execution changes
+- LLM calls outside preview
+- chat history persistence
+- source import
+- editing workflows
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
