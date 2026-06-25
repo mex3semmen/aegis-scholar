@@ -375,6 +375,13 @@ pub struct ScholarChatDraftGroundingInspectionRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatGroundedAnswerBuildIntentRequest {
+    pub grounding_request: ScholarChatDraftGroundingInspectionRequest,
+    pub answer_draft_id: Option<String>,
+    pub explicit_user_intent: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ScholarChatDraftGroundingInspectionItem {
     pub item_index: usize,
     pub text_preview: String,
@@ -557,6 +564,48 @@ pub struct ScholarChatGroundedAnswerWriteEligibilityPreview {
     pub no_runtime_execution: bool,
     pub no_registry_status_change: bool,
     pub no_audit_write: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatGroundedAnswerBuildIntentStatus {
+    Blocked,
+    NeedsReview,
+    IntentReadyLater,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatGroundedAnswerBuildIntentPreview {
+    pub status: ScholarChatGroundedAnswerBuildIntentStatus,
+    pub write_eligibility_status: ScholarChatGroundedAnswerWriteEligibilityStatus,
+    pub candidate_status: ScholarChatGroundedAnswerCandidateStatus,
+    pub normalized_prompt: String,
+    pub selected_source_count: usize,
+    pub evidence_candidate_count: usize,
+    pub inspected_item_count: usize,
+    pub supported_item_count: usize,
+    pub weakly_supported_item_count: usize,
+    pub unsupported_item_count: usize,
+    pub candidate_statement_count: usize,
+    pub required_inputs: Vec<String>,
+    pub missing_inputs: Vec<String>,
+    pub intent_reasons: Vec<String>,
+    pub blockers: Vec<ScholarChatDraftGroundingInspectionBlocker>,
+    pub warnings: Vec<ScholarChatDraftGroundingInspectionWarning>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub not_answer_draft: bool,
+    pub not_grounded_answer: bool,
+    pub not_final_answer: bool,
+    pub no_answer_artifact_created: bool,
+    pub no_evidence_pack_built: bool,
+    pub no_persistence: bool,
+    pub no_llm_call: bool,
+    pub no_runtime_execution: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+    pub no_grounded_answer_service_call: bool,
 }
 
 enum ScholarChatPreviewKind {
@@ -2065,10 +2114,345 @@ fn grounded_answer_write_eligibility_preview_from_candidate_preview(
     }
 }
 
+pub fn preview_scholar_chat_grounded_answer_build_intent(
+    root: impl Into<PathBuf>,
+    request: ScholarChatGroundedAnswerBuildIntentRequest,
+) -> AegisResult<ScholarChatGroundedAnswerBuildIntentPreview> {
+    let root = root.into();
+    let normalized_prompt = normalized_prompt_or_err(request.grounding_request.scholar_chat_request.prompt.clone())?;
+    let normalized_answer_draft_id = normalize_optional_answer_draft_id(request.answer_draft_id)?;
+    let write_eligibility_preview =
+        preview_scholar_chat_grounded_answer_write_eligibility(&root, request.grounding_request.clone())?;
+    Ok(grounded_answer_build_intent_preview_from_write_eligibility_preview(
+        write_eligibility_preview,
+        normalized_prompt,
+        normalized_answer_draft_id,
+        request.explicit_user_intent,
+    ))
+}
+
 fn normalize_optional_draft_text(draft_text: Option<String>) -> Option<String> {
     draft_text
         .map(|text| text.trim().to_string())
         .and_then(|text| if text.is_empty() { None } else { Some(text) })
+}
+
+fn normalize_optional_answer_draft_id(answer_draft_id: Option<String>) -> AegisResult<Option<String>> {
+    match answer_draft_id {
+        None => Ok(None),
+        Some(answer_draft_id) => {
+            let normalized_answer_draft_id = answer_draft_id.trim().to_string();
+            if normalized_answer_draft_id.is_empty() {
+                Ok(None)
+            } else {
+                validate_answer_draft_id(&normalized_answer_draft_id)?;
+                Ok(Some(normalized_answer_draft_id))
+            }
+        }
+    }
+}
+
+fn grounded_answer_build_intent_status(
+    write_eligibility_preview: &ScholarChatGroundedAnswerWriteEligibilityPreview,
+    explicit_user_intent: bool,
+    answer_draft_id_present: bool,
+) -> ScholarChatGroundedAnswerBuildIntentStatus {
+    match write_eligibility_preview.status {
+        ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked => ScholarChatGroundedAnswerBuildIntentStatus::Blocked,
+        ScholarChatGroundedAnswerWriteEligibilityStatus::NeedsReview => {
+            ScholarChatGroundedAnswerBuildIntentStatus::NeedsReview
+        }
+        ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater => {
+            if explicit_user_intent && answer_draft_id_present {
+                ScholarChatGroundedAnswerBuildIntentStatus::IntentReadyLater
+            } else {
+                ScholarChatGroundedAnswerBuildIntentStatus::Blocked
+            }
+        }
+    }
+}
+
+fn grounded_answer_build_intent_required_inputs() -> Vec<String> {
+    vec![
+        "write_eligible_later".to_string(),
+        "explicit_user_intent".to_string(),
+        "answer_draft_id".to_string(),
+    ]
+}
+
+fn grounded_answer_build_intent_missing_inputs(
+    write_eligibility_preview: &ScholarChatGroundedAnswerWriteEligibilityPreview,
+    explicit_user_intent: bool,
+    answer_draft_id_present: bool,
+) -> Vec<String> {
+    let mut missing_inputs = Vec::new();
+    if !matches!(
+        write_eligibility_preview.status,
+        ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater
+    ) {
+        missing_inputs.push("write_eligible_later".to_string());
+    }
+    if !explicit_user_intent {
+        missing_inputs.push("explicit_user_intent".to_string());
+    }
+    if !answer_draft_id_present {
+        missing_inputs.push("answer_draft_id".to_string());
+    }
+    missing_inputs
+}
+
+fn grounded_answer_build_intent_summary(
+    status: &ScholarChatGroundedAnswerBuildIntentStatus,
+    write_eligibility_preview: &ScholarChatGroundedAnswerWriteEligibilityPreview,
+    explicit_user_intent: bool,
+    answer_draft_id_present: bool,
+) -> String {
+    match status {
+        ScholarChatGroundedAnswerBuildIntentStatus::Blocked => match write_eligibility_preview.status {
+            ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked => {
+                "Grounded-answer build intent is blocked because grounded-answer write eligibility is blocked."
+                    .to_string()
+            }
+            ScholarChatGroundedAnswerWriteEligibilityStatus::NeedsReview => {
+                "Grounded-answer build intent is blocked because grounded-answer write eligibility still needs review."
+                    .to_string()
+            }
+            ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater => {
+                if !explicit_user_intent && !answer_draft_id_present {
+                    "Grounded-answer build intent is blocked until explicit user intent and an answer draft ID are provided."
+                        .to_string()
+                } else if !explicit_user_intent {
+                    "Grounded-answer build intent is blocked until explicit user intent is provided."
+                        .to_string()
+                } else {
+                    "Grounded-answer build intent is blocked until an answer draft ID is provided."
+                        .to_string()
+                }
+            }
+        },
+        ScholarChatGroundedAnswerBuildIntentStatus::NeedsReview => {
+            "The draft is not yet ready for a grounded-answer build intent because weakly supported or unsupported items remain."
+                .to_string()
+        }
+        ScholarChatGroundedAnswerBuildIntentStatus::IntentReadyLater => {
+            "All inputs are present. A future user-confirmed GroundedAnswer build intent can be accepted later."
+                .to_string()
+        }
+    }
+}
+
+fn grounded_answer_build_intent_reasons(
+    status: &ScholarChatGroundedAnswerBuildIntentStatus,
+    write_eligibility_preview: &ScholarChatGroundedAnswerWriteEligibilityPreview,
+    explicit_user_intent: bool,
+    answer_draft_id_present: bool,
+) -> Vec<String> {
+    let mut reasons = vec![
+        format!("Write eligibility status: {:?}", write_eligibility_preview.status),
+        format!("Candidate status: {:?}", write_eligibility_preview.candidate_status),
+        format!("Explicit user intent: {}", explicit_user_intent),
+        format!("Answer draft ID provided: {}", answer_draft_id_present),
+    ];
+    match status {
+        ScholarChatGroundedAnswerBuildIntentStatus::Blocked => match write_eligibility_preview.status {
+            ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked => {
+                reasons.push("Grounded-answer write eligibility is blocked.".to_string());
+            }
+            ScholarChatGroundedAnswerWriteEligibilityStatus::NeedsReview => {
+                reasons.push("Grounded-answer write eligibility still needs review.".to_string());
+            }
+            ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater => {
+                if !explicit_user_intent && !answer_draft_id_present {
+                    reasons.push("Explicit user intent and answer draft ID are both missing.".to_string());
+                } else if !explicit_user_intent {
+                    reasons.push("Explicit user intent is missing.".to_string());
+                } else {
+                    reasons.push("Answer draft ID is missing.".to_string());
+                }
+            }
+        },
+        ScholarChatGroundedAnswerBuildIntentStatus::NeedsReview => {
+            reasons.push("Weakly supported or unsupported draft items remain.".to_string());
+        }
+        ScholarChatGroundedAnswerBuildIntentStatus::IntentReadyLater => {
+            reasons.push("All inspected items were supported by local evidence.".to_string());
+            reasons.push(
+                "A future user-confirmed GroundedAnswer build intent can be accepted later after an explicit implementation phase."
+                    .to_string(),
+            );
+        }
+    }
+    reasons
+}
+
+fn grounded_answer_build_intent_next_required_actions(
+    status: &ScholarChatGroundedAnswerBuildIntentStatus,
+    write_eligibility_preview: &ScholarChatGroundedAnswerWriteEligibilityPreview,
+    explicit_user_intent: bool,
+    answer_draft_id_present: bool,
+) -> Vec<String> {
+    let mut next_required_actions = write_eligibility_preview.next_required_actions.clone();
+    match status {
+        ScholarChatGroundedAnswerBuildIntentStatus::Blocked => {
+            if !matches!(
+                write_eligibility_preview.status,
+                ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater
+            ) {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Resolve grounded-answer write-eligibility blockers before any GroundedAnswer service call.",
+                );
+            }
+            if !explicit_user_intent {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Provide explicit user intent before any GroundedAnswer service call.",
+                );
+            }
+            if !answer_draft_id_present {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Provide an answer draft ID before any GroundedAnswer service call.",
+                );
+            }
+        }
+        ScholarChatGroundedAnswerBuildIntentStatus::NeedsReview => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Review weakly supported and unsupported draft items before any GroundedAnswer service call.",
+            );
+        }
+        ScholarChatGroundedAnswerBuildIntentStatus::IntentReadyLater => {
+            push_unique_text(
+                &mut next_required_actions,
+                "A future user-confirmed GroundedAnswer service call can be added later without changing this preview.",
+            );
+        }
+    }
+    next_required_actions
+}
+
+fn grounded_answer_build_intent_preview_from_write_eligibility_preview(
+    write_eligibility_preview: ScholarChatGroundedAnswerWriteEligibilityPreview,
+    normalized_prompt: String,
+    normalized_answer_draft_id: Option<String>,
+    explicit_user_intent: bool,
+) -> ScholarChatGroundedAnswerBuildIntentPreview {
+    let answer_draft_id_present = normalized_answer_draft_id.is_some();
+    let status = grounded_answer_build_intent_status(
+        &write_eligibility_preview,
+        explicit_user_intent,
+        answer_draft_id_present,
+    );
+    let mut blockers = write_eligibility_preview.blockers.clone();
+    let mut warnings = write_eligibility_preview.warnings.clone();
+
+    push_grounding_inspection_warning(
+        &mut warnings,
+        "boundary",
+        "This is a grounded-answer build-intent preview only; it is not an AnswerDraft, GroundedAnswer, FinalAnswer, Evidence Pack, or persisted artifact.",
+    );
+
+    match status {
+        ScholarChatGroundedAnswerBuildIntentStatus::Blocked => {
+            if !matches!(
+                write_eligibility_preview.status,
+                ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater
+            ) {
+                push_grounding_inspection_blocker(
+                    &mut blockers,
+                    "write_eligibility_blocked",
+                    "Grounded-answer build intent is blocked until grounded-answer write eligibility is available.",
+                );
+            }
+            if !explicit_user_intent {
+                push_grounding_inspection_blocker(
+                    &mut blockers,
+                    "explicit_user_intent_missing",
+                    "Explicit user intent was not provided.",
+                );
+            }
+            if !answer_draft_id_present {
+                push_grounding_inspection_blocker(
+                    &mut blockers,
+                    "answer_draft_id_missing",
+                    "No answer draft ID was provided.",
+                );
+            }
+        }
+        ScholarChatGroundedAnswerBuildIntentStatus::NeedsReview => {
+            push_grounding_inspection_warning(
+                &mut warnings,
+                "needs_review",
+                "Weakly supported or unsupported draft items remain and need review before a future GroundedAnswer build intent is added.",
+            );
+        }
+        ScholarChatGroundedAnswerBuildIntentStatus::IntentReadyLater => {
+            push_grounding_inspection_warning(
+                &mut warnings,
+                "intent_ready_later",
+                "All inputs are present. This is still only a grounded-answer build-intent preview.",
+            );
+        }
+    }
+
+    let summary = grounded_answer_build_intent_summary(
+        &status,
+        &write_eligibility_preview,
+        explicit_user_intent,
+        answer_draft_id_present,
+    );
+    let required_inputs = grounded_answer_build_intent_required_inputs();
+    let missing_inputs = grounded_answer_build_intent_missing_inputs(
+        &write_eligibility_preview,
+        explicit_user_intent,
+        answer_draft_id_present,
+    );
+    let intent_reasons = grounded_answer_build_intent_reasons(
+        &status,
+        &write_eligibility_preview,
+        explicit_user_intent,
+        answer_draft_id_present,
+    );
+    let next_required_actions = grounded_answer_build_intent_next_required_actions(
+        &status,
+        &write_eligibility_preview,
+        explicit_user_intent,
+        answer_draft_id_present,
+    );
+
+    ScholarChatGroundedAnswerBuildIntentPreview {
+        status,
+        write_eligibility_status: write_eligibility_preview.status,
+        candidate_status: write_eligibility_preview.candidate_status,
+        normalized_prompt,
+        selected_source_count: write_eligibility_preview.selected_source_count,
+        evidence_candidate_count: write_eligibility_preview.evidence_candidate_count,
+        inspected_item_count: write_eligibility_preview.inspected_item_count,
+        supported_item_count: write_eligibility_preview.supported_item_count,
+        weakly_supported_item_count: write_eligibility_preview.weakly_supported_item_count,
+        unsupported_item_count: write_eligibility_preview.unsupported_item_count,
+        candidate_statement_count: write_eligibility_preview.candidate_statement_count,
+        required_inputs,
+        missing_inputs,
+        intent_reasons,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        not_answer_draft: true,
+        not_grounded_answer: true,
+        not_final_answer: true,
+        no_answer_artifact_created: true,
+        no_evidence_pack_built: true,
+        no_persistence: true,
+        no_llm_call: true,
+        no_runtime_execution: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+        no_grounded_answer_service_call: true,
+    }
 }
 
 fn push_grounding_inspection_warning(
@@ -2801,6 +3185,16 @@ fn validate_source_id(source_id: &str) -> AegisResult<()> {
     Ok(())
 }
 
+fn validate_answer_draft_id(answer_draft_id: &str) -> AegisResult<()> {
+    if answer_draft_id.trim().is_empty() {
+        return Err(AegisError::AnswerDraftInvalidId);
+    }
+    if answer_draft_id.contains('/') || answer_draft_id.contains('\\') || answer_draft_id.contains("..") {
+        return Err(AegisError::AnswerDraftInvalidId);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2830,6 +3224,20 @@ mod tests {
             },
             draft_text: draft_text.map(|value| value.to_string()),
             max_items: Some(4),
+        }
+    }
+
+    fn build_intent_request(
+        prompt: &str,
+        draft_text: Option<&str>,
+        selected_source_ids: Vec<String>,
+        answer_draft_id: Option<&str>,
+        explicit_user_intent: bool,
+    ) -> ScholarChatGroundedAnswerBuildIntentRequest {
+        ScholarChatGroundedAnswerBuildIntentRequest {
+            grounding_request: grounding_request(prompt, draft_text, selected_source_ids),
+            answer_draft_id: answer_draft_id.map(|value| value.to_string()),
+            explicit_user_intent,
         }
     }
 
@@ -3196,6 +3604,23 @@ fn main() {
         assert!(preview.no_audit_write);
     }
 
+    fn assert_grounded_answer_build_intent_boundary_fields(
+        preview: &ScholarChatGroundedAnswerBuildIntentPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.not_answer_draft);
+        assert!(preview.not_grounded_answer);
+        assert!(preview.not_final_answer);
+        assert!(preview.no_answer_artifact_created);
+        assert!(preview.no_evidence_pack_built);
+        assert!(preview.no_persistence);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_runtime_execution);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+        assert!(preview.no_grounded_answer_service_call);
+    }
+
     fn assert_grounded_answer_build_plan_deterministic_and_path_free(
         temp: &tempfile::TempDir,
         request: ScholarChatDraftGroundingInspectionRequest,
@@ -3255,6 +3680,27 @@ fn main() {
             assert!(!debug.contains(temp_path.as_ref()));
             assert!(!json.contains(temp_path.as_ref()));
             assert_grounded_answer_write_eligibility_boundary_fields(preview);
+        }
+        first
+    }
+
+    fn assert_grounded_answer_build_intent_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatGroundedAnswerBuildIntentRequest,
+    ) -> ScholarChatGroundedAnswerBuildIntentPreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let first = preview_scholar_chat_grounded_answer_build_intent(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_grounded_answer_build_intent(temp.path(), request).unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_grounded_answer_build_intent_boundary_fields(preview);
         }
         first
     }
@@ -4917,6 +5363,233 @@ fn main() {
             assert_eq!(candidate_item.source_ids, inspection_item.source_ids);
             assert_eq!(candidate_item.locator_previews, inspection_item.locator_previews);
         }
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_intent_rejects_empty_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_grounded_answer_build_intent(
+            temp.path(),
+            build_intent_request(
+                "   ",
+                Some("Alpha beta."),
+                vec!["src_demo".to_string()],
+                Some("draft-1"),
+                true,
+            ),
+        );
+        assert!(matches!(result, Err(AegisError::ScholarChatPromptEmpty)));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_intent_rejects_invalid_answer_draft_ids_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["..", "../evil", "evil/draft", "evil\\draft"] {
+            let result = preview_scholar_chat_grounded_answer_build_intent(
+                temp.path(),
+                build_intent_request(
+                    "alpha grounded evidence",
+                    Some("Alpha beta."),
+                    vec!["src_demo".to_string()],
+                    Some(invalid),
+                    true,
+                ),
+            );
+            assert!(matches!(result, Err(AegisError::AnswerDraftInvalidId)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_intent_blocks_without_draft_text() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = assert_grounded_answer_build_intent_deterministic_and_path_free(
+            &temp,
+            build_intent_request(
+                "alpha grounded evidence",
+                Some("   "),
+                vec![source_id],
+                Some("draft-1"),
+                true,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerBuildIntentStatus::Blocked);
+        assert_eq!(result.write_eligibility_status, ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::Blocked);
+        assert!(result.missing_inputs.contains(&"write_eligible_later".to_string()));
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "write_eligibility_blocked"));
+        assert_grounded_answer_build_intent_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_intent_blocks_without_selected_sources() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_grounded_answer_build_intent_deterministic_and_path_free(
+            &temp,
+            build_intent_request(
+                "alpha grounded evidence",
+                Some("Alpha beta."),
+                vec![],
+                Some("draft-1"),
+                true,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerBuildIntentStatus::Blocked);
+        assert_eq!(result.write_eligibility_status, ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::Blocked);
+        assert!(result.missing_inputs.contains(&"write_eligible_later".to_string()));
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "write_eligibility_blocked"));
+        assert_grounded_answer_build_intent_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_intent_needs_review_when_candidate_needs_review() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = assert_grounded_answer_build_intent_deterministic_and_path_free(
+            &temp,
+            build_intent_request(
+                "alpha grounded evidence",
+                Some("The alpha."),
+                vec![source_id],
+                Some("draft-1"),
+                true,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerBuildIntentStatus::NeedsReview);
+        assert_eq!(result.write_eligibility_status, ScholarChatGroundedAnswerWriteEligibilityStatus::NeedsReview);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::NeedsReview);
+        assert_eq!(result.selected_source_count, 1);
+        assert_eq!(result.evidence_candidate_count, 1);
+        assert_eq!(result.inspected_item_count, 1);
+        assert_eq!(result.supported_item_count, 0);
+        assert_eq!(result.weakly_supported_item_count, 1);
+        assert_eq!(result.unsupported_item_count, 0);
+        assert_eq!(result.candidate_statement_count, 0);
+        assert!(result
+            .intent_reasons
+            .iter()
+            .any(|reason| reason.contains("Weakly supported or unsupported draft items remain.")));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.kind == "needs_review"));
+        assert_grounded_answer_build_intent_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_intent_blocks_without_explicit_user_intent() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = assert_grounded_answer_build_intent_deterministic_and_path_free(
+            &temp,
+            build_intent_request(
+                "alpha grounded evidence",
+                Some("Alpha beta. Alpha beta gamma."),
+                vec![source_id],
+                Some("draft-1"),
+                false,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerBuildIntentStatus::Blocked);
+        assert_eq!(result.write_eligibility_status, ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::CandidateReadyLater);
+        assert!(result.required_inputs.contains(&"explicit_user_intent".to_string()));
+        assert!(result.missing_inputs.contains(&"explicit_user_intent".to_string()));
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "explicit_user_intent_missing"));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("Provide explicit user intent before any GroundedAnswer service call.")));
+        assert_grounded_answer_build_intent_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_intent_blocks_without_answer_draft_id() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = assert_grounded_answer_build_intent_deterministic_and_path_free(
+            &temp,
+            build_intent_request(
+                "alpha grounded evidence",
+                Some("Alpha beta. Alpha beta gamma."),
+                vec![source_id],
+                None,
+                true,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerBuildIntentStatus::Blocked);
+        assert_eq!(result.write_eligibility_status, ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::CandidateReadyLater);
+        assert!(result.required_inputs.contains(&"answer_draft_id".to_string()));
+        assert!(result.missing_inputs.contains(&"answer_draft_id".to_string()));
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "answer_draft_id_missing"));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("Provide an answer draft ID before any GroundedAnswer service call.")));
+        assert_grounded_answer_build_intent_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_intent_is_ready_only_when_all_inputs_present() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let request = build_intent_request(
+            "alpha grounded evidence",
+            Some("Alpha beta. Alpha beta gamma."),
+            vec![source_id.clone()],
+            Some("draft-1"),
+            true,
+        );
+        let build_intent_preview = assert_grounded_answer_build_intent_deterministic_and_path_free(&temp, request.clone());
+        let write_eligibility_preview = assert_grounded_answer_write_eligibility_deterministic_and_path_free(&temp, request.grounding_request);
+        assert_eq!(build_intent_preview.status, ScholarChatGroundedAnswerBuildIntentStatus::IntentReadyLater);
+        assert_eq!(build_intent_preview.write_eligibility_status, ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater);
+        assert_eq!(build_intent_preview.candidate_status, ScholarChatGroundedAnswerCandidateStatus::CandidateReadyLater);
+        assert_eq!(build_intent_preview.selected_source_count, write_eligibility_preview.selected_source_count);
+        assert_eq!(build_intent_preview.evidence_candidate_count, write_eligibility_preview.evidence_candidate_count);
+        assert_eq!(build_intent_preview.inspected_item_count, write_eligibility_preview.inspected_item_count);
+        assert_eq!(build_intent_preview.supported_item_count, write_eligibility_preview.supported_item_count);
+        assert_eq!(build_intent_preview.weakly_supported_item_count, write_eligibility_preview.weakly_supported_item_count);
+        assert_eq!(build_intent_preview.unsupported_item_count, write_eligibility_preview.unsupported_item_count);
+        assert_eq!(build_intent_preview.candidate_statement_count, write_eligibility_preview.candidate_statement_count);
+        assert_eq!(
+            build_intent_preview.required_inputs,
+            vec![
+                "write_eligible_later".to_string(),
+                "explicit_user_intent".to_string(),
+                "answer_draft_id".to_string(),
+            ]
+        );
+        assert!(build_intent_preview.missing_inputs.is_empty());
+        assert!(build_intent_preview
+            .intent_reasons
+            .iter()
+            .any(|reason| reason.contains("All inspected items were supported by local evidence")));
+        assert!(build_intent_preview
+            .warnings
+            .iter()
+            .any(|warning| warning.kind == "intent_ready_later"));
+        assert!(build_intent_preview
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("A future user-confirmed GroundedAnswer service call can be added later without changing this preview.")));
+        assert_grounded_answer_build_intent_boundary_fields(&build_intent_preview);
     }
 
     #[test]
