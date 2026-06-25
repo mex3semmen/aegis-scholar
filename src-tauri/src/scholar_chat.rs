@@ -608,6 +608,56 @@ pub struct ScholarChatGroundedAnswerBuildIntentPreview {
     pub no_grounded_answer_service_call: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatGroundedAnswerBuildRequestStatus {
+    Blocked,
+    NeedsReview,
+    RequestReadyLater,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatGroundedAnswerBuildRequestPreviewRequest {
+    pub build_intent_request: ScholarChatGroundedAnswerBuildIntentRequest,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatGroundedAnswerBuildRequestPreview {
+    pub status: ScholarChatGroundedAnswerBuildRequestStatus,
+    pub build_intent_status: ScholarChatGroundedAnswerBuildIntentStatus,
+    pub write_eligibility_status: ScholarChatGroundedAnswerWriteEligibilityStatus,
+    pub candidate_status: ScholarChatGroundedAnswerCandidateStatus,
+    pub normalized_prompt: String,
+    pub selected_source_count: usize,
+    pub evidence_candidate_count: usize,
+    pub inspected_item_count: usize,
+    pub supported_item_count: usize,
+    pub weakly_supported_item_count: usize,
+    pub unsupported_item_count: usize,
+    pub candidate_statement_count: usize,
+    pub answer_draft_id: Option<String>,
+    pub selected_source_ids: Vec<String>,
+    pub required_inputs: Vec<String>,
+    pub missing_inputs: Vec<String>,
+    pub request_reasons: Vec<String>,
+    pub blockers: Vec<ScholarChatDraftGroundingInspectionBlocker>,
+    pub warnings: Vec<ScholarChatDraftGroundingInspectionWarning>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub not_answer_draft: bool,
+    pub not_grounded_answer: bool,
+    pub not_final_answer: bool,
+    pub no_answer_artifact_created: bool,
+    pub no_evidence_pack_built: bool,
+    pub no_persistence: bool,
+    pub no_llm_call: bool,
+    pub no_runtime_execution: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+    pub no_grounded_answer_service_call: bool,
+}
+
 enum ScholarChatPreviewKind {
     Request,
     Retrieval,
@@ -2131,6 +2181,61 @@ pub fn preview_scholar_chat_grounded_answer_build_intent(
     ))
 }
 
+pub fn preview_scholar_chat_grounded_answer_build_request(
+    root: impl Into<PathBuf>,
+    request: ScholarChatGroundedAnswerBuildRequestPreviewRequest,
+) -> AegisResult<ScholarChatGroundedAnswerBuildRequestPreview> {
+    let root = root.into();
+    let normalized_prompt = normalized_prompt_or_err(
+        request
+            .build_intent_request
+            .grounding_request
+            .scholar_chat_request
+            .prompt
+            .clone(),
+    )?;
+    let normalized_answer_draft_id =
+        normalize_optional_answer_draft_id(request.build_intent_request.answer_draft_id.clone())?;
+    let (normalized_selected_source_ids, _selected_source_count) = normalize_selected_source_ids(
+        request
+            .build_intent_request
+            .grounding_request
+            .scholar_chat_request
+            .selected_source_ids
+            .clone(),
+    )?;
+    let normalized_build_intent_request = ScholarChatGroundedAnswerBuildIntentRequest {
+        grounding_request: ScholarChatDraftGroundingInspectionRequest {
+            scholar_chat_request: ScholarChatRequest {
+                prompt: normalized_prompt.clone(),
+                mode: request
+                    .build_intent_request
+                    .grounding_request
+                    .scholar_chat_request
+                    .mode,
+                grounding_policy: request
+                    .build_intent_request
+                    .grounding_request
+                    .scholar_chat_request
+                    .grounding_policy,
+                selected_source_ids: normalized_selected_source_ids.clone(),
+            },
+            draft_text: request.build_intent_request.grounding_request.draft_text.clone(),
+            max_items: request.build_intent_request.grounding_request.max_items,
+        },
+        answer_draft_id: normalized_answer_draft_id.clone(),
+        explicit_user_intent: request.build_intent_request.explicit_user_intent,
+    };
+    let build_intent_preview =
+        preview_scholar_chat_grounded_answer_build_intent(&root, normalized_build_intent_request)?;
+    Ok(grounded_answer_build_request_preview_from_build_intent_preview(
+        build_intent_preview,
+        normalized_prompt,
+        normalized_answer_draft_id,
+        normalized_selected_source_ids,
+    ))
+}
+
 fn normalize_optional_draft_text(draft_text: Option<String>) -> Option<String> {
     draft_text
         .map(|text| text.trim().to_string())
@@ -2436,6 +2541,262 @@ fn grounded_answer_build_intent_preview_from_write_eligibility_preview(
         required_inputs,
         missing_inputs,
         intent_reasons,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        not_answer_draft: true,
+        not_grounded_answer: true,
+        not_final_answer: true,
+        no_answer_artifact_created: true,
+        no_evidence_pack_built: true,
+        no_persistence: true,
+        no_llm_call: true,
+        no_runtime_execution: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+        no_grounded_answer_service_call: true,
+    }
+}
+
+fn grounded_answer_build_request_status(
+    build_intent_preview: &ScholarChatGroundedAnswerBuildIntentPreview,
+) -> ScholarChatGroundedAnswerBuildRequestStatus {
+    match build_intent_preview.status {
+        ScholarChatGroundedAnswerBuildIntentStatus::Blocked => ScholarChatGroundedAnswerBuildRequestStatus::Blocked,
+        ScholarChatGroundedAnswerBuildIntentStatus::NeedsReview => {
+            ScholarChatGroundedAnswerBuildRequestStatus::NeedsReview
+        }
+        ScholarChatGroundedAnswerBuildIntentStatus::IntentReadyLater => {
+            ScholarChatGroundedAnswerBuildRequestStatus::RequestReadyLater
+        }
+    }
+}
+
+fn grounded_answer_build_request_required_inputs() -> Vec<String> {
+    vec![
+        "build_intent_ready_later".to_string(),
+        "answer_draft_id".to_string(),
+        "selected_source_ids".to_string(),
+    ]
+}
+
+fn grounded_answer_build_request_missing_inputs(
+    build_intent_preview: &ScholarChatGroundedAnswerBuildIntentPreview,
+    answer_draft_id: &Option<String>,
+    selected_source_ids: &[String],
+) -> Vec<String> {
+    let mut missing_inputs = Vec::new();
+    if !matches!(
+        build_intent_preview.status,
+        ScholarChatGroundedAnswerBuildIntentStatus::IntentReadyLater
+    ) {
+        missing_inputs.push("build_intent_ready_later".to_string());
+    }
+    if answer_draft_id.is_none() {
+        missing_inputs.push("answer_draft_id".to_string());
+    }
+    if selected_source_ids.is_empty() {
+        missing_inputs.push("selected_source_ids".to_string());
+    }
+    missing_inputs
+}
+
+fn grounded_answer_build_request_summary(
+    status: &ScholarChatGroundedAnswerBuildRequestStatus,
+    build_intent_preview: &ScholarChatGroundedAnswerBuildIntentPreview,
+    answer_draft_id: &Option<String>,
+    selected_source_ids: &[String],
+) -> String {
+    let answer_draft_id_summary = if answer_draft_id.is_some() { "present" } else { "missing" };
+    let selected_source_summary = if selected_source_ids.is_empty() {
+        "no selected source IDs"
+    } else {
+        "selected source IDs are normalized and ready"
+    };
+    match status {
+        ScholarChatGroundedAnswerBuildRequestStatus::Blocked => format!(
+            "Grounded-answer build request is blocked because the build intent is {:?}; answer draft ID is {}; {}.",
+            build_intent_preview.status,
+            answer_draft_id_summary,
+            selected_source_summary,
+        ),
+        ScholarChatGroundedAnswerBuildRequestStatus::NeedsReview => format!(
+            "Grounded-answer build request still needs review because the build intent is {:?}; answer draft ID is {}; {}.",
+            build_intent_preview.status,
+            answer_draft_id_summary,
+            selected_source_summary,
+        ),
+        ScholarChatGroundedAnswerBuildRequestStatus::RequestReadyLater => {
+            "The grounded-answer build request is normalized and ready later for a future GroundedAnswer service call."
+                .to_string()
+        }
+    }
+}
+
+fn grounded_answer_build_request_reasons(
+    build_intent_preview: &ScholarChatGroundedAnswerBuildIntentPreview,
+    answer_draft_id: &Option<String>,
+    selected_source_ids: &[String],
+) -> Vec<String> {
+    let mut request_reasons = vec![
+        format!("Build intent status: {:?}", build_intent_preview.status),
+        format!("Write eligibility status: {:?}", build_intent_preview.write_eligibility_status),
+        format!("Candidate status: {:?}", build_intent_preview.candidate_status),
+        format!("Answer draft ID provided: {}", answer_draft_id.is_some()),
+        format!("Selected source count: {}", selected_source_ids.len()),
+    ];
+    match build_intent_preview.status {
+        ScholarChatGroundedAnswerBuildIntentStatus::Blocked => {
+            request_reasons.push("Grounded-answer build intent must be ready later before a request can be accepted.".to_string());
+        }
+        ScholarChatGroundedAnswerBuildIntentStatus::NeedsReview => {
+            request_reasons.push(
+                "Weakly supported or unsupported draft items remain and need review before a future GroundedAnswer service call."
+                    .to_string(),
+            );
+        }
+        ScholarChatGroundedAnswerBuildIntentStatus::IntentReadyLater => {
+            request_reasons.push(
+                "The request fields are normalized and ready later for a future GroundedAnswer service call.".to_string(),
+            );
+        }
+    }
+    request_reasons
+}
+
+fn grounded_answer_build_request_next_required_actions(
+    status: &ScholarChatGroundedAnswerBuildRequestStatus,
+    build_intent_preview: &ScholarChatGroundedAnswerBuildIntentPreview,
+    answer_draft_id: &Option<String>,
+    selected_source_ids: &[String],
+) -> Vec<String> {
+    let mut next_required_actions = build_intent_preview.next_required_actions.clone();
+    match status {
+        ScholarChatGroundedAnswerBuildRequestStatus::Blocked => {
+            if !matches!(
+                build_intent_preview.status,
+                ScholarChatGroundedAnswerBuildIntentStatus::IntentReadyLater
+            ) {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Resolve grounded-answer build-intent blockers before any GroundedAnswer service call.",
+                );
+            }
+            if answer_draft_id.is_none() {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Provide an answer draft ID before any GroundedAnswer service call.",
+                );
+            }
+            if selected_source_ids.is_empty() {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Select at least one source ID before any GroundedAnswer service call.",
+                );
+            }
+        }
+        ScholarChatGroundedAnswerBuildRequestStatus::NeedsReview => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Review the normalized request fields before any GroundedAnswer service call.",
+            );
+        }
+        ScholarChatGroundedAnswerBuildRequestStatus::RequestReadyLater => {
+            push_unique_text(
+                &mut next_required_actions,
+                "A future user-confirmed GroundedAnswer service call can be added later using the normalized request fields.",
+            );
+        }
+    }
+    next_required_actions
+}
+
+fn grounded_answer_build_request_preview_from_build_intent_preview(
+    build_intent_preview: ScholarChatGroundedAnswerBuildIntentPreview,
+    normalized_prompt: String,
+    normalized_answer_draft_id: Option<String>,
+    normalized_selected_source_ids: Vec<String>,
+) -> ScholarChatGroundedAnswerBuildRequestPreview {
+    let status = grounded_answer_build_request_status(&build_intent_preview);
+    let mut blockers = build_intent_preview.blockers.clone();
+    let mut warnings = build_intent_preview.warnings.clone();
+
+    push_grounding_inspection_warning(
+        &mut warnings,
+        "boundary",
+        "This is a grounded-answer build-request preview only; it is not an AnswerDraft, GroundedAnswer, FinalAnswer, Evidence Pack, or persisted artifact.",
+    );
+
+    match status {
+        ScholarChatGroundedAnswerBuildRequestStatus::Blocked => {
+            push_grounding_inspection_blocker(
+                &mut blockers,
+                "build_request_blocked",
+                "Grounded-answer build request is blocked until the build intent is ready later.",
+            );
+        }
+        ScholarChatGroundedAnswerBuildRequestStatus::NeedsReview => {
+            push_grounding_inspection_warning(
+                &mut warnings,
+                "request_needs_review",
+                "The normalized grounded-answer build request still needs review before any GroundedAnswer service call.",
+            );
+        }
+        ScholarChatGroundedAnswerBuildRequestStatus::RequestReadyLater => {
+            push_grounding_inspection_warning(
+                &mut warnings,
+                "request_ready_later",
+                "The normalized grounded-answer build request is ready later for a future GroundedAnswer service call.",
+            );
+        }
+    }
+
+    let answer_draft_id = normalized_answer_draft_id;
+    let selected_source_count = normalized_selected_source_ids.len();
+    let required_inputs = grounded_answer_build_request_required_inputs();
+    let missing_inputs = grounded_answer_build_request_missing_inputs(
+        &build_intent_preview,
+        &answer_draft_id,
+        &normalized_selected_source_ids,
+    );
+    let request_reasons = grounded_answer_build_request_reasons(
+        &build_intent_preview,
+        &answer_draft_id,
+        &normalized_selected_source_ids,
+    );
+    let next_required_actions = grounded_answer_build_request_next_required_actions(
+        &status,
+        &build_intent_preview,
+        &answer_draft_id,
+        &normalized_selected_source_ids,
+    );
+    let summary = grounded_answer_build_request_summary(
+        &status,
+        &build_intent_preview,
+        &answer_draft_id,
+        &normalized_selected_source_ids,
+    );
+
+    ScholarChatGroundedAnswerBuildRequestPreview {
+        status,
+        build_intent_status: build_intent_preview.status,
+        write_eligibility_status: build_intent_preview.write_eligibility_status,
+        candidate_status: build_intent_preview.candidate_status,
+        normalized_prompt,
+        selected_source_count,
+        evidence_candidate_count: build_intent_preview.evidence_candidate_count,
+        inspected_item_count: build_intent_preview.inspected_item_count,
+        supported_item_count: build_intent_preview.supported_item_count,
+        weakly_supported_item_count: build_intent_preview.weakly_supported_item_count,
+        unsupported_item_count: build_intent_preview.unsupported_item_count,
+        candidate_statement_count: build_intent_preview.candidate_statement_count,
+        answer_draft_id,
+        selected_source_ids: normalized_selected_source_ids,
+        required_inputs,
+        missing_inputs,
+        request_reasons,
         blockers,
         warnings,
         next_required_actions,
@@ -3241,6 +3602,24 @@ mod tests {
         }
     }
 
+    fn build_request_request(
+        prompt: &str,
+        draft_text: Option<&str>,
+        selected_source_ids: Vec<String>,
+        answer_draft_id: Option<&str>,
+        explicit_user_intent: bool,
+    ) -> ScholarChatGroundedAnswerBuildRequestPreviewRequest {
+        ScholarChatGroundedAnswerBuildRequestPreviewRequest {
+            build_intent_request: build_intent_request(
+                prompt,
+                draft_text,
+                selected_source_ids,
+                answer_draft_id,
+                explicit_user_intent,
+            ),
+        }
+    }
+
     #[test]
     fn scholar_chat_preview_rejects_empty_prompt() {
         let temp = tempfile::tempdir().unwrap();
@@ -3621,6 +4000,23 @@ fn main() {
         assert!(preview.no_grounded_answer_service_call);
     }
 
+    fn assert_grounded_answer_build_request_boundary_fields(
+        preview: &ScholarChatGroundedAnswerBuildRequestPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.not_answer_draft);
+        assert!(preview.not_grounded_answer);
+        assert!(preview.not_final_answer);
+        assert!(preview.no_answer_artifact_created);
+        assert!(preview.no_evidence_pack_built);
+        assert!(preview.no_persistence);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_runtime_execution);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+        assert!(preview.no_grounded_answer_service_call);
+    }
+
     fn assert_grounded_answer_build_plan_deterministic_and_path_free(
         temp: &tempfile::TempDir,
         request: ScholarChatDraftGroundingInspectionRequest,
@@ -3701,6 +4097,27 @@ fn main() {
             assert!(!debug.contains(temp_path.as_ref()));
             assert!(!json.contains(temp_path.as_ref()));
             assert_grounded_answer_build_intent_boundary_fields(preview);
+        }
+        first
+    }
+
+    fn assert_grounded_answer_build_request_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatGroundedAnswerBuildRequestPreviewRequest,
+    ) -> ScholarChatGroundedAnswerBuildRequestPreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let first = preview_scholar_chat_grounded_answer_build_request(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_grounded_answer_build_request(temp.path(), request).unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_grounded_answer_build_request_boundary_fields(preview);
         }
         first
     }
@@ -4424,7 +4841,11 @@ fn main() {
         let first = preview_scholar_chat_draft_inference(temp.path(), request.clone()).unwrap();
         let second = preview_scholar_chat_draft_inference(temp.path(), request).unwrap();
         let after_entries = fs::read_dir(temp.path()).unwrap().count();
-        assert_eq!(first, second);
+        let mut first_sanitized = first.clone();
+        let mut second_sanitized = second.clone();
+        first_sanitized.duration_ms = 0;
+        second_sanitized.duration_ms = 0;
+        assert_eq!(first_sanitized, second_sanitized);
         assert_eq!(first.status, ScholarChatDraftInferenceStatus::InferenceSucceeded);
         assert_eq!(first.output_classification, ScholarChatDraftOutputClassification::UngroundedModelDraft);
         assert_eq!(first.normalized_prompt, "Explain alpha");
@@ -5616,6 +6037,153 @@ fn main() {
             .iter()
             .any(|action| action.contains("A future user-confirmed GroundedAnswer service call can be added later without changing this preview.")));
         assert_grounded_answer_build_intent_boundary_fields(&build_intent_preview);
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_request_rejects_empty_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_grounded_answer_build_request(
+            temp.path(),
+            build_request_request(
+                "   ",
+                Some("Alpha beta."),
+                vec!["src_demo".to_string()],
+                Some("draft-1"),
+                true,
+            ),
+        );
+        assert!(matches!(result, Err(AegisError::ScholarChatPromptEmpty)));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_request_rejects_invalid_answer_draft_ids_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["..", "../evil", "evil/draft", "evil\\draft"] {
+            let result = preview_scholar_chat_grounded_answer_build_request(
+                temp.path(),
+                build_request_request(
+                    "alpha grounded evidence",
+                    Some("Alpha beta."),
+                    vec!["src_demo".to_string()],
+                    Some(invalid),
+                    true,
+                ),
+            );
+            assert!(matches!(result, Err(AegisError::AnswerDraftInvalidId)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_request_blocks_without_selected_sources() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_grounded_answer_build_request_deterministic_and_path_free(
+            &temp,
+            build_request_request(
+                "alpha grounded evidence",
+                Some("Alpha beta. Alpha beta gamma."),
+                vec![],
+                Some("draft-1"),
+                true,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerBuildRequestStatus::Blocked);
+        assert_eq!(result.build_intent_status, ScholarChatGroundedAnswerBuildIntentStatus::Blocked);
+        assert_eq!(result.write_eligibility_status, ScholarChatGroundedAnswerWriteEligibilityStatus::Blocked);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::Blocked);
+        assert!(result.required_inputs.contains(&"selected_source_ids".to_string()));
+        assert!(result.missing_inputs.contains(&"selected_source_ids".to_string()));
+        assert_grounded_answer_build_request_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_request_treats_whitespace_answer_draft_id_as_missing_input() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = assert_grounded_answer_build_request_deterministic_and_path_free(
+            &temp,
+            build_request_request(
+                "alpha grounded evidence",
+                Some("Alpha beta. Alpha beta gamma."),
+                vec![source_id],
+                Some("   "),
+                true,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerBuildRequestStatus::Blocked);
+        assert_eq!(result.build_intent_status, ScholarChatGroundedAnswerBuildIntentStatus::Blocked);
+        assert_eq!(result.write_eligibility_status, ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::CandidateReadyLater);
+        assert!(result.required_inputs.contains(&"answer_draft_id".to_string()));
+        assert!(result.missing_inputs.contains(&"answer_draft_id".to_string()));
+        assert!(result.answer_draft_id.is_none());
+        assert_grounded_answer_build_request_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_request_needs_review_when_build_intent_needs_review() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = assert_grounded_answer_build_request_deterministic_and_path_free(
+            &temp,
+            build_request_request(
+                "alpha grounded evidence",
+                Some("The alpha."),
+                vec![source_id],
+                Some("draft-1"),
+                true,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerBuildRequestStatus::NeedsReview);
+        assert_eq!(result.build_intent_status, ScholarChatGroundedAnswerBuildIntentStatus::NeedsReview);
+        assert_eq!(result.write_eligibility_status, ScholarChatGroundedAnswerWriteEligibilityStatus::NeedsReview);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::NeedsReview);
+        assert_eq!(result.candidate_statement_count, 0);
+        assert!(result
+            .request_reasons
+            .iter()
+            .any(|reason| reason.contains("Weakly supported or unsupported draft items remain")));
+        assert_grounded_answer_build_request_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_grounded_answer_build_request_is_ready_only_when_build_intent_is_ready_later() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_a = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let source_b = build_source_with_index(&temp, "alpha beta gamma\nalpha beta epsilon\n");
+        let request = build_request_request(
+            "alpha grounded evidence",
+            Some("Alpha beta. Alpha beta gamma."),
+            vec![format!("  {source_b}  "), format!("  {source_a}  ")],
+            Some("  draft-1  "),
+            true,
+        );
+        let first = assert_grounded_answer_build_request_deterministic_and_path_free(&temp, request.clone());
+        let build_intent_preview = preview_scholar_chat_grounded_answer_build_intent(
+            temp.path(),
+            request.build_intent_request.clone(),
+        )
+        .unwrap();
+        assert_eq!(first.status, ScholarChatGroundedAnswerBuildRequestStatus::RequestReadyLater);
+        assert_eq!(first.build_intent_status, ScholarChatGroundedAnswerBuildIntentStatus::IntentReadyLater);
+        assert_eq!(first.write_eligibility_status, ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater);
+        assert_eq!(first.candidate_status, ScholarChatGroundedAnswerCandidateStatus::CandidateReadyLater);
+        assert_eq!(first.selected_source_count, 2);
+        assert_eq!(first.selected_source_ids, vec![source_b.clone(), source_a.clone()]);
+        assert_eq!(first.answer_draft_id.as_deref(), Some("draft-1"));
+        assert_eq!(first.selected_source_count, build_intent_preview.selected_source_count);
+        assert_eq!(first.evidence_candidate_count, build_intent_preview.evidence_candidate_count);
+        assert_eq!(first.inspected_item_count, build_intent_preview.inspected_item_count);
+        assert_eq!(first.supported_item_count, build_intent_preview.supported_item_count);
+        assert_eq!(first.weakly_supported_item_count, build_intent_preview.weakly_supported_item_count);
+        assert_eq!(first.unsupported_item_count, build_intent_preview.unsupported_item_count);
+        assert_eq!(first.candidate_statement_count, build_intent_preview.candidate_statement_count);
+        assert!(first
+            .request_reasons
+            .iter()
+            .any(|reason| reason.contains("ready later for a future GroundedAnswer service call")));
+        assert_grounded_answer_build_request_boundary_fields(&first);
     }
 
     #[test]
