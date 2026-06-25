@@ -44,6 +44,7 @@ use scholar_chat::{
     preview_scholar_chat_draft_grounding_inspection as preview_scholar_chat_draft_grounding_inspection_impl,
     preview_scholar_chat_grounded_answer_build_plan as preview_scholar_chat_grounded_answer_build_plan_impl,
     preview_scholar_chat_grounded_answer_candidate as preview_scholar_chat_grounded_answer_candidate_impl,
+    preview_scholar_chat_grounded_answer_write_eligibility as preview_scholar_chat_grounded_answer_write_eligibility_impl,
     preview_scholar_chat_request as preview_scholar_chat_request_impl,
     preview_scholar_chat_evidence_plan as preview_scholar_chat_evidence_plan_impl,
     preview_scholar_chat_prompt_pack as preview_scholar_chat_prompt_pack_impl,
@@ -57,6 +58,7 @@ use scholar_chat::{
     ScholarChatDraftGroundingInspectionRequest,
     ScholarChatGroundedAnswerBuildPlanPreview,
     ScholarChatGroundedAnswerCandidatePreview,
+    ScholarChatGroundedAnswerWriteEligibilityPreview,
     ScholarChatGroundedDraftReadinessPreview,
     ScholarChatRequest,
     ScholarChatEvidencePlanResponse,
@@ -333,6 +335,15 @@ fn preview_scholar_chat_grounded_answer_candidate(
 }
 
 #[tauri::command]
+fn preview_scholar_chat_grounded_answer_write_eligibility(
+    root: String,
+    request: ScholarChatDraftGroundingInspectionRequest,
+) -> Result<ScholarChatGroundedAnswerWriteEligibilityPreview, String> {
+    preview_scholar_chat_grounded_answer_write_eligibility_impl(root, request)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
 fn preview_scholar_chat_retrieval(root: String, request: ScholarChatRequest) -> Result<ScholarChatRetrievalPreviewResponse, String> {
     preview_scholar_chat_retrieval_impl(root, request)
         .map_err(to_user_error)
@@ -420,6 +431,7 @@ pub fn run() {
             preview_scholar_chat_grounded_draft_readiness,
             preview_scholar_chat_grounded_answer_build_plan,
             preview_scholar_chat_grounded_answer_candidate,
+            preview_scholar_chat_grounded_answer_write_eligibility,
             preview_scholar_chat_retrieval,
             preview_scholar_chat_evidence_plan,
             preview_scholar_chat_prompt_pack,
