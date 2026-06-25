@@ -416,6 +416,46 @@ type ScholarChatGroundedAnswerBuildPlanPreview = {
   next_required_actions: string[];
 };
 
+type ScholarChatGroundedAnswerCandidateStatus =
+  | "blocked"
+  | "needs_review"
+  | "candidate_ready_later";
+
+type ScholarChatGroundedAnswerCandidateItem = {
+  item_index: number;
+  statement_preview: string;
+  support_status: ScholarChatDraftGroundingSupportStatus;
+  source_ids: string[];
+  locator_previews: string[];
+  matched_evidence_count: number;
+};
+
+type ScholarChatGroundedAnswerCandidatePreview = {
+  status: ScholarChatGroundedAnswerCandidateStatus;
+  normalized_prompt: string;
+  selected_source_count: number;
+  evidence_candidate_count: number;
+  inspected_item_count: number;
+  supported_item_count: number;
+  weakly_supported_item_count: number;
+  unsupported_item_count: number;
+  candidate_statement_count: number;
+  summary: string;
+  candidate_items: ScholarChatGroundedAnswerCandidateItem[];
+  preview_only: boolean;
+  not_answer_draft: boolean;
+  not_grounded_answer: boolean;
+  not_final_answer: boolean;
+  no_answer_artifact_created: boolean;
+  no_evidence_pack_built: boolean;
+  no_persistence: boolean;
+  no_llm_call: boolean;
+  no_runtime_execution: boolean;
+  blockers: ScholarChatDraftGroundingInspectionBlocker[];
+  warnings: ScholarChatDraftGroundingInspectionWarning[];
+  next_required_actions: string[];
+};
+
 type LocalModelRuntimeKind = "llama_cpp" | "none";
 
 type LocalModelRuntimeHealthStatus =
@@ -1022,6 +1062,11 @@ export default function App() {
   const [scholarChatGroundedAnswerBuildPlanValidationError, setScholarChatGroundedAnswerBuildPlanValidationError] = createSignal<string | null>(null);
   const [scholarChatGroundedAnswerBuildPlanLoading, setScholarChatGroundedAnswerBuildPlanLoading] = createSignal(false);
   const [scholarChatGroundedAnswerBuildPlanHasRun, setScholarChatGroundedAnswerBuildPlanHasRun] = createSignal(false);
+  const [scholarChatGroundedAnswerCandidatePreview, setScholarChatGroundedAnswerCandidatePreview] = createSignal<ScholarChatGroundedAnswerCandidatePreview | null>(null);
+  const [scholarChatGroundedAnswerCandidateError, setScholarChatGroundedAnswerCandidateError] = createSignal<string | null>(null);
+  const [scholarChatGroundedAnswerCandidateValidationError, setScholarChatGroundedAnswerCandidateValidationError] = createSignal<string | null>(null);
+  const [scholarChatGroundedAnswerCandidateLoading, setScholarChatGroundedAnswerCandidateLoading] = createSignal(false);
+  const [scholarChatGroundedAnswerCandidateHasRun, setScholarChatGroundedAnswerCandidateHasRun] = createSignal(false);
   const [localRuntimeKind, setLocalRuntimeKind] = createSignal<LocalModelRuntimeKind>("none");
   const [localRuntimeModelPath, setLocalRuntimeModelPath] = createSignal("");
   const [localRuntimeExecutablePath, setLocalRuntimeExecutablePath] = createSignal("");
@@ -1606,6 +1651,10 @@ export default function App() {
     setScholarChatGroundedAnswerBuildPlanError(null);
     setScholarChatGroundedAnswerBuildPlanValidationError(null);
     setScholarChatGroundedAnswerBuildPlanHasRun(false);
+    setScholarChatGroundedAnswerCandidatePreview(null);
+    setScholarChatGroundedAnswerCandidateError(null);
+    setScholarChatGroundedAnswerCandidateValidationError(null);
+    setScholarChatGroundedAnswerCandidateHasRun(false);
   }
 
   function normalizeOptionalTextInput(value: string) {
@@ -2133,6 +2182,36 @@ export default function App() {
       setScholarChatGroundedAnswerBuildPlanError(sanitizeBackendError(err));
     } finally {
       setScholarChatGroundedAnswerBuildPlanLoading(false);
+    }
+  }
+
+  async function previewScholarChatGroundedAnswerCandidate() {
+    const trimmedPrompt = scholarChatPrompt().trim();
+    if (!trimmedPrompt) {
+      setScholarChatGroundedAnswerCandidatePreview(null);
+      setScholarChatGroundedAnswerCandidateError(null);
+      setScholarChatGroundedAnswerCandidateValidationError("Prompt is required to preview grounded answer candidate.");
+      return;
+    }
+    if (scholarChatGroundedAnswerCandidateLoading()) {
+      return;
+    }
+
+    setScholarChatGroundedAnswerCandidateHasRun(true);
+    setScholarChatGroundedAnswerCandidateLoading(true);
+    setScholarChatGroundedAnswerCandidateError(null);
+    setScholarChatGroundedAnswerCandidateValidationError(null);
+    setScholarChatGroundedAnswerCandidatePreview(null);
+    try {
+      const result = await invoke<ScholarChatGroundedAnswerCandidatePreview>("preview_scholar_chat_grounded_answer_candidate", {
+        root: ".",
+        request: buildScholarChatDraftGroundingInspectionRequest(trimmedPrompt),
+      });
+      setScholarChatGroundedAnswerCandidatePreview(result);
+    } catch (err) {
+      setScholarChatGroundedAnswerCandidateError(sanitizeBackendError(err));
+    } finally {
+      setScholarChatGroundedAnswerCandidateLoading(false);
     }
   }
 
@@ -3277,6 +3356,128 @@ export default function App() {
             )
           ) : (
             <p>No grounded answer build plan preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Grounded answer candidate</h3>
+          <p class="muted">
+            Read-only candidate preview for the current draft grounding inspection text. It shows what a future GroundedAnswer could look like later, but it is candidate only - not a GroundedAnswer, final answer, Evidence Pack, persistence, runtime execution, or LLM call.
+          </p>
+          <p class="muted">{scholarChatSelectedSourceIdsSummary()}</p>
+          <p class="muted">Uses the current Scholar Chat request and the draft text from the inspection card above.</p>
+          <div class="hero-actions">
+            <button onClick={previewScholarChatGroundedAnswerCandidate} disabled={scholarChatGroundedAnswerCandidateLoading()}>
+              {scholarChatGroundedAnswerCandidateLoading() ? "Previewing..." : "Preview grounded answer candidate"}
+            </button>
+          </div>
+          <p class="muted">Candidate only - not a GroundedAnswer. No Evidence Pack, final answer, persistence, runtime execution, or LLM call was created.</p>
+          {scholarChatGroundedAnswerCandidateValidationError() && <p class="error">{scholarChatGroundedAnswerCandidateValidationError()}</p>}
+          {scholarChatGroundedAnswerCandidateError() && <p class="error">{scholarChatGroundedAnswerCandidateError()}</p>}
+          {scholarChatGroundedAnswerCandidateLoading() ? (
+            <p>Previewing grounded answer candidate...</p>
+          ) : scholarChatGroundedAnswerCandidateHasRun() ? (
+            scholarChatGroundedAnswerCandidatePreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(scholarChatGroundedAnswerCandidatePreview()!.status) },
+                  { label: "Selected sources", value: scholarChatGroundedAnswerCandidatePreview()!.selected_source_count },
+                  { label: "Evidence candidates", value: scholarChatGroundedAnswerCandidatePreview()!.evidence_candidate_count },
+                  { label: "Inspected items", value: scholarChatGroundedAnswerCandidatePreview()!.inspected_item_count },
+                  { label: "Supported items", value: scholarChatGroundedAnswerCandidatePreview()!.supported_item_count },
+                  { label: "Weakly supported items", value: scholarChatGroundedAnswerCandidatePreview()!.weakly_supported_item_count },
+                  { label: "Unsupported items", value: scholarChatGroundedAnswerCandidatePreview()!.unsupported_item_count },
+                  { label: "Candidate statements", value: scholarChatGroundedAnswerCandidatePreview()!.candidate_statement_count },
+                ])}
+                <p><strong>Prompt:</strong> {scholarChatGroundedAnswerCandidatePreview()!.normalized_prompt}</p>
+                <p>{scholarChatGroundedAnswerCandidatePreview()!.summary}</p>
+                <div class="contract-meta">
+                  <div><span>Preview only</span><strong>{scholarChatGroundedAnswerCandidatePreview()!.preview_only ? "yes" : "no"}</strong></div>
+                  <div><span>Not answer draft</span><strong>{scholarChatGroundedAnswerCandidatePreview()!.not_answer_draft ? "yes" : "no"}</strong></div>
+                  <div><span>Not grounded answer</span><strong>{scholarChatGroundedAnswerCandidatePreview()!.not_grounded_answer ? "yes" : "no"}</strong></div>
+                  <div><span>Not final answer</span><strong>{scholarChatGroundedAnswerCandidatePreview()!.not_final_answer ? "yes" : "no"}</strong></div>
+                  <div><span>No answer artifact created</span><strong>{scholarChatGroundedAnswerCandidatePreview()!.no_answer_artifact_created ? "yes" : "no"}</strong></div>
+                  <div><span>No Evidence Pack built</span><strong>{scholarChatGroundedAnswerCandidatePreview()!.no_evidence_pack_built ? "yes" : "no"}</strong></div>
+                  <div><span>No persistence</span><strong>{scholarChatGroundedAnswerCandidatePreview()!.no_persistence ? "yes" : "no"}</strong></div>
+                  <div><span>No LLM call</span><strong>{scholarChatGroundedAnswerCandidatePreview()!.no_llm_call ? "yes" : "no"}</strong></div>
+                  <div><span>No runtime execution</span><strong>{scholarChatGroundedAnswerCandidatePreview()!.no_runtime_execution ? "yes" : "no"}</strong></div>
+                </div>
+                {scholarChatGroundedAnswerCandidatePreview()!.candidate_items.length > 0 ? (
+                  <ul class="final-answer-list-items">
+                    {scholarChatGroundedAnswerCandidatePreview()!.candidate_items.map((item) => (
+                      <li>
+                        <div class="final-answer-list-item">
+                          <span>
+                            <strong>Item {item.item_index + 1}</strong> {compactTextPreview(item.statement_preview, 140)}
+                          </span>
+                          <small>
+                            Status: {formatSnakeCaseLabel(item.support_status)} | matched={item.matched_evidence_count} | sources={item.source_ids.join(", ") || "none"}
+                          </small>
+                        </div>
+                        {item.locator_previews.length > 0 ? (
+                          <small>{item.locator_previews.join(" | ")}</small>
+                        ) : (
+                          <small>No locator previews.</small>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>
+                    {scholarChatGroundedAnswerCandidatePreview()!.status === "candidate_ready_later"
+                      ? "No candidate items were returned."
+                      : scholarChatGroundedAnswerCandidatePreview()!.status === "needs_review"
+                        ? "No candidate items yet because weakly supported or unsupported items remain."
+                        : "No candidate items because grounded-answer candidate preview is blocked."}
+                  </p>
+                )}
+                {scholarChatGroundedAnswerCandidatePreview()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {scholarChatGroundedAnswerCandidatePreview()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No grounded answer candidate blockers.</p>
+                )}
+                {scholarChatGroundedAnswerCandidatePreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {scholarChatGroundedAnswerCandidatePreview()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No grounded answer candidate warnings.</p>
+                )}
+                {scholarChatGroundedAnswerCandidatePreview()!.next_required_actions.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Next required actions</h4>
+                    <ul>
+                      {scholarChatGroundedAnswerCandidatePreview()!.next_required_actions.map((action) => (
+                        <li>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No next required actions.</p>
+                )}
+              </>
+            ) : (
+              <p>No grounded answer candidate preview loaded yet.</p>
+            )
+          ) : (
+            <p>No grounded answer candidate preview loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">
