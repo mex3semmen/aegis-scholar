@@ -4439,6 +4439,7 @@ fn main() {
         );
         assert_eq!(result.status, ScholarChatGroundedAnswerCandidateStatus::Blocked);
         assert_eq!(result.candidate_statement_count, 0);
+        assert!(result.candidate_items.is_empty());
         assert_eq!(result.inspected_item_count, 0);
         assert_eq!(result.supported_item_count, 0);
         assert!(result.blockers.iter().any(|blocker| blocker.kind == "needs_sources"));
@@ -4467,6 +4468,7 @@ fn main() {
         );
         assert_eq!(result.status, ScholarChatGroundedAnswerCandidateStatus::Blocked);
         assert_eq!(result.candidate_statement_count, 0);
+        assert!(result.candidate_items.is_empty());
         assert_eq!(result.inspected_item_count, 0);
         assert!(result.blockers.iter().any(|blocker| blocker.kind == "draft_text_missing"));
         assert!(result.summary.contains("blocked"));
@@ -4514,6 +4516,7 @@ fn main() {
         );
         assert_eq!(result.status, ScholarChatGroundedAnswerCandidateStatus::Blocked);
         assert_eq!(result.candidate_statement_count, 0);
+        assert!(result.candidate_items.is_empty());
         assert_eq!(result.evidence_candidate_count, 0);
         assert!(result
             .blockers
@@ -4544,6 +4547,7 @@ fn main() {
         );
         assert_eq!(weak_result.status, ScholarChatGroundedAnswerCandidateStatus::NeedsReview);
         assert_eq!(weak_result.candidate_statement_count, 0);
+        assert!(weak_result.candidate_items.is_empty());
         assert_eq!(weak_result.weakly_supported_item_count, 1);
         assert_eq!(weak_result.unsupported_item_count, 0);
         assert!(weak_result
@@ -4566,6 +4570,7 @@ fn main() {
         );
         assert_eq!(unsupported_result.status, ScholarChatGroundedAnswerCandidateStatus::NeedsReview);
         assert_eq!(unsupported_result.candidate_statement_count, 0);
+        assert!(unsupported_result.candidate_items.is_empty());
         assert_eq!(unsupported_result.supported_item_count, 0);
         assert_eq!(unsupported_result.weakly_supported_item_count, 0);
         assert_eq!(unsupported_result.unsupported_item_count, 1);
@@ -4596,6 +4601,7 @@ fn main() {
         assert_eq!(candidate_preview.unsupported_item_count, build_plan_preview.unsupported_item_count);
         assert_eq!(candidate_preview.status, ScholarChatGroundedAnswerCandidateStatus::CandidateReadyLater);
         assert_eq!(candidate_preview.candidate_statement_count, 2);
+        assert_eq!(candidate_preview.candidate_statement_count, candidate_preview.candidate_items.len());
         assert_eq!(candidate_preview.inspected_item_count, 2);
         assert_eq!(candidate_preview.supported_item_count, 2);
         assert_eq!(candidate_preview.weakly_supported_item_count, 0);
