@@ -5402,6 +5402,32 @@ fn main() {
     }
 
     #[test]
+    fn scholar_chat_grounded_answer_build_intent_treats_whitespace_answer_draft_id_as_missing_input() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let result = assert_grounded_answer_build_intent_deterministic_and_path_free(
+            &temp,
+            build_intent_request(
+                "alpha grounded evidence",
+                Some("Alpha beta. Alpha beta gamma."),
+                vec![source_id],
+                Some("   "),
+                true,
+            ),
+        );
+        assert_eq!(result.status, ScholarChatGroundedAnswerBuildIntentStatus::Blocked);
+        assert_eq!(result.write_eligibility_status, ScholarChatGroundedAnswerWriteEligibilityStatus::WriteEligibleLater);
+        assert_eq!(result.candidate_status, ScholarChatGroundedAnswerCandidateStatus::CandidateReadyLater);
+        assert!(result.required_inputs.contains(&"answer_draft_id".to_string()));
+        assert!(result.missing_inputs.contains(&"answer_draft_id".to_string()));
+        assert!(!result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "answer_draft_id_invalid"));
+        assert_grounded_answer_build_intent_boundary_fields(&result);
+    }
+
+    #[test]
     fn scholar_chat_grounded_answer_build_intent_blocks_without_draft_text() {
         let temp = tempfile::tempdir().unwrap();
         let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
