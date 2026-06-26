@@ -529,6 +529,60 @@ type LocalRuntimeSmokeReadinessPreview = {
   no_evidence_pack_used: boolean;
 };
 
+type LocalRuntimeSmokeExecutionPlanStatus = "blocked" | "needs_review" | "plan_ready_later";
+
+type LocalRuntimeSmokeExecutionPlanPreviewRequest = {
+  smoke_readiness_preview_request: LocalRuntimeSmokeReadinessPreviewRequest;
+};
+
+type LocalRuntimeSmokeExecutionPlanPreview = {
+  status: LocalRuntimeSmokeExecutionPlanStatus;
+  smoke_readiness_status: LocalRuntimeSmokeReadinessStatus;
+  capability_status: LocalRuntimeCapabilityStatus;
+  version_probe_status: LocalRuntimeVersionProbeStatus;
+  probe_readiness_status: LocalRuntimeProbeReadinessStatus;
+  validation_status: LocalRuntimeValidationStatus;
+  adapter_contract_status: LocalRuntimeAdapterContractStatus;
+  adapter_kind: LocalRuntimeAdapterKind;
+  normalized_model_family: string | null;
+  normalized_model_format: string;
+  safe_executable_file_name: string | null;
+  safe_model_file_name: string | null;
+  probe_consent: boolean;
+  allow_probe_execution: boolean;
+  smoke_consent: boolean;
+  normalized_diagnostic_prompt: string;
+  diagnostic_prompt_char_count: number;
+  max_output_tokens: number;
+  timeout_ms: number;
+  planned_operation: string;
+  planned_inputs: string[];
+  planned_safe_arguments: string[];
+  planned_outputs: string[];
+  required_inputs: string[];
+  missing_inputs: string[];
+  plan_reasons: string[];
+  blockers: LocalRuntimeProbeWarning[];
+  warnings: LocalRuntimeProbeWarning[];
+  next_required_actions: string[];
+  summary: string;
+  preview_only: boolean;
+  no_process_spawn: boolean;
+  no_smoke_inference_execution: boolean;
+  no_model_file_read: boolean;
+  no_model_load: boolean;
+  no_llm_call: boolean;
+  no_persistence: boolean;
+  no_artifact_write: boolean;
+  no_registry_status_change: boolean;
+  no_audit_write: boolean;
+  diagnostic_only: boolean;
+  not_scholar_chat_answer: boolean;
+  no_answer_generated: boolean;
+  no_grounding_applied: boolean;
+  no_evidence_pack_used: boolean;
+};
+
 type ScholarChatGroundedAnswerBuildPlanStatus =
   | "blocked"
   | "needs_review"
@@ -1680,6 +1734,11 @@ export default function App() {
   const [scholarChatGroundedAnswerExecutionPlanValidationError, setScholarChatGroundedAnswerExecutionPlanValidationError] = createSignal<string | null>(null);
   const [scholarChatGroundedAnswerExecutionPlanLoading, setScholarChatGroundedAnswerExecutionPlanLoading] = createSignal(false);
   const [scholarChatGroundedAnswerExecutionPlanHasRun, setScholarChatGroundedAnswerExecutionPlanHasRun] = createSignal(false);
+  const [localRuntimeSmokeExecutionPlanPreview, setLocalRuntimeSmokeExecutionPlanPreview] = createSignal<LocalRuntimeSmokeExecutionPlanPreview | null>(null);
+  const [localRuntimeSmokeExecutionPlanError, setLocalRuntimeSmokeExecutionPlanError] = createSignal<string | null>(null);
+  const [localRuntimeSmokeExecutionPlanValidationError, setLocalRuntimeSmokeExecutionPlanValidationError] = createSignal<string | null>(null);
+  const [localRuntimeSmokeExecutionPlanLoading, setLocalRuntimeSmokeExecutionPlanLoading] = createSignal(false);
+  const [localRuntimeSmokeExecutionPlanHasRun, setLocalRuntimeSmokeExecutionPlanHasRun] = createSignal(false);
   const [localRuntimeKind, setLocalRuntimeKind] = createSignal<LocalModelRuntimeKind>("none");
   const [localRuntimeModelPath, setLocalRuntimeModelPath] = createSignal("");
   const [localRuntimeExecutablePath, setLocalRuntimeExecutablePath] = createSignal("");
@@ -2285,6 +2344,14 @@ export default function App() {
     setLocalRuntimeSmokeReadinessError(null);
     setLocalRuntimeSmokeReadinessValidationError(null);
     setLocalRuntimeSmokeReadinessHasRun(false);
+    clearLocalRuntimeSmokeExecutionPlanPreview();
+  }
+
+  function clearLocalRuntimeSmokeExecutionPlanPreview() {
+    setLocalRuntimeSmokeExecutionPlanPreview(null);
+    setLocalRuntimeSmokeExecutionPlanError(null);
+    setLocalRuntimeSmokeExecutionPlanValidationError(null);
+    setLocalRuntimeSmokeExecutionPlanHasRun(false);
   }
 
   function clearLocalRuntimeAdapterContractPreview() {
@@ -3484,6 +3551,49 @@ export default function App() {
       max_output_tokens: maxOutputTokens,
       timeout_ms: timeoutMs,
     };
+  }
+
+  function buildLocalRuntimeSmokeExecutionPlanPreviewRequest(): LocalRuntimeSmokeExecutionPlanPreviewRequest | null {
+    const smokeReadinessPreviewRequest = buildLocalRuntimeSmokeReadinessPreviewRequest();
+    if (!smokeReadinessPreviewRequest) {
+      return null;
+    }
+
+    return {
+      smoke_readiness_preview_request: smokeReadinessPreviewRequest,
+    };
+  }
+
+  async function previewLocalRuntimeSmokeExecutionPlan() {
+    if (localRuntimeSmokeExecutionPlanLoading()) {
+      return;
+    }
+
+    const request = buildLocalRuntimeSmokeExecutionPlanPreviewRequest();
+    if (!request) {
+      setLocalRuntimeSmokeExecutionPlanHasRun(true);
+      setLocalRuntimeSmokeExecutionPlanPreview(null);
+      setLocalRuntimeSmokeExecutionPlanError(null);
+      setLocalRuntimeSmokeExecutionPlanValidationError(null);
+      return;
+    }
+
+    setLocalRuntimeSmokeExecutionPlanHasRun(true);
+    setLocalRuntimeSmokeExecutionPlanLoading(true);
+    setLocalRuntimeSmokeExecutionPlanError(null);
+    setLocalRuntimeSmokeExecutionPlanValidationError(null);
+    setLocalRuntimeSmokeExecutionPlanPreview(null);
+    try {
+      const result = await invoke<LocalRuntimeSmokeExecutionPlanPreview>("preview_llama_runtime_smoke_execution_plan", {
+        root: ".",
+        request,
+      });
+      setLocalRuntimeSmokeExecutionPlanPreview(result);
+    } catch (err) {
+      setLocalRuntimeSmokeExecutionPlanError(sanitizeBackendError(err));
+    } finally {
+      setLocalRuntimeSmokeExecutionPlanLoading(false);
+    }
   }
 
   async function previewLocalRuntimeProbeReadiness() {
@@ -6647,6 +6757,251 @@ export default function App() {
           )
         ) : (
           <p>No llama.cpp smoke readiness preview loaded yet.</p>
+        )}
+      </div>
+      <div class="artifact-overview">
+        <h3>llama.cpp smoke execution plan</h3>
+        <p class="muted">
+          Execution plan only - this does not run smoke inference, does not spawn a process, does not load/read a model, does not call an LLM, and does not persist settings or artifacts.
+        </p>
+        <p class="muted">Uses the smoke readiness inputs above and only previews a future diagnostic smoke inference plan.</p>
+        <div class="hero-actions">
+          <button onClick={previewLocalRuntimeSmokeExecutionPlan} disabled={localRuntimeSmokeExecutionPlanLoading()}>
+            {localRuntimeSmokeExecutionPlanLoading() ? "Previewing..." : "Preview llama.cpp smoke execution plan"}
+          </button>
+        </div>
+        {localRuntimeSmokeExecutionPlanValidationError() && <p class="error">{localRuntimeSmokeExecutionPlanValidationError()}</p>}
+        {localRuntimeSmokeExecutionPlanError() && <p class="error">{localRuntimeSmokeExecutionPlanError()}</p>}
+        {localRuntimeSmokeExecutionPlanLoading() ? (
+          <p>Previewing llama.cpp smoke execution plan...</p>
+        ) : localRuntimeSmokeExecutionPlanHasRun() ? (
+          localRuntimeSmokeExecutionPlanPreview() ? (
+            <>
+              {renderMetricGrid([
+                { label: "Status", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.status) },
+                { label: "Smoke readiness", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.smoke_readiness_status) },
+                { label: "Capability status", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.capability_status) },
+                { label: "Version probe status", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.version_probe_status) },
+                { label: "Probe readiness", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.probe_readiness_status) },
+                { label: "Validation status", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.validation_status) },
+                { label: "Adapter contract status", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.adapter_contract_status) },
+                { label: "Adapter kind", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.adapter_kind) },
+                { label: "Probe consent", value: localRuntimeSmokeExecutionPlanPreview()!.probe_consent ? "yes" : "no" },
+                { label: "Allow probe execution", value: localRuntimeSmokeExecutionPlanPreview()!.allow_probe_execution ? "yes" : "no" },
+                { label: "Smoke consent", value: localRuntimeSmokeExecutionPlanPreview()!.smoke_consent ? "yes" : "no" },
+                { label: "Diagnostic prompt chars", value: localRuntimeSmokeExecutionPlanPreview()!.diagnostic_prompt_char_count },
+                { label: "Max output tokens", value: localRuntimeSmokeExecutionPlanPreview()!.max_output_tokens },
+                { label: "Timeout ms", value: localRuntimeSmokeExecutionPlanPreview()!.timeout_ms },
+              ])}
+              <div class="contract-meta">
+                <div><span>Executable file</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.safe_executable_file_name ?? "not configured"}</strong></div>
+                <div><span>Model file</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.safe_model_file_name ?? "not configured"}</strong></div>
+                <div><span>Normalized prompt</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.normalized_diagnostic_prompt || "missing"}</strong></div>
+                <div><span>Planned operation</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.planned_operation}</strong></div>
+                <div><span>Preview only</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.preview_only ? "yes" : "no"}</strong></div>
+                <div><span>No process spawn</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_process_spawn ? "yes" : "no"}</strong></div>
+                <div><span>No smoke inference execution</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_smoke_inference_execution ? "yes" : "no"}</strong></div>
+                <div><span>No model file read</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_model_file_read ? "yes" : "no"}</strong></div>
+                <div><span>No model load</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_model_load ? "yes" : "no"}</strong></div>
+                <div><span>No LLM call</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_llm_call ? "yes" : "no"}</strong></div>
+                <div><span>No persistence</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_persistence ? "yes" : "no"}</strong></div>
+                <div><span>No artifact write</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_artifact_write ? "yes" : "no"}</strong></div>
+                <div><span>No registry status change</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_registry_status_change ? "yes" : "no"}</strong></div>
+                <div><span>No audit write</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_audit_write ? "yes" : "no"}</strong></div>
+                <div><span>Diagnostic only</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.diagnostic_only ? "yes" : "no"}</strong></div>
+                <div><span>Not Scholar Chat answer</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.not_scholar_chat_answer ? "yes" : "no"}</strong></div>
+                <div><span>No answer generated</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_answer_generated ? "yes" : "no"}</strong></div>
+                <div><span>No grounding applied</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_grounding_applied ? "yes" : "no"}</strong></div>
+                <div><span>No Evidence Pack used</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_evidence_pack_used ? "yes" : "no"}</strong></div>
+              </div>
+              {localRuntimeSmokeExecutionPlanPreview()!.summary && <p><strong>Summary:</strong> {localRuntimeSmokeExecutionPlanPreview()!.summary}</p>}
+              <div class="contract-meta">
+                <div><span>Required inputs</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.required_inputs.join(", ") || "none"}</strong></div>
+                <div><span>Missing inputs</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.missing_inputs.join(", ") || "none"}</strong></div>
+                <div><span>Planned inputs</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.planned_inputs.join(", ") || "none"}</strong></div>
+                <div><span>Planned safe arguments</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.planned_safe_arguments.join(" ") || "none"}</strong></div>
+                <div><span>Planned outputs</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.planned_outputs.join(", ") || "none"}</strong></div>
+              </div>
+              {localRuntimeSmokeExecutionPlanPreview()!.plan_reasons.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Plan reasons</h4>
+                  <ul>
+                    {localRuntimeSmokeExecutionPlanPreview()!.plan_reasons.map((reason) => (
+                      <li>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p>No smoke execution plan reasons.</p>
+              )}
+              {localRuntimeSmokeExecutionPlanPreview()!.blockers.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Blockers</h4>
+                  <ul>
+                    {localRuntimeSmokeExecutionPlanPreview()!.blockers.map((blocker) => (
+                      <li>
+                        <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                        <div>{blocker.message}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p>No smoke execution plan blockers.</p>
+              )}
+              {localRuntimeSmokeExecutionPlanPreview()!.warnings.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Warnings</h4>
+                  <ul>
+                    {localRuntimeSmokeExecutionPlanPreview()!.warnings.map((warning) => (
+                      <li>
+                        <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                        <div>{warning.message}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p>No smoke execution plan warnings.</p>
+              )}
+              <h4>Next required actions</h4>
+              {localRuntimeSmokeExecutionPlanPreview()!.next_required_actions.length > 0 ? (
+                <ul>
+                  {localRuntimeSmokeExecutionPlanPreview()!.next_required_actions.map((item) => (
+                    <li>{item}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No next required actions.</p>
+              )}
+            </>
+          ) : (
+            <p>No llama.cpp smoke execution plan preview loaded yet.</p>
+          )
+        ) : (
+          <p>No llama.cpp smoke execution plan preview loaded yet.</p>
+        )}
+      </div>
+      <div class="artifact-overview">
+        <h3>llama.cpp smoke execution plan</h3>
+        <p class="muted">
+          Execution plan only - this does not run smoke inference, does not spawn a process, does not load/read a model, does not call an LLM, and does not persist settings or artifacts.
+        </p>
+        <p class="muted">Uses the smoke readiness inputs above and only previews a future diagnostic smoke inference plan.</p>
+        <div class="hero-actions">
+          <button onClick={previewLocalRuntimeSmokeExecutionPlan} disabled={localRuntimeSmokeExecutionPlanLoading()}>
+            {localRuntimeSmokeExecutionPlanLoading() ? "Previewing..." : "Preview llama.cpp smoke execution plan"}
+          </button>
+        </div>
+        {localRuntimeSmokeExecutionPlanError() && <p class="error">{localRuntimeSmokeExecutionPlanError()}</p>}
+        {localRuntimeSmokeExecutionPlanLoading() ? (
+          <p>Previewing llama.cpp smoke execution plan...</p>
+        ) : localRuntimeSmokeExecutionPlanHasRun() ? (
+          localRuntimeSmokeExecutionPlanPreview() ? (
+            <>
+              {renderMetricGrid([
+                { label: "Status", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.status) },
+                { label: "Smoke readiness", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.smoke_readiness_status) },
+                { label: "Capability status", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.capability_status) },
+                { label: "Version probe status", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.version_probe_status) },
+                { label: "Probe readiness", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.probe_readiness_status) },
+                { label: "Validation status", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.validation_status) },
+                { label: "Adapter contract status", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.adapter_contract_status) },
+                { label: "Adapter kind", value: formatSnakeCaseLabel(localRuntimeSmokeExecutionPlanPreview()!.adapter_kind) },
+                { label: "Probe consent", value: localRuntimeSmokeExecutionPlanPreview()!.probe_consent ? "yes" : "no" },
+                { label: "Allow probe execution", value: localRuntimeSmokeExecutionPlanPreview()!.allow_probe_execution ? "yes" : "no" },
+                { label: "Smoke consent", value: localRuntimeSmokeExecutionPlanPreview()!.smoke_consent ? "yes" : "no" },
+                { label: "Diagnostic prompt chars", value: localRuntimeSmokeExecutionPlanPreview()!.diagnostic_prompt_char_count },
+                { label: "Max output tokens", value: localRuntimeSmokeExecutionPlanPreview()!.max_output_tokens },
+                { label: "Timeout ms", value: localRuntimeSmokeExecutionPlanPreview()!.timeout_ms },
+              ])}
+              <div class="contract-meta">
+                <div><span>Executable file</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.safe_executable_file_name ?? "not configured"}</strong></div>
+                <div><span>Model file</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.safe_model_file_name ?? "not configured"}</strong></div>
+                <div><span>Normalized prompt</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.normalized_diagnostic_prompt || "missing"}</strong></div>
+                <div><span>Planned operation</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.planned_operation}</strong></div>
+                <div><span>Preview only</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.preview_only ? "yes" : "no"}</strong></div>
+                <div><span>No process spawn</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_process_spawn ? "yes" : "no"}</strong></div>
+                <div><span>No smoke inference execution</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_smoke_inference_execution ? "yes" : "no"}</strong></div>
+                <div><span>No model file read</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_model_file_read ? "yes" : "no"}</strong></div>
+                <div><span>No model load</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_model_load ? "yes" : "no"}</strong></div>
+                <div><span>No LLM call</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_llm_call ? "yes" : "no"}</strong></div>
+                <div><span>No persistence</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_persistence ? "yes" : "no"}</strong></div>
+                <div><span>No artifact write</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_artifact_write ? "yes" : "no"}</strong></div>
+                <div><span>No registry status change</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_registry_status_change ? "yes" : "no"}</strong></div>
+                <div><span>No audit write</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_audit_write ? "yes" : "no"}</strong></div>
+                <div><span>Diagnostic only</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.diagnostic_only ? "yes" : "no"}</strong></div>
+                <div><span>Not Scholar Chat answer</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.not_scholar_chat_answer ? "yes" : "no"}</strong></div>
+                <div><span>No answer generated</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_answer_generated ? "yes" : "no"}</strong></div>
+                <div><span>No grounding applied</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_grounding_applied ? "yes" : "no"}</strong></div>
+                <div><span>No Evidence Pack used</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.no_evidence_pack_used ? "yes" : "no"}</strong></div>
+              </div>
+              {localRuntimeSmokeExecutionPlanPreview()!.summary && <p><strong>Summary:</strong> {localRuntimeSmokeExecutionPlanPreview()!.summary}</p>}
+              <div class="contract-meta">
+                <div><span>Required inputs</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.required_inputs.join(", ") || "none"}</strong></div>
+                <div><span>Missing inputs</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.missing_inputs.join(", ") || "none"}</strong></div>
+                <div><span>Planned inputs</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.planned_inputs.join(", ") || "none"}</strong></div>
+                <div><span>Planned safe arguments</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.planned_safe_arguments.join(" ") || "none"}</strong></div>
+                <div><span>Planned outputs</span><strong>{localRuntimeSmokeExecutionPlanPreview()!.planned_outputs.join(", ") || "none"}</strong></div>
+              </div>
+              {localRuntimeSmokeExecutionPlanPreview()!.plan_reasons.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Plan reasons</h4>
+                  <ul>
+                    {localRuntimeSmokeExecutionPlanPreview()!.plan_reasons.map((reason) => (
+                      <li>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p>No smoke execution plan reasons.</p>
+              )}
+              {localRuntimeSmokeExecutionPlanPreview()!.blockers.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Blockers</h4>
+                  <ul>
+                    {localRuntimeSmokeExecutionPlanPreview()!.blockers.map((blocker) => (
+                      <li>
+                        <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                        <div>{blocker.message}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p>No smoke execution plan blockers.</p>
+              )}
+              {localRuntimeSmokeExecutionPlanPreview()!.warnings.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Warnings</h4>
+                  <ul>
+                    {localRuntimeSmokeExecutionPlanPreview()!.warnings.map((warning) => (
+                      <li>
+                        <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                        <div>{warning.message}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p>No smoke execution plan warnings.</p>
+              )}
+              <h4>Next required actions</h4>
+              {localRuntimeSmokeExecutionPlanPreview()!.next_required_actions.length > 0 ? (
+                <ul>
+                  {localRuntimeSmokeExecutionPlanPreview()!.next_required_actions.map((item) => (
+                    <li>{item}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No next required actions.</p>
+              )}
+            </>
+          ) : (
+            <p>No llama.cpp smoke execution plan preview loaded yet.</p>
+          )
+        ) : (
+          <p>No llama.cpp smoke execution plan preview loaded yet.</p>
         )}
       </div>
       <div class="artifact-overview">
