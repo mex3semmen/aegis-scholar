@@ -1356,6 +1356,10 @@ Do not implement:
 
 Phase 88.0 adds a preview-only llama.cpp runtime validation layer on top of the adapter contract preview. It checks executable/model path presence and lightweight metadata for future GGUF runtime use, but it does not execute llama.cpp, probe binaries, load models, call an LLM, persist settings, or write artifacts. GGUF, Gemma, and related adapter values remain future runtime compatibility context, not bundled model support.
 
+## Phase 89 - Llama Runtime Probe Readiness Preview
+
+Phase 89.0 adds a preview-only llama.cpp runtime probe-readiness layer on top of runtime validation. It only decides whether a future binary probe may be attempted and does not probe binaries, execute runtime code, load models, call an LLM, persist settings, or write artifacts.
+
 Do not implement:
 
 - llama.cpp execution

@@ -28,6 +28,7 @@ use local_runtime::{
     preview_local_runtime_invocation_plan as preview_local_runtime_invocation_plan_impl,
     preview_llama_runtime_adapter_contract as preview_llama_runtime_adapter_contract_impl,
     preview_llama_runtime_validation as preview_llama_runtime_validation_impl,
+    preview_llama_runtime_probe_readiness as preview_llama_runtime_probe_readiness_impl,
     smoke_test_local_runtime_inference as smoke_test_local_runtime_inference_impl,
     probe_local_runtime_version as probe_local_runtime_version_impl,
     LocalModelRuntimeConfig,
@@ -38,6 +39,8 @@ use local_runtime::{
     LocalRuntimeInvocationPlanRequest,
     LocalRuntimeProbeRequest,
     LocalRuntimeProbeResult,
+    LocalRuntimeProbeReadinessPreview,
+    LocalRuntimeProbeReadinessPreviewRequest,
     LocalRuntimeSmokeInferenceRequest,
     LocalRuntimeSmokeInferenceResult,
     LocalRuntimeValidationPreview,
@@ -455,6 +458,15 @@ fn preview_llama_runtime_validation(
 }
 
 #[tauri::command]
+fn preview_llama_runtime_probe_readiness(
+    root: String,
+    request: LocalRuntimeProbeReadinessPreviewRequest,
+) -> Result<LocalRuntimeProbeReadinessPreview, String> {
+    preview_llama_runtime_probe_readiness_impl(root, request)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
 fn probe_local_runtime_version(root: String, request: LocalRuntimeProbeRequest) -> Result<LocalRuntimeProbeResult, String> {
     probe_local_runtime_version_impl(root, request)
         .map_err(to_user_error)
@@ -522,6 +534,7 @@ pub fn run() {
             preview_local_runtime_invocation_plan,
             preview_llama_runtime_adapter_contract,
             preview_llama_runtime_validation,
+            preview_llama_runtime_probe_readiness,
             probe_local_runtime_version,
             smoke_test_local_runtime_inference
         ])
