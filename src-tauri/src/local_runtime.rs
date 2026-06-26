@@ -97,6 +97,58 @@ pub struct LocalRuntimeAdapterContractPreview {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum LocalRuntimeValidationStatus {
+    Blocked,
+    NeedsReview,
+    ValidationReadyLater,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeValidationPreviewRequest {
+    pub adapter_contract_request: LocalRuntimeAdapterContractPreviewRequest,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeValidationPreview {
+    pub status: LocalRuntimeValidationStatus,
+    pub adapter_contract_status: LocalRuntimeAdapterContractStatus,
+    pub adapter_kind: LocalRuntimeAdapterKind,
+    pub normalized_model_family: Option<String>,
+    pub normalized_model_format: String,
+    pub executable_path_present: bool,
+    pub model_path_present: bool,
+    pub executable_exists: bool,
+    pub model_exists: bool,
+    pub executable_is_file: bool,
+    pub model_is_file: bool,
+    pub model_extension_valid: bool,
+    pub safe_executable_file_name: Option<String>,
+    pub safe_model_file_name: Option<String>,
+    pub context_window_tokens: Option<u32>,
+    pub gpu_layers: Option<i32>,
+    pub threads: Option<u32>,
+    pub batch_size: Option<u32>,
+    pub chat_template_present: bool,
+    pub missing_inputs: Vec<String>,
+    pub validation_reasons: Vec<String>,
+    pub blockers: Vec<LocalRuntimeAdapterContractBlocker>,
+    pub warnings: Vec<LocalRuntimeAdapterContractWarning>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub no_process_spawn: bool,
+    pub no_binary_probe: bool,
+    pub no_model_load: bool,
+    pub no_llm_call: bool,
+    pub no_runtime_execution: bool,
+    pub no_persistence: bool,
+    pub no_artifact_write: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum LocalModelRuntimeHealthStatus {
     NotConfigured,
     ConfigPresent,
@@ -697,6 +749,166 @@ pub fn preview_llama_runtime_adapter_contract(
     })
 }
 
+pub fn preview_llama_runtime_validation(
+    root: impl Into<PathBuf>,
+    request: LocalRuntimeValidationPreviewRequest,
+) -> AegisResult<LocalRuntimeValidationPreview> {
+    let root = root.into();
+    let adapter_contract_request = request.adapter_contract_request;
+    let adapter_contract_preview =
+        preview_llama_runtime_adapter_contract(root.clone(), adapter_contract_request.clone())?;
+    let normalized_executable_path = normalize_optional_path(adapter_contract_request.executable_path)?;
+    let normalized_model_path = normalize_optional_path(adapter_contract_request.model_path)?;
+    let executable_file_name = safe_file_name_from_path(normalized_executable_path.as_deref());
+    let model_file_name = safe_file_name_from_path(normalized_model_path.as_deref());
+    let executable_path_present = adapter_contract_preview.executable_path_present;
+    let model_path_present = adapter_contract_preview.model_path_present;
+    let executable_metadata = inspect_runtime_validation_path(&root, normalized_executable_path.as_deref())?;
+    let model_metadata = inspect_runtime_validation_path(&root, normalized_model_path.as_deref())?;
+    let model_extension_valid = normalized_model_path
+        .as_deref()
+        .map(|path| has_gguf_extension(Path::new(path)))
+        .unwrap_or(false);
+
+    let mut blockers = adapter_contract_preview.blockers.clone();
+    let mut warnings = adapter_contract_preview.warnings.clone();
+    push_adapter_contract_warning(
+        &mut warnings,
+        "validation_boundary",
+        "This is a preview-only llama.cpp runtime validation; no binary was probed, no process was started, no model was loaded, no runtime execution or LLM call occurred, and no settings or artifacts were persisted.",
+    );
+
+    if executable_path_present {
+        if !executable_metadata.exists {
+            push_adapter_contract_blocker(
+                &mut blockers,
+                "executable_missing",
+                "The configured executable file is missing.",
+            );
+        } else if !executable_metadata.is_file {
+            push_adapter_contract_blocker(
+                &mut blockers,
+                "executable_not_file",
+                "The configured executable path points to a directory instead of a file.",
+            );
+        }
+    }
+
+    if model_path_present {
+        if !model_metadata.exists {
+            push_adapter_contract_blocker(
+                &mut blockers,
+                "model_missing",
+                "The configured model file is missing.",
+            );
+        } else if !model_metadata.is_file {
+            push_adapter_contract_blocker(
+                &mut blockers,
+                "model_not_file",
+                "The configured model path points to a directory instead of a file.",
+            );
+        } else if !model_extension_valid {
+            push_adapter_contract_blocker(
+                &mut blockers,
+                "model_extension_invalid",
+                "The configured model file does not use a .gguf extension.",
+            );
+        }
+    }
+
+    let status = if matches!(adapter_contract_preview.status, LocalRuntimeAdapterContractStatus::Blocked)
+        || !blockers.is_empty()
+    {
+        LocalRuntimeValidationStatus::Blocked
+    } else if matches!(
+        adapter_contract_preview.status,
+        LocalRuntimeAdapterContractStatus::NeedsReview
+    ) {
+        LocalRuntimeValidationStatus::NeedsReview
+    } else {
+        LocalRuntimeValidationStatus::ValidationReadyLater
+    };
+
+    let missing_inputs = llama_runtime_validation_missing_inputs(
+        executable_path_present,
+        model_path_present,
+        &executable_metadata,
+        &model_metadata,
+        model_extension_valid,
+    );
+    let validation_reasons = llama_runtime_validation_reasons(
+        &status,
+        &adapter_contract_preview,
+        executable_path_present,
+        model_path_present,
+        &executable_metadata,
+        &model_metadata,
+        model_extension_valid,
+        executable_file_name.as_deref(),
+        model_file_name.as_deref(),
+    );
+    let next_required_actions = llama_runtime_validation_next_required_actions(
+        &status,
+        &adapter_contract_preview,
+        executable_path_present,
+        model_path_present,
+        executable_metadata.exists,
+        model_metadata.exists,
+        executable_metadata.is_file,
+        model_metadata.is_file,
+        &executable_metadata,
+        &model_metadata,
+        model_extension_valid,
+    );
+    let summary = llama_runtime_validation_summary(
+        &status,
+        &adapter_contract_preview,
+        executable_path_present,
+        model_path_present,
+        &executable_metadata,
+        &model_metadata,
+        model_extension_valid,
+    );
+
+    Ok(LocalRuntimeValidationPreview {
+        status,
+        adapter_contract_status: adapter_contract_preview.status,
+        adapter_kind: adapter_contract_preview.adapter_kind,
+        normalized_model_family: adapter_contract_preview.normalized_model_family,
+        normalized_model_format: adapter_contract_preview.normalized_model_format,
+        executable_path_present,
+        model_path_present,
+        executable_exists: executable_metadata.exists,
+        model_exists: model_metadata.exists,
+        executable_is_file: executable_metadata.is_file,
+        model_is_file: model_metadata.is_file,
+        model_extension_valid,
+        safe_executable_file_name: executable_file_name,
+        safe_model_file_name: model_file_name,
+        context_window_tokens: adapter_contract_preview.context_window_tokens,
+        gpu_layers: adapter_contract_preview.gpu_layers,
+        threads: adapter_contract_preview.threads,
+        batch_size: adapter_contract_preview.batch_size,
+        chat_template_present: adapter_contract_preview.chat_template_present,
+        missing_inputs,
+        validation_reasons,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        no_process_spawn: true,
+        no_binary_probe: true,
+        no_model_load: true,
+        no_llm_call: true,
+        no_runtime_execution: true,
+        no_persistence: true,
+        no_artifact_write: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+    })
+}
+
 pub fn probe_local_runtime_version(
     root: impl Into<PathBuf>,
     request: LocalRuntimeProbeRequest,
@@ -1260,6 +1472,11 @@ struct PathInspection {
     file_name: Option<String>,
 }
 
+struct RuntimeValidationPathInspection {
+    exists: bool,
+    is_file: bool,
+}
+
 fn normalize_optional_path(path: Option<String>) -> AegisResult<Option<String>> {
     match path {
         Some(value) => {
@@ -1600,6 +1817,277 @@ fn inspect_configured_path(root: &Path, path: Option<&str>) -> AegisResult<PathI
         }),
         Err(error) => Err(error.into()),
     }
+}
+
+fn inspect_runtime_validation_path(
+    root: &Path,
+    path: Option<&str>,
+) -> AegisResult<RuntimeValidationPathInspection> {
+    let Some(path) = path else {
+        return Ok(RuntimeValidationPathInspection {
+            exists: false,
+            is_file: false,
+        });
+    };
+
+    let resolved = resolve_runtime_path(root, path);
+    let metadata = fs::metadata(&resolved);
+    match metadata {
+        Ok(metadata) => Ok(RuntimeValidationPathInspection {
+            exists: true,
+            is_file: metadata.is_file(),
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(RuntimeValidationPathInspection {
+            exists: false,
+            is_file: false,
+        }),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn llama_runtime_validation_missing_inputs(
+    executable_path_present: bool,
+    model_path_present: bool,
+    executable_metadata: &RuntimeValidationPathInspection,
+    model_metadata: &RuntimeValidationPathInspection,
+    model_extension_valid: bool,
+) -> Vec<String> {
+    let mut missing_inputs = Vec::new();
+    if !executable_path_present {
+        missing_inputs.push("executable_path".to_string());
+    } else if !executable_metadata.exists {
+        missing_inputs.push("executable_exists".to_string());
+    } else if !executable_metadata.is_file {
+        missing_inputs.push("executable_is_file".to_string());
+    }
+
+    if !model_path_present {
+        missing_inputs.push("model_path".to_string());
+    } else if !model_metadata.exists {
+        missing_inputs.push("model_exists".to_string());
+    } else if !model_metadata.is_file {
+        missing_inputs.push("model_is_file".to_string());
+    } else if !model_extension_valid {
+        missing_inputs.push("model_extension_valid".to_string());
+    }
+
+    missing_inputs
+}
+
+fn llama_runtime_validation_reasons(
+    status: &LocalRuntimeValidationStatus,
+    adapter_contract_preview: &LocalRuntimeAdapterContractPreview,
+    executable_path_present: bool,
+    model_path_present: bool,
+    executable_metadata: &RuntimeValidationPathInspection,
+    model_metadata: &RuntimeValidationPathInspection,
+    model_extension_valid: bool,
+    safe_executable_file_name: Option<&str>,
+    safe_model_file_name: Option<&str>,
+) -> Vec<String> {
+    let mut reasons = adapter_contract_preview.contract_reasons.clone();
+    push_unique_text(
+        &mut reasons,
+        "This is a preview-only llama.cpp runtime validation; no binary was probed and no model was loaded.",
+    );
+    push_unique_text(
+        &mut reasons,
+        &format!(
+            "Adapter contract status: {}.",
+            validation_status_label(&adapter_contract_preview.status)
+        ),
+    );
+    push_unique_text(
+        &mut reasons,
+        &format!(
+            "Executable path present: {}.",
+            yes_no_text(executable_path_present)
+        ),
+    );
+    push_unique_text(
+        &mut reasons,
+        &format!("Executable exists: {}.", yes_no_text(executable_metadata.exists)),
+    );
+    push_unique_text(
+        &mut reasons,
+        &format!("Executable is file: {}.", yes_no_text(executable_metadata.is_file)),
+    );
+    push_unique_text(
+        &mut reasons,
+        &format!("Model path present: {}.", yes_no_text(model_path_present)),
+    );
+    push_unique_text(
+        &mut reasons,
+        &format!("Model exists: {}.", yes_no_text(model_metadata.exists)),
+    );
+    push_unique_text(
+        &mut reasons,
+        &format!("Model is file: {}.", yes_no_text(model_metadata.is_file)),
+    );
+    push_unique_text(
+        &mut reasons,
+        &format!("Model extension valid: {}.", yes_no_text(model_extension_valid)),
+    );
+    if let Some(file_name) = safe_executable_file_name {
+        push_unique_text(&mut reasons, &format!("Safe executable file name: {file_name}."));
+    }
+    if let Some(file_name) = safe_model_file_name {
+        push_unique_text(&mut reasons, &format!("Safe model file name: {file_name}."));
+    }
+    if matches!(status, LocalRuntimeValidationStatus::ValidationReadyLater) {
+        push_unique_text(
+            &mut reasons,
+            "The llama.cpp runtime validation preview is ready later.",
+        );
+    }
+    reasons
+}
+
+fn llama_runtime_validation_next_required_actions(
+    status: &LocalRuntimeValidationStatus,
+    adapter_contract_preview: &LocalRuntimeAdapterContractPreview,
+    executable_path_present: bool,
+    model_path_present: bool,
+    executable_exists: bool,
+    model_exists: bool,
+    executable_is_file: bool,
+    model_is_file: bool,
+    executable_metadata: &RuntimeValidationPathInspection,
+    model_metadata: &RuntimeValidationPathInspection,
+    model_extension_valid: bool,
+) -> Vec<String> {
+    let mut next_required_actions = Vec::new();
+    if !executable_path_present {
+        push_unique_text(
+            &mut next_required_actions,
+            "Provide an executable_path for the future llama.cpp runtime validation.",
+        );
+    } else if !executable_metadata.exists {
+        push_unique_text(
+            &mut next_required_actions,
+            "Place the executable file at the configured path before validation.",
+        );
+    } else if !executable_metadata.is_file {
+        push_unique_text(
+            &mut next_required_actions,
+            "Point executable_path at a file, not a directory.",
+        );
+    }
+
+    if !model_path_present {
+        push_unique_text(
+            &mut next_required_actions,
+            "Provide a model_path for the future llama.cpp runtime validation.",
+        );
+    } else if !model_metadata.exists {
+        push_unique_text(
+            &mut next_required_actions,
+            "Place the model file at the configured path before validation.",
+        );
+    } else if !model_metadata.is_file {
+        push_unique_text(
+            &mut next_required_actions,
+            "Point model_path at a file, not a directory.",
+        );
+    } else if !model_extension_valid {
+        push_unique_text(
+            &mut next_required_actions,
+            "Use a .gguf model file for the future runtime.",
+        );
+    }
+
+    match status {
+        LocalRuntimeValidationStatus::Blocked => {
+            if executable_path_present
+                && model_path_present
+                && executable_exists
+                && model_exists
+                && executable_is_file
+                && model_is_file
+                && model_extension_valid
+                && matches!(adapter_contract_preview.status, LocalRuntimeAdapterContractStatus::Blocked)
+            {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Review the adapter metadata before accepting validation.",
+                );
+            }
+        }
+        LocalRuntimeValidationStatus::NeedsReview => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Review the adapter metadata before accepting validation.",
+            );
+        }
+        LocalRuntimeValidationStatus::ValidationReadyLater => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Implement the future llama.cpp runtime validation later without changing this preview.",
+            );
+        }
+    }
+    next_required_actions
+}
+
+fn llama_runtime_validation_summary(
+    status: &LocalRuntimeValidationStatus,
+    adapter_contract_preview: &LocalRuntimeAdapterContractPreview,
+    executable_path_present: bool,
+    model_path_present: bool,
+    executable_metadata: &RuntimeValidationPathInspection,
+    model_metadata: &RuntimeValidationPathInspection,
+    model_extension_valid: bool,
+) -> String {
+    match status {
+        LocalRuntimeValidationStatus::Blocked => {
+            if !executable_path_present {
+                if !model_path_present {
+                    "Llama runtime validation preview is blocked until executable_path and model_path are provided.".to_string()
+                } else {
+                    "Llama runtime validation preview is blocked until executable_path is provided.".to_string()
+                }
+            } else if !model_path_present {
+                "Llama runtime validation preview is blocked until model_path is provided.".to_string()
+            } else if !executable_metadata.exists {
+                "Llama runtime validation preview is blocked until the executable file exists.".to_string()
+            } else if !model_metadata.exists {
+                "Llama runtime validation preview is blocked until the model file exists.".to_string()
+            } else if !executable_metadata.is_file {
+                "Llama runtime validation preview is blocked until executable_path points to a file.".to_string()
+            } else if !model_metadata.is_file {
+                "Llama runtime validation preview is blocked until model_path points to a file.".to_string()
+            } else if !model_extension_valid {
+                "Llama runtime validation preview is blocked until the model file uses a .gguf extension.".to_string()
+            } else if matches!(
+                adapter_contract_preview.status,
+                LocalRuntimeAdapterContractStatus::Blocked
+            ) {
+                "Llama runtime validation preview is blocked because the adapter contract preview is blocked.".to_string()
+            } else {
+                "Llama runtime validation preview is blocked.".to_string()
+            }
+        }
+        LocalRuntimeValidationStatus::NeedsReview => {
+            "Llama runtime validation preview needs review because the adapter contract preview still needs review."
+                .to_string()
+        }
+        LocalRuntimeValidationStatus::ValidationReadyLater => {
+            "The llama.cpp runtime validation preview is ready later: the adapter contract is ready later, both files exist and are files, and the model file uses a .gguf extension."
+                .to_string()
+        }
+    }
+}
+
+fn validation_status_label(status: &LocalRuntimeAdapterContractStatus) -> &'static str {
+    match status {
+        LocalRuntimeAdapterContractStatus::Blocked => "blocked",
+        LocalRuntimeAdapterContractStatus::NeedsReview => "needs_review",
+        LocalRuntimeAdapterContractStatus::ContractReadyLater => "contract_ready_later",
+    }
+}
+
+fn yes_no_text(value: bool) -> &'static str {
+    if value { "yes" } else { "no" }
 }
 
 fn resolve_runtime_path(root: &Path, path: &str) -> PathBuf {
@@ -2380,6 +2868,66 @@ fn main() {
         first
     }
 
+    fn llama_runtime_validation_request(
+        executable_path: Option<&str>,
+        model_path: Option<&str>,
+        model_family: Option<&str>,
+        model_format: Option<&str>,
+        context_window_tokens: Option<u32>,
+        gpu_layers: Option<i32>,
+        threads: Option<u32>,
+        batch_size: Option<u32>,
+        chat_template: Option<&str>,
+    ) -> LocalRuntimeValidationPreviewRequest {
+        LocalRuntimeValidationPreviewRequest {
+            adapter_contract_request: llama_runtime_adapter_contract_request(
+                executable_path,
+                model_path,
+                model_family,
+                model_format,
+                context_window_tokens,
+                gpu_layers,
+                threads,
+                batch_size,
+                chat_template,
+            ),
+        }
+    }
+
+    fn assert_llama_runtime_validation_boundary_fields(preview: &LocalRuntimeValidationPreview) {
+        assert!(preview.preview_only);
+        assert!(preview.no_process_spawn);
+        assert!(preview.no_binary_probe);
+        assert!(preview.no_model_load);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_runtime_execution);
+        assert!(preview.no_persistence);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
+    fn assert_llama_runtime_validation_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: LocalRuntimeValidationPreviewRequest,
+    ) -> LocalRuntimeValidationPreview {
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let first = preview_llama_runtime_validation(temp.path(), request.clone()).unwrap();
+        let second = preview_llama_runtime_validation(temp.path(), request).unwrap();
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_llama_runtime_validation_boundary_fields(preview);
+        }
+        first
+    }
+
     #[test]
     fn local_runtime_invocation_plan_preview_is_not_configured_for_default_config() {
         let temp = tempfile::tempdir().unwrap();
@@ -2742,6 +3290,309 @@ fn main() {
             assert!(matches!(result, Err(AegisError::LocalModelRuntimeInvalidPath)));
             assert!(!temp.path().join(".aegis").exists());
         }
+    }
+
+    #[test]
+    fn local_runtime_validation_preview_blocks_when_adapter_contract_is_blocked() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_llama_runtime_validation_deterministic_and_path_free(
+            &temp,
+            llama_runtime_validation_request(
+                Some("   "),
+                Some("\t"),
+                None,
+                Some("gguf"),
+                Some(8192),
+                Some(0),
+                Some(8),
+                Some(256),
+                Some("template"),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeValidationStatus::Blocked);
+        assert_eq!(result.adapter_contract_status, LocalRuntimeAdapterContractStatus::Blocked);
+        assert_eq!(
+            result.missing_inputs,
+            vec!["executable_path".to_string(), "model_path".to_string()]
+        );
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "executable_path_missing"));
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "model_path_missing"));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn local_runtime_validation_preview_rejects_traversal_like_paths_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["..", "../llama-server.exe", "nested/../llama-server.exe", "nested\\..\\llama-server.exe"] {
+            for request in [
+                llama_runtime_validation_request(
+                    Some(invalid),
+                    Some("model.gguf"),
+                    Some("llama"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                llama_runtime_validation_request(
+                    Some("llama-server.exe"),
+                    Some(invalid),
+                    Some("llama"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+            ] {
+                let result = preview_llama_runtime_validation(temp.path(), request);
+                assert!(matches!(result, Err(AegisError::LocalModelRuntimeInvalidPath)));
+                assert!(!temp.path().join(".aegis").exists());
+            }
+        }
+    }
+
+    #[test]
+    fn local_runtime_validation_preview_blocks_when_executable_file_is_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_validation_deterministic_and_path_free(
+            &temp,
+            llama_runtime_validation_request(
+                Some("missing-executable.exe"),
+                Some(model_path.to_string_lossy().as_ref()),
+                Some("llama"),
+                Some("gguf"),
+                Some(8192),
+                Some(0),
+                Some(8),
+                Some(256),
+                Some("template"),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeValidationStatus::Blocked);
+        assert!(!result.executable_exists);
+        assert!(!result.executable_is_file);
+        assert_eq!(result.safe_executable_file_name.as_deref(), Some("missing-executable.exe"));
+        assert!(result.missing_inputs.contains(&"executable_exists".to_string()));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn local_runtime_validation_preview_blocks_when_model_file_is_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let executable_path = temp.path().join("llama-server.exe");
+        fs::write(&executable_path, "placeholder").unwrap();
+        let result = assert_llama_runtime_validation_deterministic_and_path_free(
+            &temp,
+            llama_runtime_validation_request(
+                Some(executable_path.to_string_lossy().as_ref()),
+                Some("missing-model.gguf"),
+                Some("llama"),
+                Some("gguf"),
+                Some(8192),
+                Some(0),
+                Some(8),
+                Some(256),
+                Some("template"),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeValidationStatus::Blocked);
+        assert!(result.executable_exists);
+        assert!(result.executable_is_file);
+        assert!(!result.model_exists);
+        assert!(!result.model_is_file);
+        assert_eq!(result.safe_model_file_name.as_deref(), Some("missing-model.gguf"));
+        assert!(result.missing_inputs.contains(&"model_exists".to_string()));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn local_runtime_validation_preview_blocks_when_executable_path_points_to_a_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let executable_dir = temp.path().join("llama-server.exe");
+        fs::create_dir(&executable_dir).unwrap();
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_validation_deterministic_and_path_free(
+            &temp,
+            llama_runtime_validation_request(
+                Some(executable_dir.to_string_lossy().as_ref()),
+                Some(model_path.to_string_lossy().as_ref()),
+                Some("llama"),
+                Some("gguf"),
+                Some(8192),
+                Some(0),
+                Some(8),
+                Some(256),
+                Some("template"),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeValidationStatus::Blocked);
+        assert!(result.executable_exists);
+        assert!(!result.executable_is_file);
+        assert!(result.missing_inputs.contains(&"executable_is_file".to_string()));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn local_runtime_validation_preview_blocks_when_model_path_points_to_a_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let executable_path = temp.path().join("llama-server.exe");
+        fs::write(&executable_path, "placeholder").unwrap();
+        let model_dir = temp.path().join("ready-model.gguf");
+        fs::create_dir(&model_dir).unwrap();
+        let result = assert_llama_runtime_validation_deterministic_and_path_free(
+            &temp,
+            llama_runtime_validation_request(
+                Some(executable_path.to_string_lossy().as_ref()),
+                Some(model_dir.to_string_lossy().as_ref()),
+                Some("llama"),
+                Some("gguf"),
+                Some(8192),
+                Some(0),
+                Some(8),
+                Some(256),
+                Some("template"),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeValidationStatus::Blocked);
+        assert!(result.model_exists);
+        assert!(!result.model_is_file);
+        assert!(result.missing_inputs.contains(&"model_is_file".to_string()));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn local_runtime_validation_preview_blocks_when_model_extension_is_not_gguf() {
+        let temp = tempfile::tempdir().unwrap();
+        let executable_path = temp.path().join("llama-server.exe");
+        let model_path = temp.path().join("ready-model.txt");
+        fs::write(&executable_path, "placeholder").unwrap();
+        fs::write(&model_path, "not gguf").unwrap();
+        let result = assert_llama_runtime_validation_deterministic_and_path_free(
+            &temp,
+            llama_runtime_validation_request(
+                Some(executable_path.to_string_lossy().as_ref()),
+                Some(model_path.to_string_lossy().as_ref()),
+                Some("llama"),
+                Some("gguf"),
+                Some(8192),
+                Some(0),
+                Some(8),
+                Some(256),
+                Some("template"),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeValidationStatus::Blocked);
+        assert!(result.model_exists);
+        assert!(result.model_is_file);
+        assert!(!result.model_extension_valid);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "model_extension_invalid"));
+        assert!(result.missing_inputs.contains(&"model_extension_valid".to_string()));
+    }
+
+    #[test]
+    fn local_runtime_validation_preview_needs_review_when_adapter_contract_needs_review_and_files_are_ready() {
+        let temp = tempfile::tempdir().unwrap();
+        let executable_path = temp.path().join("llama-server.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&executable_path, "placeholder").unwrap();
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_validation_deterministic_and_path_free(
+            &temp,
+            llama_runtime_validation_request(
+                Some(executable_path.to_string_lossy().as_ref()),
+                Some(model_path.to_string_lossy().as_ref()),
+                Some("experimental-family"),
+                Some("gguf"),
+                Some(8192),
+                Some(0),
+                Some(8),
+                Some(256),
+                Some("template"),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeValidationStatus::NeedsReview);
+        assert_eq!(result.adapter_contract_status, LocalRuntimeAdapterContractStatus::NeedsReview);
+        assert!(result.missing_inputs.is_empty());
+        assert!(result
+            .validation_reasons
+            .iter()
+            .any(|reason| reason.contains("Adapter contract status")));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn local_runtime_validation_preview_returns_ready_later_for_existing_gguf_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let executable_path = temp.path().join("llama-server.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&executable_path, "placeholder").unwrap();
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_validation_deterministic_and_path_free(
+            &temp,
+            llama_runtime_validation_request(
+                Some(executable_path.to_string_lossy().as_ref()),
+                Some(model_path.to_string_lossy().as_ref()),
+                Some("llama"),
+                Some("gguf"),
+                Some(8192),
+                Some(0),
+                Some(8),
+                Some(256),
+                Some("template"),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeValidationStatus::ValidationReadyLater);
+        assert_eq!(result.adapter_contract_status, LocalRuntimeAdapterContractStatus::ContractReadyLater);
+        assert!(result.missing_inputs.is_empty());
+        assert_eq!(result.safe_executable_file_name.as_deref(), Some("llama-server.exe"));
+        assert_eq!(result.safe_model_file_name.as_deref(), Some("ready-model.gguf"));
+        assert!(result.validation_reasons.iter().any(|reason| reason.contains("ready later")));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn local_runtime_validation_preview_is_deterministic_and_path_free() {
+        let temp = tempfile::tempdir().unwrap();
+        let executable_path = temp.path().join("llama-server.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&executable_path, "placeholder").unwrap();
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let request = llama_runtime_validation_request(
+            Some(executable_path.to_string_lossy().as_ref()),
+            Some(model_path.to_string_lossy().as_ref()),
+            Some("llama"),
+            Some("gguf"),
+            Some(8192),
+            Some(0),
+            Some(8),
+            Some(256),
+            Some("template"),
+        );
+        let first = preview_llama_runtime_validation(temp.path(), request.clone()).unwrap();
+        let second = preview_llama_runtime_validation(temp.path(), request).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(first.status, LocalRuntimeValidationStatus::ValidationReadyLater);
+        let debug = format!("{first:?}");
+        let json = serde_json::to_string(&first).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
     }
 
     #[test]
