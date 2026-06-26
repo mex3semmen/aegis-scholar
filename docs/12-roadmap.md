@@ -1414,6 +1414,25 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 92 - Llama Runtime Smoke Readiness Preview
+
+Phase 92.0 adds a preview-only smoke-readiness layer on top of the capability preview. It only prepares a future diagnostic smoke inference preview and does not run inference, load a model, or call an LLM.
+
+Do not implement:
+
+- llama.cpp execution beyond the wrapped capability preview
+- model loading
+- inference
+- smoke inference execution
+- model path arguments
+- persistence
+- artifact writes
+- registry status changes
+- audit writes
+- source import
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
