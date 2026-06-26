@@ -70,6 +70,7 @@ use scholar_chat::{
     preview_scholar_chat_grounded_answer_build_request as preview_scholar_chat_grounded_answer_build_request_impl,
     preview_scholar_chat_grounded_answer_execution_readiness as preview_scholar_chat_grounded_answer_execution_readiness_impl,
     preview_scholar_chat_grounded_answer_execution_plan as preview_scholar_chat_grounded_answer_execution_plan_impl,
+    preview_scholar_chat_runtime_diagnostic_bridge as preview_scholar_chat_runtime_diagnostic_bridge_impl,
     preview_scholar_chat_grounded_answer_write_eligibility as preview_scholar_chat_grounded_answer_write_eligibility_impl,
     preview_scholar_chat_request as preview_scholar_chat_request_impl,
     preview_scholar_chat_evidence_plan as preview_scholar_chat_evidence_plan_impl,
@@ -90,6 +91,8 @@ use scholar_chat::{
     ScholarChatGroundedAnswerBuildRequestPreviewRequest,
     ScholarChatGroundedAnswerWriteEligibilityPreview,
     ScholarChatGroundedDraftReadinessPreview,
+    ScholarChatRuntimeDiagnosticBridgePreview,
+    ScholarChatRuntimeDiagnosticBridgePreviewRequest,
     ScholarChatRequest,
     ScholarChatEvidencePlanResponse,
     ScholarChatPromptPackPreviewResponse,
@@ -529,6 +532,15 @@ fn run_llama_runtime_smoke_diagnostic(
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn preview_scholar_chat_runtime_diagnostic_bridge(
+    root: String,
+    request: ScholarChatRuntimeDiagnosticBridgePreviewRequest,
+) -> Result<ScholarChatRuntimeDiagnosticBridgePreview, String> {
+    preview_scholar_chat_runtime_diagnostic_bridge_impl(root, request)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -579,6 +591,7 @@ pub fn run() {
             preview_scholar_chat_retrieval,
             preview_scholar_chat_evidence_plan,
             preview_scholar_chat_prompt_pack,
+            preview_scholar_chat_runtime_diagnostic_bridge,
             preview_local_model_runtime_health,
             preview_local_runtime_invocation_plan,
             preview_llama_runtime_adapter_contract,
