@@ -475,6 +475,60 @@ type LocalRuntimeCapabilityPreview = {
   no_audit_write: boolean;
 };
 
+type LocalRuntimeSmokeReadinessStatus = "blocked" | "needs_review" | "smoke_ready_later";
+
+type LocalRuntimeSmokeReadinessPreviewRequest = {
+  capability_preview_request: LocalRuntimeCapabilityPreviewRequest;
+  smoke_consent: boolean;
+  diagnostic_prompt: string | null;
+  max_output_tokens: number | null;
+  timeout_ms: number | null;
+};
+
+type LocalRuntimeSmokeReadinessPreview = {
+  status: LocalRuntimeSmokeReadinessStatus;
+  capability_status: LocalRuntimeCapabilityStatus;
+  version_probe_status: LocalRuntimeVersionProbeStatus;
+  probe_readiness_status: LocalRuntimeProbeReadinessStatus;
+  validation_status: LocalRuntimeValidationStatus;
+  adapter_contract_status: LocalRuntimeAdapterContractStatus;
+  adapter_kind: LocalRuntimeAdapterKind;
+  normalized_model_family: string | null;
+  normalized_model_format: string;
+  safe_executable_file_name: string | null;
+  safe_model_file_name: string | null;
+  probe_consent: boolean;
+  allow_probe_execution: boolean;
+  smoke_consent: boolean;
+  normalized_diagnostic_prompt: string;
+  diagnostic_prompt_char_count: number;
+  max_output_tokens: number;
+  timeout_ms: number;
+  required_inputs: string[];
+  missing_inputs: string[];
+  readiness_reasons: string[];
+  blockers: LocalRuntimeProbeWarning[];
+  warnings: LocalRuntimeProbeWarning[];
+  next_required_actions: string[];
+  summary: string;
+  preview_only: boolean;
+  no_new_process_spawn: boolean;
+  no_smoke_inference_execution: boolean;
+  no_model_path_argument: boolean;
+  no_model_file_read: boolean;
+  no_model_load: boolean;
+  no_llm_call: boolean;
+  no_persistence: boolean;
+  no_artifact_write: boolean;
+  no_registry_status_change: boolean;
+  no_audit_write: boolean;
+  diagnostic_only: boolean;
+  not_scholar_chat_answer: boolean;
+  no_answer_generated: boolean;
+  no_grounding_applied: boolean;
+  no_evidence_pack_used: boolean;
+};
+
 type ScholarChatGroundedAnswerBuildPlanStatus =
   | "blocked"
   | "needs_review"
@@ -1680,6 +1734,12 @@ export default function App() {
   const [localRuntimeCapabilityError, setLocalRuntimeCapabilityError] = createSignal<string | null>(null);
   const [localRuntimeCapabilityLoading, setLocalRuntimeCapabilityLoading] = createSignal(false);
   const [localRuntimeCapabilityHasRun, setLocalRuntimeCapabilityHasRun] = createSignal(false);
+  const [localRuntimeSmokeReadinessConsent, setLocalRuntimeSmokeReadinessConsent] = createSignal(false);
+  const [localRuntimeSmokeReadinessResult, setLocalRuntimeSmokeReadinessResult] = createSignal<LocalRuntimeSmokeReadinessPreview | null>(null);
+  const [localRuntimeSmokeReadinessError, setLocalRuntimeSmokeReadinessError] = createSignal<string | null>(null);
+  const [localRuntimeSmokeReadinessValidationError, setLocalRuntimeSmokeReadinessValidationError] = createSignal<string | null>(null);
+  const [localRuntimeSmokeReadinessLoading, setLocalRuntimeSmokeReadinessLoading] = createSignal(false);
+  const [localRuntimeSmokeReadinessHasRun, setLocalRuntimeSmokeReadinessHasRun] = createSignal(false);
   const [localRuntimeSmokePrompt, setLocalRuntimeSmokePrompt] = createSignal("Say READY in one short sentence.");
   const [localRuntimeSmokeAllowExecution, setLocalRuntimeSmokeAllowExecution] = createSignal(false);
   const [localRuntimeSmokeTimeoutMs, setLocalRuntimeSmokeTimeoutMs] = createSignal("3000");
@@ -2210,6 +2270,7 @@ export default function App() {
     setLocalRuntimeCapabilityResult(null);
     setLocalRuntimeCapabilityError(null);
     setLocalRuntimeCapabilityHasRun(false);
+    clearLocalRuntimeSmokeReadinessPreview();
   }
 
   function clearLocalRuntimeSmokePreview() {
@@ -2217,6 +2278,13 @@ export default function App() {
     setLocalRuntimeSmokeError(null);
     setLocalRuntimeSmokeValidationError(null);
     setLocalRuntimeSmokeHasRun(false);
+  }
+
+  function clearLocalRuntimeSmokeReadinessPreview() {
+    setLocalRuntimeSmokeReadinessResult(null);
+    setLocalRuntimeSmokeReadinessError(null);
+    setLocalRuntimeSmokeReadinessValidationError(null);
+    setLocalRuntimeSmokeReadinessHasRun(false);
   }
 
   function clearLocalRuntimeAdapterContractPreview() {
@@ -3387,6 +3455,37 @@ export default function App() {
     };
   }
 
+  function buildLocalRuntimeSmokeReadinessPreviewRequest(): LocalRuntimeSmokeReadinessPreviewRequest | null {
+    const capabilityPreviewRequest = buildLocalRuntimeCapabilityPreviewRequest();
+    if (!capabilityPreviewRequest) {
+      return null;
+    }
+
+    const maxOutputTokens = parseOptionalIntegerInput(
+      localRuntimeSmokeMaxOutputTokens(),
+      "Smoke readiness max output tokens",
+      setLocalRuntimeSmokeReadinessValidationError,
+    );
+    const timeoutMs = parseOptionalIntegerInput(
+      localRuntimeSmokeTimeoutMs(),
+      "Smoke readiness timeout",
+      setLocalRuntimeSmokeReadinessValidationError,
+    );
+    if (maxOutputTokens === undefined || timeoutMs === undefined) {
+      return null;
+    }
+
+    const diagnosticPrompt = localRuntimeSmokePrompt().trim();
+
+    return {
+      capability_preview_request: capabilityPreviewRequest,
+      smoke_consent: localRuntimeSmokeReadinessConsent(),
+      diagnostic_prompt: diagnosticPrompt ? diagnosticPrompt : null,
+      max_output_tokens: maxOutputTokens,
+      timeout_ms: timeoutMs,
+    };
+  }
+
   async function previewLocalRuntimeProbeReadiness() {
     if (localRuntimeProbeReadinessPreviewLoading()) {
       return;
@@ -3478,6 +3577,38 @@ export default function App() {
       setLocalRuntimeCapabilityError(sanitizeBackendError(err));
     } finally {
       setLocalRuntimeCapabilityLoading(false);
+    }
+  }
+
+  async function previewLocalRuntimeSmokeReadiness() {
+    if (localRuntimeSmokeReadinessLoading()) {
+      return;
+    }
+
+    setLocalRuntimeSmokeReadinessValidationError(null);
+    const request = buildLocalRuntimeSmokeReadinessPreviewRequest();
+    if (!request) {
+      setLocalRuntimeSmokeReadinessHasRun(true);
+      setLocalRuntimeSmokeReadinessResult(null);
+      setLocalRuntimeSmokeReadinessError(null);
+      return;
+    }
+
+    setLocalRuntimeSmokeReadinessHasRun(true);
+    setLocalRuntimeSmokeReadinessLoading(true);
+    setLocalRuntimeSmokeReadinessError(null);
+    setLocalRuntimeSmokeReadinessValidationError(null);
+    setLocalRuntimeSmokeReadinessResult(null);
+    try {
+      const result = await invoke<LocalRuntimeSmokeReadinessPreview>("preview_llama_runtime_smoke_readiness", {
+        root: ".",
+        request,
+      });
+      setLocalRuntimeSmokeReadinessResult(result);
+    } catch (err) {
+      setLocalRuntimeSmokeReadinessError(sanitizeBackendError(err));
+    } finally {
+      setLocalRuntimeSmokeReadinessLoading(false);
     }
   }
 
@@ -6371,6 +6502,154 @@ export default function App() {
         )}
       </div>
       <div class="artifact-overview">
+        <h3>llama.cpp smoke readiness</h3>
+        <p class="muted">
+          Smoke readiness only - this does not run inference, does not pass a model path to a process, does not load or read a model, does not call an LLM, and does not persist settings or artifacts.
+        </p>
+        <p class="muted">Uses the current capability preview inputs above and the shared smoke prompt and timeout settings, plus explicit smoke consent.</p>
+        <div class="form-row">
+          <label>
+            Diagnostic prompt
+            <textarea
+              rows={3}
+              value={localRuntimeSmokePrompt()}
+              onInput={(event) => {
+                setLocalRuntimeSmokePrompt(event.currentTarget.value);
+                clearLocalRuntimeSmokePreview();
+                clearLocalRuntimeSmokeReadinessPreview();
+              }}
+              placeholder="Describe the diagnostic smoke-check prompt..."
+            />
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="inline-field">
+            <input
+              type="checkbox"
+              checked={localRuntimeSmokeReadinessConsent()}
+              onChange={(event) => {
+                setLocalRuntimeSmokeReadinessConsent(event.currentTarget.checked);
+                clearLocalRuntimeSmokeReadinessPreview();
+              }}
+            />
+            I understand this only prepares a future diagnostic smoke inference and does not run inference now.
+          </label>
+        </div>
+        <div class="hero-actions">
+          <button onClick={previewLocalRuntimeSmokeReadiness} disabled={localRuntimeSmokeReadinessLoading()}>
+            {localRuntimeSmokeReadinessLoading() ? "Previewing..." : "Preview llama.cpp smoke readiness"}
+          </button>
+        </div>
+        <p class="muted">This preview is read-only and shares the current smoke prompt, timeout, and max-output-token inputs.</p>
+        {localRuntimeSmokeReadinessValidationError() && <p class="error">{localRuntimeSmokeReadinessValidationError()}</p>}
+        {localRuntimeSmokeReadinessError() && <p class="error">{localRuntimeSmokeReadinessError()}</p>}
+        {localRuntimeSmokeReadinessLoading() ? (
+          <p>Previewing llama.cpp smoke readiness...</p>
+        ) : localRuntimeSmokeReadinessHasRun() ? (
+          localRuntimeSmokeReadinessResult() ? (
+            <>
+              {renderMetricGrid([
+                { label: "Status", value: formatSnakeCaseLabel(localRuntimeSmokeReadinessResult()!.status) },
+                { label: "Capability status", value: formatSnakeCaseLabel(localRuntimeSmokeReadinessResult()!.capability_status) },
+                { label: "Version probe status", value: formatSnakeCaseLabel(localRuntimeSmokeReadinessResult()!.version_probe_status) },
+                { label: "Probe readiness", value: formatSnakeCaseLabel(localRuntimeSmokeReadinessResult()!.probe_readiness_status) },
+                { label: "Validation status", value: formatSnakeCaseLabel(localRuntimeSmokeReadinessResult()!.validation_status) },
+                { label: "Adapter contract status", value: formatSnakeCaseLabel(localRuntimeSmokeReadinessResult()!.adapter_contract_status) },
+                { label: "Adapter kind", value: formatSnakeCaseLabel(localRuntimeSmokeReadinessResult()!.adapter_kind) },
+                { label: "Probe consent", value: localRuntimeSmokeReadinessResult()!.probe_consent ? "yes" : "no" },
+                { label: "Allow probe execution", value: localRuntimeSmokeReadinessResult()!.allow_probe_execution ? "yes" : "no" },
+                { label: "Smoke consent", value: localRuntimeSmokeReadinessResult()!.smoke_consent ? "yes" : "no" },
+                { label: "Diagnostic prompt chars", value: localRuntimeSmokeReadinessResult()!.diagnostic_prompt_char_count },
+                { label: "Max output tokens", value: localRuntimeSmokeReadinessResult()!.max_output_tokens },
+                { label: "Timeout ms", value: localRuntimeSmokeReadinessResult()!.timeout_ms },
+              ])}
+              <div class="contract-meta">
+                <div><span>Executable file</span><strong>{localRuntimeSmokeReadinessResult()!.safe_executable_file_name ?? "not configured"}</strong></div>
+                <div><span>Model file</span><strong>{localRuntimeSmokeReadinessResult()!.safe_model_file_name ?? "not configured"}</strong></div>
+                <div><span>Normalized prompt</span><strong>{localRuntimeSmokeReadinessResult()!.normalized_diagnostic_prompt || "missing"}</strong></div>
+                <div><span>Preview only</span><strong>{localRuntimeSmokeReadinessResult()!.preview_only ? "yes" : "no"}</strong></div>
+                <div><span>No new process spawn</span><strong>{localRuntimeSmokeReadinessResult()!.no_new_process_spawn ? "yes" : "no"}</strong></div>
+                <div><span>No smoke inference execution</span><strong>{localRuntimeSmokeReadinessResult()!.no_smoke_inference_execution ? "yes" : "no"}</strong></div>
+                <div><span>No model path argument</span><strong>{localRuntimeSmokeReadinessResult()!.no_model_path_argument ? "yes" : "no"}</strong></div>
+                <div><span>No model file read</span><strong>{localRuntimeSmokeReadinessResult()!.no_model_file_read ? "yes" : "no"}</strong></div>
+                <div><span>No model load</span><strong>{localRuntimeSmokeReadinessResult()!.no_model_load ? "yes" : "no"}</strong></div>
+                <div><span>No LLM call</span><strong>{localRuntimeSmokeReadinessResult()!.no_llm_call ? "yes" : "no"}</strong></div>
+                <div><span>No persistence</span><strong>{localRuntimeSmokeReadinessResult()!.no_persistence ? "yes" : "no"}</strong></div>
+                <div><span>No artifact write</span><strong>{localRuntimeSmokeReadinessResult()!.no_artifact_write ? "yes" : "no"}</strong></div>
+                <div><span>No registry status change</span><strong>{localRuntimeSmokeReadinessResult()!.no_registry_status_change ? "yes" : "no"}</strong></div>
+                <div><span>No audit write</span><strong>{localRuntimeSmokeReadinessResult()!.no_audit_write ? "yes" : "no"}</strong></div>
+                <div><span>Diagnostic only</span><strong>{localRuntimeSmokeReadinessResult()!.diagnostic_only ? "yes" : "no"}</strong></div>
+                <div><span>Not Scholar Chat answer</span><strong>{localRuntimeSmokeReadinessResult()!.not_scholar_chat_answer ? "yes" : "no"}</strong></div>
+                <div><span>No answer generated</span><strong>{localRuntimeSmokeReadinessResult()!.no_answer_generated ? "yes" : "no"}</strong></div>
+                <div><span>No grounding applied</span><strong>{localRuntimeSmokeReadinessResult()!.no_grounding_applied ? "yes" : "no"}</strong></div>
+                <div><span>No Evidence Pack used</span><strong>{localRuntimeSmokeReadinessResult()!.no_evidence_pack_used ? "yes" : "no"}</strong></div>
+              </div>
+              {localRuntimeSmokeReadinessResult()!.summary && <p><strong>Summary:</strong> {localRuntimeSmokeReadinessResult()!.summary}</p>}
+              <div class="contract-meta">
+                <div><span>Required inputs</span><strong>{localRuntimeSmokeReadinessResult()!.required_inputs.join(", ") || "none"}</strong></div>
+                <div><span>Missing inputs</span><strong>{localRuntimeSmokeReadinessResult()!.missing_inputs.join(", ") || "none"}</strong></div>
+              </div>
+              {localRuntimeSmokeReadinessResult()!.readiness_reasons.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Readiness reasons</h4>
+                  <ul>
+                    {localRuntimeSmokeReadinessResult()!.readiness_reasons.map((reason) => (
+                      <li>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p>No readiness reasons.</p>
+              )}
+              {localRuntimeSmokeReadinessResult()!.blockers.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Blockers</h4>
+                  <ul>
+                    {localRuntimeSmokeReadinessResult()!.blockers.map((blocker) => (
+                      <li>
+                        <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                        <div>{blocker.message}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p>No smoke readiness blockers.</p>
+              )}
+              {localRuntimeSmokeReadinessResult()!.warnings.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Warnings</h4>
+                  <ul>
+                    {localRuntimeSmokeReadinessResult()!.warnings.map((warning) => (
+                      <li>
+                        <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                        <div>{warning.message}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p>No smoke readiness warnings.</p>
+              )}
+              <h4>Next required actions</h4>
+              {localRuntimeSmokeReadinessResult()!.next_required_actions.length > 0 ? (
+                <ul>
+                  {localRuntimeSmokeReadinessResult()!.next_required_actions.map((item) => (
+                    <li>{item}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No next required actions.</p>
+              )}
+            </>
+          ) : (
+            <p>No llama.cpp smoke readiness preview loaded yet.</p>
+          )
+        ) : (
+          <p>No llama.cpp smoke readiness preview loaded yet.</p>
+        )}
+      </div>
+      <div class="artifact-overview">
         <h3>Runtime invocation plan</h3>
         <p class="muted">
           Read-only preview of the future local runtime invocation. It uses the current Scholar Chat prompt and optional prompt-pack estimate, but it never starts a process or persists configuration.
@@ -6502,6 +6781,7 @@ export default function App() {
               onInput={(event) => {
                 setLocalRuntimeSmokePrompt(event.currentTarget.value);
                 clearLocalRuntimeSmokePreview();
+                clearLocalRuntimeSmokeReadinessPreview();
               }}
               placeholder="Say READY in one short sentence."
             />
@@ -6526,6 +6806,7 @@ export default function App() {
                 onInput={(event) => {
                   setLocalRuntimeSmokeTimeoutMs(event.currentTarget.value);
                   clearLocalRuntimeSmokePreview();
+                  clearLocalRuntimeSmokeReadinessPreview();
                 }}
                 placeholder="3000"
               />
@@ -6538,6 +6819,7 @@ export default function App() {
                 onInput={(event) => {
                   setLocalRuntimeSmokeMaxOutputTokens(event.currentTarget.value);
                   clearLocalRuntimeSmokePreview();
+                  clearLocalRuntimeSmokeReadinessPreview();
                 }}
                 placeholder="8"
               />
