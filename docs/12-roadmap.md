@@ -1395,6 +1395,25 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 91 - Llama Runtime Capability Preview
+
+Phase 91.0 adds a preview-only llama.cpp capability summary on top of the version-probe result. It is diagnostic only, not model loading, not model compatibility validation, and not inference.
+
+Do not implement:
+
+- llama.cpp execution beyond the wrapped version probe
+- model loading
+- model compatibility claims
+- inference
+- LLM calls
+- persistence
+- artifact writes
+- registry status changes
+- audit writes
+- source import
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
