@@ -1486,6 +1486,24 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 96 - Scholar Chat Runtime Diagnostic Result Preview
+
+Phase 96.0 adds a backend-only Scholar Chat runtime diagnostic result preview that classifies an already-provided smoke diagnostic preview/result for future Scholar Chat use. It does not run smoke diagnostics, does not run inference, and does not create artifacts, persistence, registry changes, or audit writes.
+
+Do not implement:
+
+- runtime execution
+- smoke diagnostic execution
+- smoke inference execution
+- Scholar Chat answer generation
+- artifact writes
+- persistence
+- registry status changes
+- audit writes
+- source import
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
