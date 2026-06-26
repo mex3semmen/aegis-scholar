@@ -149,6 +149,57 @@ pub struct LocalRuntimeValidationPreview {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum LocalRuntimeProbeReadinessStatus {
+    Blocked,
+    NeedsReview,
+    ProbeReadyLater,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeProbeReadinessPreviewRequest {
+    pub validation_preview_request: LocalRuntimeValidationPreviewRequest,
+    pub probe_consent: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeProbeReadinessPreview {
+    pub status: LocalRuntimeProbeReadinessStatus,
+    pub validation_status: LocalRuntimeValidationStatus,
+    pub adapter_contract_status: LocalRuntimeAdapterContractStatus,
+    pub adapter_kind: LocalRuntimeAdapterKind,
+    pub normalized_model_family: Option<String>,
+    pub normalized_model_format: String,
+    pub executable_path_present: bool,
+    pub model_path_present: bool,
+    pub executable_exists: bool,
+    pub model_exists: bool,
+    pub executable_is_file: bool,
+    pub model_is_file: bool,
+    pub model_extension_valid: bool,
+    pub safe_executable_file_name: Option<String>,
+    pub safe_model_file_name: Option<String>,
+    pub probe_consent: bool,
+    pub required_inputs: Vec<String>,
+    pub missing_inputs: Vec<String>,
+    pub readiness_reasons: Vec<String>,
+    pub blockers: Vec<LocalRuntimeAdapterContractBlocker>,
+    pub warnings: Vec<LocalRuntimeAdapterContractWarning>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub no_process_spawn: bool,
+    pub no_binary_probe: bool,
+    pub no_model_load: bool,
+    pub no_llm_call: bool,
+    pub no_runtime_execution: bool,
+    pub no_persistence: bool,
+    pub no_artifact_write: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum LocalModelRuntimeHealthStatus {
     NotConfigured,
     ConfigPresent,
@@ -892,6 +943,107 @@ pub fn preview_llama_runtime_validation(
         chat_template_present: adapter_contract_preview.chat_template_present,
         missing_inputs,
         validation_reasons,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        no_process_spawn: true,
+        no_binary_probe: true,
+        no_model_load: true,
+        no_llm_call: true,
+        no_runtime_execution: true,
+        no_persistence: true,
+        no_artifact_write: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+    })
+}
+
+pub fn preview_llama_runtime_probe_readiness(
+    root: impl Into<PathBuf>,
+    request: LocalRuntimeProbeReadinessPreviewRequest,
+) -> AegisResult<LocalRuntimeProbeReadinessPreview> {
+    let root = root.into();
+    let validation_preview =
+        preview_llama_runtime_validation(root, request.validation_preview_request)?;
+    let status = match validation_preview.status {
+        LocalRuntimeValidationStatus::Blocked => LocalRuntimeProbeReadinessStatus::Blocked,
+        LocalRuntimeValidationStatus::NeedsReview => LocalRuntimeProbeReadinessStatus::NeedsReview,
+        LocalRuntimeValidationStatus::ValidationReadyLater => {
+            if request.probe_consent {
+                LocalRuntimeProbeReadinessStatus::ProbeReadyLater
+            } else {
+                LocalRuntimeProbeReadinessStatus::Blocked
+            }
+        }
+    };
+    let required_inputs = llama_runtime_probe_readiness_required_inputs();
+    let missing_inputs = llama_runtime_probe_readiness_missing_inputs(
+        &validation_preview.status,
+        request.probe_consent,
+    );
+    let readiness_reasons = llama_runtime_probe_readiness_reasons(
+        &validation_preview,
+        request.probe_consent,
+        &status,
+    );
+    let mut blockers = validation_preview.blockers.clone();
+    let mut warnings = validation_preview.warnings.clone();
+
+    push_adapter_contract_warning(
+        &mut warnings,
+        "probe_readiness_boundary",
+        "This is a preview-only llama.cpp probe readiness; no binary was probed, no process was started, no model was loaded, no runtime execution or LLM call occurred, and no settings or artifacts were persisted.",
+    );
+    if !matches!(
+        validation_preview.status,
+        LocalRuntimeValidationStatus::ValidationReadyLater
+    ) {
+        push_adapter_contract_blocker(
+            &mut blockers,
+            "runtime_validation_not_ready_later",
+            "The llama.cpp runtime validation preview is not ready later yet.",
+        );
+    } else if !request.probe_consent {
+        push_adapter_contract_blocker(
+            &mut blockers,
+            "probe_consent_missing",
+            "Probe consent was not given.",
+        );
+    }
+
+    let next_required_actions = llama_runtime_probe_readiness_next_required_actions(
+        &status,
+        &validation_preview,
+        request.probe_consent,
+    );
+    let summary = llama_runtime_probe_readiness_summary(
+        &status,
+        &validation_preview,
+        request.probe_consent,
+    );
+
+    Ok(LocalRuntimeProbeReadinessPreview {
+        status,
+        validation_status: validation_preview.status,
+        adapter_contract_status: validation_preview.adapter_contract_status,
+        adapter_kind: validation_preview.adapter_kind,
+        normalized_model_family: validation_preview.normalized_model_family,
+        normalized_model_format: validation_preview.normalized_model_format,
+        executable_path_present: validation_preview.executable_path_present,
+        model_path_present: validation_preview.model_path_present,
+        executable_exists: validation_preview.executable_exists,
+        model_exists: validation_preview.model_exists,
+        executable_is_file: validation_preview.executable_is_file,
+        model_is_file: validation_preview.model_is_file,
+        model_extension_valid: validation_preview.model_extension_valid,
+        safe_executable_file_name: validation_preview.safe_executable_file_name,
+        safe_model_file_name: validation_preview.safe_model_file_name,
+        probe_consent: request.probe_consent,
+        required_inputs,
+        missing_inputs,
+        readiness_reasons,
         blockers,
         warnings,
         next_required_actions,
@@ -2078,6 +2230,148 @@ fn llama_runtime_validation_summary(
     }
 }
 
+fn llama_runtime_probe_readiness_required_inputs() -> Vec<String> {
+    vec![
+        "runtime_validation_ready_later".to_string(),
+        "probe_consent".to_string(),
+    ]
+}
+
+fn llama_runtime_probe_readiness_missing_inputs(
+    validation_status: &LocalRuntimeValidationStatus,
+    probe_consent: bool,
+) -> Vec<String> {
+    let mut missing_inputs = Vec::new();
+    if !matches!(
+        validation_status,
+        LocalRuntimeValidationStatus::ValidationReadyLater
+    ) {
+        missing_inputs.push("runtime_validation_ready_later".to_string());
+    } else if !probe_consent {
+        missing_inputs.push("probe_consent".to_string());
+    }
+    missing_inputs
+}
+
+fn llama_runtime_probe_readiness_reasons(
+    validation_preview: &LocalRuntimeValidationPreview,
+    probe_consent: bool,
+    status: &LocalRuntimeProbeReadinessStatus,
+) -> Vec<String> {
+    let mut reasons = validation_preview.validation_reasons.clone();
+    push_unique_text(
+        &mut reasons,
+        &format!("Validation status: {:?}.", validation_preview.status),
+    );
+    push_unique_text(
+        &mut reasons,
+        &format!(
+            "Adapter contract status: {:?}.",
+            validation_preview.adapter_contract_status
+        ),
+    );
+    push_unique_text(
+        &mut reasons,
+        &format!("Probe consent: {}.", yes_no_text(probe_consent)),
+    );
+    if let Some(file_name) = validation_preview.safe_executable_file_name.as_deref() {
+        push_unique_text(&mut reasons, &format!("Safe executable file name: {file_name}."));
+    }
+    if let Some(file_name) = validation_preview.safe_model_file_name.as_deref() {
+        push_unique_text(&mut reasons, &format!("Safe model file name: {file_name}."));
+    }
+    match status {
+        LocalRuntimeProbeReadinessStatus::Blocked => {
+            push_unique_text(
+                &mut reasons,
+                "The llama.cpp probe-readiness preview is blocked until the runtime validation preview is ready later and probe consent is given.",
+            );
+        }
+        LocalRuntimeProbeReadinessStatus::NeedsReview => {
+            push_unique_text(
+                &mut reasons,
+                "The llama.cpp probe-readiness preview needs review because the runtime validation preview still needs review.",
+            );
+        }
+        LocalRuntimeProbeReadinessStatus::ProbeReadyLater => {
+            push_unique_text(
+                &mut reasons,
+                "The llama.cpp probe-readiness preview is ready later and probe consent is true.",
+            );
+        }
+    }
+    reasons
+}
+
+fn llama_runtime_probe_readiness_next_required_actions(
+    status: &LocalRuntimeProbeReadinessStatus,
+    validation_preview: &LocalRuntimeValidationPreview,
+    probe_consent: bool,
+) -> Vec<String> {
+    let mut next_required_actions = validation_preview.next_required_actions.clone();
+    match status {
+        LocalRuntimeProbeReadinessStatus::Blocked => {
+            if !matches!(
+                validation_preview.status,
+                LocalRuntimeValidationStatus::ValidationReadyLater
+            ) {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Bring the llama.cpp runtime validation preview to validation_ready_later first.",
+                );
+            } else if !probe_consent {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Confirm probe consent before a future binary probe can proceed.",
+                );
+            }
+        }
+        LocalRuntimeProbeReadinessStatus::NeedsReview => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Review the llama.cpp runtime validation preview before checking probe readiness again.",
+            );
+        }
+        LocalRuntimeProbeReadinessStatus::ProbeReadyLater => {
+            push_unique_text(
+                &mut next_required_actions,
+                "A future binary probe can be added later when execution is enabled.",
+            );
+        }
+    }
+    next_required_actions
+}
+
+fn llama_runtime_probe_readiness_summary(
+    status: &LocalRuntimeProbeReadinessStatus,
+    validation_preview: &LocalRuntimeValidationPreview,
+    probe_consent: bool,
+) -> String {
+    match status {
+        LocalRuntimeProbeReadinessStatus::Blocked => {
+            if !matches!(
+                validation_preview.status,
+                LocalRuntimeValidationStatus::ValidationReadyLater
+            ) {
+                "Probe-readiness preview is blocked until the llama.cpp runtime validation preview is ready later."
+                    .to_string()
+            } else if !probe_consent {
+                "Probe-readiness preview is blocked until probe consent is given.".to_string()
+            } else {
+                "Probe-readiness preview is blocked.".to_string()
+            }
+        }
+        LocalRuntimeProbeReadinessStatus::NeedsReview => {
+            "Probe-readiness preview needs review because the llama.cpp runtime validation preview still needs review."
+                .to_string()
+        }
+        LocalRuntimeProbeReadinessStatus::ProbeReadyLater => {
+            "Probe-readiness preview is ready later: the llama.cpp runtime validation preview is ready later and probe consent is true."
+                .to_string()
+        }
+    }
+}
+
 fn validation_status_label(status: &LocalRuntimeAdapterContractStatus) -> &'static str {
     match status {
         LocalRuntimeAdapterContractStatus::Blocked => "blocked",
@@ -2928,6 +3222,52 @@ fn main() {
         first
     }
 
+    fn probe_readiness_request(
+        validation_preview_request: LocalRuntimeValidationPreviewRequest,
+        probe_consent: bool,
+    ) -> LocalRuntimeProbeReadinessPreviewRequest {
+        LocalRuntimeProbeReadinessPreviewRequest {
+            validation_preview_request,
+            probe_consent,
+        }
+    }
+
+    fn assert_llama_runtime_probe_readiness_boundary_fields(
+        preview: &LocalRuntimeProbeReadinessPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.no_process_spawn);
+        assert!(preview.no_binary_probe);
+        assert!(preview.no_model_load);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_runtime_execution);
+        assert!(preview.no_persistence);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
+    fn assert_llama_runtime_probe_readiness_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: LocalRuntimeProbeReadinessPreviewRequest,
+    ) -> LocalRuntimeProbeReadinessPreview {
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let first = preview_llama_runtime_probe_readiness(temp.path(), request.clone()).unwrap();
+        let second = preview_llama_runtime_probe_readiness(temp.path(), request).unwrap();
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_llama_runtime_probe_readiness_boundary_fields(preview);
+        }
+        first
+    }
+
     #[test]
     fn local_runtime_invocation_plan_preview_is_not_configured_for_default_config() {
         let temp = tempfile::tempdir().unwrap();
@@ -3593,6 +3933,191 @@ fn main() {
         assert!(!json.contains(temp_path.as_ref()));
         assert!(!temp.path().join(".aegis").exists());
         assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn local_runtime_probe_readiness_preview_blocks_when_validation_is_blocked() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_llama_runtime_probe_readiness_deterministic_and_path_free(
+            &temp,
+            probe_readiness_request(
+                llama_runtime_validation_request(
+                    Some("   "),
+                    Some("\t"),
+                    None,
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                true,
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeProbeReadinessStatus::Blocked);
+        assert_eq!(result.validation_status, LocalRuntimeValidationStatus::Blocked);
+        assert_eq!(
+            result.missing_inputs,
+            vec!["runtime_validation_ready_later".to_string()]
+        );
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "runtime_validation_not_ready_later"));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn local_runtime_probe_readiness_preview_needs_review_when_validation_needs_review() {
+        let temp = tempfile::tempdir().unwrap();
+        let executable_path = temp.path().join("llama-server.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&executable_path, "placeholder").unwrap();
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_probe_readiness_deterministic_and_path_free(
+            &temp,
+            probe_readiness_request(
+                llama_runtime_validation_request(
+                    Some(executable_path.to_string_lossy().as_ref()),
+                    Some(model_path.to_string_lossy().as_ref()),
+                    Some("experimental-family"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                true,
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeProbeReadinessStatus::NeedsReview);
+        assert_eq!(result.validation_status, LocalRuntimeValidationStatus::NeedsReview);
+        assert_eq!(
+            result.missing_inputs,
+            vec!["runtime_validation_ready_later".to_string()]
+        );
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "runtime_validation_not_ready_later"));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn local_runtime_probe_readiness_preview_blocks_without_probe_consent_only_after_validation_is_ready_later() {
+        let temp = tempfile::tempdir().unwrap();
+        let executable_path = temp.path().join("llama-server.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&executable_path, "placeholder").unwrap();
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_probe_readiness_deterministic_and_path_free(
+            &temp,
+            probe_readiness_request(
+                llama_runtime_validation_request(
+                    Some(executable_path.to_string_lossy().as_ref()),
+                    Some(model_path.to_string_lossy().as_ref()),
+                    Some("llama"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                false,
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeProbeReadinessStatus::Blocked);
+        assert_eq!(result.validation_status, LocalRuntimeValidationStatus::ValidationReadyLater);
+        assert_eq!(result.missing_inputs, vec!["probe_consent".to_string()]);
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "probe_consent_missing"));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn local_runtime_probe_readiness_preview_returns_ready_later_when_validation_is_ready_later_and_probe_consent_is_true() {
+        let temp = tempfile::tempdir().unwrap();
+        let executable_path = temp.path().join("llama-server.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&executable_path, "placeholder").unwrap();
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_probe_readiness_deterministic_and_path_free(
+            &temp,
+            probe_readiness_request(
+                llama_runtime_validation_request(
+                    Some(executable_path.to_string_lossy().as_ref()),
+                    Some(model_path.to_string_lossy().as_ref()),
+                    Some("llama"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                true,
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeProbeReadinessStatus::ProbeReadyLater);
+        assert_eq!(result.validation_status, LocalRuntimeValidationStatus::ValidationReadyLater);
+        assert!(result.missing_inputs.is_empty());
+        assert_eq!(result.safe_executable_file_name.as_deref(), Some("llama-server.exe"));
+        assert_eq!(result.safe_model_file_name.as_deref(), Some("ready-model.gguf"));
+        assert_eq!(result.required_inputs, vec![
+            "runtime_validation_ready_later".to_string(),
+            "probe_consent".to_string(),
+        ]);
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn local_runtime_probe_readiness_preview_rejects_traversal_like_paths_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["..", "../llama-server.exe", "nested/../llama-server.exe", "nested\\..\\llama-server.exe"] {
+            for request in [
+                probe_readiness_request(
+                    llama_runtime_validation_request(
+                        Some(invalid),
+                        Some("model.gguf"),
+                        Some("llama"),
+                        Some("gguf"),
+                        Some(8192),
+                        Some(0),
+                        Some(8),
+                        Some(256),
+                        Some("template"),
+                    ),
+                    true,
+                ),
+                probe_readiness_request(
+                    llama_runtime_validation_request(
+                        Some("llama-server.exe"),
+                        Some(invalid),
+                        Some("llama"),
+                        Some("gguf"),
+                        Some(8192),
+                        Some(0),
+                        Some(8),
+                        Some(256),
+                        Some("template"),
+                    ),
+                    true,
+                ),
+            ] {
+                let result = preview_llama_runtime_probe_readiness(temp.path(), request);
+                assert!(matches!(result, Err(AegisError::LocalModelRuntimeInvalidPath)));
+                assert!(!temp.path().join(".aegis").exists());
+            }
+        }
     }
 
     #[test]

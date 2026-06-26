@@ -871,6 +871,52 @@ type LocalRuntimeValidationPreview = {
   no_audit_write: boolean;
 };
 
+type LocalRuntimeProbeReadinessStatus =
+  | "blocked"
+  | "needs_review"
+  | "probe_ready_later";
+
+type LocalRuntimeProbeReadinessPreviewRequest = {
+  validation_preview_request: LocalRuntimeValidationPreviewRequest;
+  probe_consent: boolean;
+};
+
+type LocalRuntimeProbeReadinessPreview = {
+  status: LocalRuntimeProbeReadinessStatus;
+  validation_status: LocalRuntimeValidationStatus;
+  adapter_contract_status: LocalRuntimeAdapterContractStatus;
+  adapter_kind: LocalRuntimeAdapterKind;
+  normalized_model_family: string | null;
+  normalized_model_format: string;
+  executable_path_present: boolean;
+  model_path_present: boolean;
+  executable_exists: boolean;
+  model_exists: boolean;
+  executable_is_file: boolean;
+  model_is_file: boolean;
+  model_extension_valid: boolean;
+  safe_executable_file_name?: string | null;
+  safe_model_file_name?: string | null;
+  probe_consent: boolean;
+  required_inputs: string[];
+  missing_inputs: string[];
+  readiness_reasons: string[];
+  blockers: LocalRuntimeAdapterContractBlocker[];
+  warnings: LocalRuntimeAdapterContractWarning[];
+  next_required_actions: string[];
+  summary: string;
+  preview_only: boolean;
+  no_process_spawn: boolean;
+  no_binary_probe: boolean;
+  no_model_load: boolean;
+  no_llm_call: boolean;
+  no_runtime_execution: boolean;
+  no_persistence: boolean;
+  no_artifact_write: boolean;
+  no_registry_status_change: boolean;
+  no_audit_write: boolean;
+};
+
 type LocalModelRuntimeHealthPreview = {
   status: LocalModelRuntimeHealthStatus;
   runtime_kind: LocalModelRuntimeKind;
@@ -1515,6 +1561,12 @@ export default function App() {
   const [localRuntimeValidationPreviewInputError, setLocalRuntimeValidationPreviewInputError] = createSignal<string | null>(null);
   const [localRuntimeValidationPreviewLoading, setLocalRuntimeValidationPreviewLoading] = createSignal(false);
   const [localRuntimeValidationPreviewHasRun, setLocalRuntimeValidationPreviewHasRun] = createSignal(false);
+  const [localRuntimeProbeReadinessConsent, setLocalRuntimeProbeReadinessConsent] = createSignal(false);
+  const [localRuntimeProbeReadinessPreview, setLocalRuntimeProbeReadinessPreview] = createSignal<LocalRuntimeProbeReadinessPreview | null>(null);
+  const [localRuntimeProbeReadinessPreviewError, setLocalRuntimeProbeReadinessPreviewError] = createSignal<string | null>(null);
+  const [localRuntimeProbeReadinessPreviewInputError, setLocalRuntimeProbeReadinessPreviewInputError] = createSignal<string | null>(null);
+  const [localRuntimeProbeReadinessPreviewLoading, setLocalRuntimeProbeReadinessPreviewLoading] = createSignal(false);
+  const [localRuntimeProbeReadinessPreviewHasRun, setLocalRuntimeProbeReadinessPreviewHasRun] = createSignal(false);
   const [localRuntimePreview, setLocalRuntimePreview] = createSignal<LocalModelRuntimeHealthPreview | null>(null);
   const [localRuntimeError, setLocalRuntimeError] = createSignal<string | null>(null);
   const [localRuntimeValidationError, setLocalRuntimeValidationError] = createSignal<string | null>(null);
@@ -2079,6 +2131,14 @@ export default function App() {
     setLocalRuntimeValidationPreviewError(null);
     setLocalRuntimeValidationPreviewInputError(null);
     setLocalRuntimeValidationPreviewHasRun(false);
+    clearLocalRuntimeProbeReadinessPreview();
+  }
+
+  function clearLocalRuntimeProbeReadinessPreview() {
+    setLocalRuntimeProbeReadinessPreview(null);
+    setLocalRuntimeProbeReadinessPreviewError(null);
+    setLocalRuntimeProbeReadinessPreviewInputError(null);
+    setLocalRuntimeProbeReadinessPreviewHasRun(false);
   }
 
   function clearScholarChatAnswerReadinessPreview() {
@@ -3137,9 +3197,11 @@ export default function App() {
     }
   }
 
-  function buildLocalRuntimeValidationPreviewRequest(): LocalRuntimeValidationPreviewRequest | null {
+  function buildLocalRuntimeValidationPreviewRequest(
+    setValidationError: Setter<string | null>,
+  ): LocalRuntimeValidationPreviewRequest | null {
     const adapterContractRequest = buildLocalRuntimeAdapterContractPreviewRequest(
-      setLocalRuntimeValidationPreviewInputError,
+      setValidationError,
     );
     if (!adapterContractRequest) {
       return null;
@@ -3155,7 +3217,7 @@ export default function App() {
       return;
     }
 
-    const request = buildLocalRuntimeValidationPreviewRequest();
+    const request = buildLocalRuntimeValidationPreviewRequest(setLocalRuntimeValidationPreviewInputError);
     if (!request) {
       setLocalRuntimeValidationPreviewHasRun(true);
       setLocalRuntimeValidationPreview(null);
@@ -3178,6 +3240,51 @@ export default function App() {
       setLocalRuntimeValidationPreviewError(sanitizeBackendError(err));
     } finally {
       setLocalRuntimeValidationPreviewLoading(false);
+    }
+  }
+
+  function buildLocalRuntimeProbeReadinessPreviewRequest(): LocalRuntimeProbeReadinessPreviewRequest | null {
+    const validationPreviewRequest = buildLocalRuntimeValidationPreviewRequest(
+      setLocalRuntimeProbeReadinessPreviewInputError,
+    );
+    if (!validationPreviewRequest) {
+      return null;
+    }
+
+    return {
+      validation_preview_request: validationPreviewRequest,
+      probe_consent: localRuntimeProbeReadinessConsent(),
+    };
+  }
+
+  async function previewLocalRuntimeProbeReadiness() {
+    if (localRuntimeProbeReadinessPreviewLoading()) {
+      return;
+    }
+
+    const request = buildLocalRuntimeProbeReadinessPreviewRequest();
+    if (!request) {
+      setLocalRuntimeProbeReadinessPreviewHasRun(true);
+      setLocalRuntimeProbeReadinessPreview(null);
+      setLocalRuntimeProbeReadinessPreviewError(null);
+      return;
+    }
+
+    setLocalRuntimeProbeReadinessPreviewHasRun(true);
+    setLocalRuntimeProbeReadinessPreviewLoading(true);
+    setLocalRuntimeProbeReadinessPreviewError(null);
+    setLocalRuntimeProbeReadinessPreviewInputError(null);
+    setLocalRuntimeProbeReadinessPreview(null);
+    try {
+      const result = await invoke<LocalRuntimeProbeReadinessPreview>("preview_llama_runtime_probe_readiness", {
+        root: ".",
+        request,
+      });
+      setLocalRuntimeProbeReadinessPreview(result);
+    } catch (err) {
+      setLocalRuntimeProbeReadinessPreviewError(sanitizeBackendError(err));
+    } finally {
+      setLocalRuntimeProbeReadinessPreviewLoading(false);
     }
   }
 
@@ -5694,6 +5801,146 @@ export default function App() {
             )
           ) : (
             <p>No llama.cpp validation preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>llama.cpp probe readiness</h3>
+          <p class="muted">
+            Probe readiness preview only - no binary was probed, no process was started, no model was loaded, no runtime execution or LLM call occurred, and no settings or artifacts were persisted.
+          </p>
+          <p class="muted">Uses the current validation inputs above and only prepares a future binary probe preview.</p>
+          <div class="form-row">
+            <label class="inline-field">
+              <input
+                type="checkbox"
+                checked={localRuntimeProbeReadinessConsent()}
+                onChange={(event) => {
+                  setLocalRuntimeProbeReadinessConsent(event.currentTarget.checked);
+                  clearLocalRuntimeProbeReadinessPreview();
+                }}
+              />
+              I understand this only prepares a future binary probe preview.
+            </label>
+          </div>
+          <div class="hero-actions">
+            <button onClick={previewLocalRuntimeProbeReadiness} disabled={localRuntimeProbeReadinessPreviewLoading()}>
+              {localRuntimeProbeReadinessPreviewLoading() ? "Previewing..." : "Preview llama.cpp probe readiness"}
+            </button>
+          </div>
+          {localRuntimeProbeReadinessPreviewInputError() && <p class="error">{localRuntimeProbeReadinessPreviewInputError()}</p>}
+          {localRuntimeProbeReadinessPreviewError() && <p class="error">{localRuntimeProbeReadinessPreviewError()}</p>}
+          {localRuntimeProbeReadinessPreviewLoading() ? (
+            <p>Previewing llama.cpp probe readiness...</p>
+          ) : localRuntimeProbeReadinessPreviewHasRun() ? (
+            localRuntimeProbeReadinessPreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(localRuntimeProbeReadinessPreview()!.status) },
+                  { label: "Validation status", value: formatSnakeCaseLabel(localRuntimeProbeReadinessPreview()!.validation_status) },
+                  { label: "Adapter contract status", value: formatSnakeCaseLabel(localRuntimeProbeReadinessPreview()!.adapter_contract_status) },
+                  { label: "Adapter kind", value: formatSnakeCaseLabel(localRuntimeProbeReadinessPreview()!.adapter_kind) },
+                  { label: "Normalized model family", value: localRuntimeProbeReadinessPreview()!.normalized_model_family ?? "missing" },
+                  { label: "Normalized model format", value: localRuntimeProbeReadinessPreview()!.normalized_model_format },
+                  { label: "Executable path present", value: localRuntimeProbeReadinessPreview()!.executable_path_present ? "yes" : "no" },
+                  { label: "Executable exists", value: localRuntimeProbeReadinessPreview()!.executable_exists ? "yes" : "no" },
+                  { label: "Executable is file", value: localRuntimeProbeReadinessPreview()!.executable_is_file ? "yes" : "no" },
+                  { label: "Model path present", value: localRuntimeProbeReadinessPreview()!.model_path_present ? "yes" : "no" },
+                  { label: "Model exists", value: localRuntimeProbeReadinessPreview()!.model_exists ? "yes" : "no" },
+                  { label: "Model is file", value: localRuntimeProbeReadinessPreview()!.model_is_file ? "yes" : "no" },
+                  { label: "Model extension valid", value: localRuntimeProbeReadinessPreview()!.model_extension_valid ? "yes" : "no" },
+                  { label: "Probe consent", value: localRuntimeProbeReadinessPreview()!.probe_consent ? "yes" : "no" },
+                  { label: "Safe executable file name", value: localRuntimeProbeReadinessPreview()!.safe_executable_file_name ?? "not configured" },
+                  { label: "Safe model file name", value: localRuntimeProbeReadinessPreview()!.safe_model_file_name ?? "not configured" },
+                ])}
+                {localRuntimeProbeReadinessPreview()!.summary && <p><strong>Summary:</strong> {localRuntimeProbeReadinessPreview()!.summary}</p>}
+                <div class="contract-meta">
+                  <div><span>Preview only</span><strong>{localRuntimeProbeReadinessPreview()!.preview_only ? "yes" : "no"}</strong></div>
+                  <div><span>No process spawn</span><strong>{localRuntimeProbeReadinessPreview()!.no_process_spawn ? "yes" : "no"}</strong></div>
+                  <div><span>No binary probe</span><strong>{localRuntimeProbeReadinessPreview()!.no_binary_probe ? "yes" : "no"}</strong></div>
+                  <div><span>No model load</span><strong>{localRuntimeProbeReadinessPreview()!.no_model_load ? "yes" : "no"}</strong></div>
+                  <div><span>No runtime execution</span><strong>{localRuntimeProbeReadinessPreview()!.no_runtime_execution ? "yes" : "no"}</strong></div>
+                  <div><span>No LLM call</span><strong>{localRuntimeProbeReadinessPreview()!.no_llm_call ? "yes" : "no"}</strong></div>
+                  <div><span>No persistence</span><strong>{localRuntimeProbeReadinessPreview()!.no_persistence ? "yes" : "no"}</strong></div>
+                  <div><span>No artifact write</span><strong>{localRuntimeProbeReadinessPreview()!.no_artifact_write ? "yes" : "no"}</strong></div>
+                  <div><span>No registry status change</span><strong>{localRuntimeProbeReadinessPreview()!.no_registry_status_change ? "yes" : "no"}</strong></div>
+                  <div><span>No audit write</span><strong>{localRuntimeProbeReadinessPreview()!.no_audit_write ? "yes" : "no"}</strong></div>
+                </div>
+                <h4>Required inputs</h4>
+                {localRuntimeProbeReadinessPreview()!.required_inputs.length > 0 ? (
+                  <ul>
+                    {localRuntimeProbeReadinessPreview()!.required_inputs.map((item) => (
+                      <li>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No required inputs.</p>
+                )}
+                <h4>Missing inputs</h4>
+                {localRuntimeProbeReadinessPreview()!.missing_inputs.length > 0 ? (
+                  <ul>
+                    {localRuntimeProbeReadinessPreview()!.missing_inputs.map((item) => (
+                      <li>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No missing inputs.</p>
+                )}
+                <h4>Readiness reasons</h4>
+                {localRuntimeProbeReadinessPreview()!.readiness_reasons.length > 0 ? (
+                  <ul>
+                    {localRuntimeProbeReadinessPreview()!.readiness_reasons.map((item) => (
+                      <li>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No readiness reasons.</p>
+                )}
+                {localRuntimeProbeReadinessPreview()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {localRuntimeProbeReadinessPreview()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No probe-readiness blockers.</p>
+                )}
+                {localRuntimeProbeReadinessPreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {localRuntimeProbeReadinessPreview()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No probe-readiness warnings.</p>
+                )}
+                <h4>Next required actions</h4>
+                {localRuntimeProbeReadinessPreview()!.next_required_actions.length > 0 ? (
+                  <ul>
+                    {localRuntimeProbeReadinessPreview()!.next_required_actions.map((item) => (
+                      <li>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No next required actions.</p>
+                )}
+              </>
+            ) : (
+              <p>No llama.cpp probe readiness preview loaded yet.</p>
+            )
+          ) : (
+            <p>No llama.cpp probe readiness preview loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">
