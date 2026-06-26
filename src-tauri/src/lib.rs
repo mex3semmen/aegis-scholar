@@ -29,6 +29,7 @@ use local_runtime::{
     preview_llama_runtime_adapter_contract as preview_llama_runtime_adapter_contract_impl,
     preview_llama_runtime_validation as preview_llama_runtime_validation_impl,
     preview_llama_runtime_probe_readiness as preview_llama_runtime_probe_readiness_impl,
+    run_llama_runtime_version_probe as run_llama_runtime_version_probe_impl,
     smoke_test_local_runtime_inference as smoke_test_local_runtime_inference_impl,
     probe_local_runtime_version as probe_local_runtime_version_impl,
     LocalModelRuntimeConfig,
@@ -41,6 +42,8 @@ use local_runtime::{
     LocalRuntimeProbeResult,
     LocalRuntimeProbeReadinessPreview,
     LocalRuntimeProbeReadinessPreviewRequest,
+    LocalRuntimeVersionProbePreview,
+    LocalRuntimeVersionProbePreviewRequest,
     LocalRuntimeSmokeInferenceRequest,
     LocalRuntimeSmokeInferenceResult,
     LocalRuntimeValidationPreview,
@@ -335,6 +338,15 @@ fn preview_scholar_chat_grounded_draft_readiness(
 }
 
 #[tauri::command]
+fn run_llama_runtime_version_probe(
+    root: String,
+    request: LocalRuntimeVersionProbePreviewRequest,
+) -> Result<LocalRuntimeVersionProbePreview, String> {
+    run_llama_runtime_version_probe_impl(root, request)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
 fn preview_scholar_chat_grounded_answer_build_preflight(
     root: String,
     request: scholar_chat::ScholarChatGroundedAnswerBuildPreflightPreviewRequest,
@@ -519,6 +531,7 @@ pub fn run() {
             preview_scholar_chat_draft_inference,
             preview_scholar_chat_draft_grounding_inspection,
             preview_scholar_chat_grounded_draft_readiness,
+            run_llama_runtime_version_probe,
             preview_scholar_chat_grounded_answer_build_preflight,
             preview_scholar_chat_grounded_answer_execution_readiness,
             preview_scholar_chat_grounded_answer_execution_plan,

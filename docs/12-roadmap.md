@@ -1377,6 +1377,24 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 90 - Llama Runtime Version Probe Execution
+
+Phase 90.0 adds a preview-only, consent-gated llama.cpp version probe on top of probe readiness. It can run the configured binary with `--version` only, and it does not pass a model path, load a model, run inference, call an LLM, persist settings, or write artifacts.
+
+Do not implement:
+
+- llama.cpp execution beyond a version-only probe
+- model loading
+- inference
+- model path arguments
+- persistence
+- artifact writes
+- registry status changes
+- audit writes
+- source import
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.

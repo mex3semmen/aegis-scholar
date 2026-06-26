@@ -200,6 +200,59 @@ pub struct LocalRuntimeProbeReadinessPreview {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum LocalRuntimeVersionProbeStatus {
+    Blocked,
+    ProbeSucceeded,
+    ProbeFailed,
+    TimedOut,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeVersionProbePreviewRequest {
+    pub probe_readiness_preview_request: LocalRuntimeProbeReadinessPreviewRequest,
+    pub allow_probe_execution: bool,
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeVersionProbePreview {
+    pub status: LocalRuntimeVersionProbeStatus,
+    pub probe_readiness_status: LocalRuntimeProbeReadinessStatus,
+    pub validation_status: LocalRuntimeValidationStatus,
+    pub adapter_contract_status: LocalRuntimeAdapterContractStatus,
+    pub adapter_kind: LocalRuntimeAdapterKind,
+    pub normalized_model_family: Option<String>,
+    pub normalized_model_format: String,
+    pub safe_executable_file_name: Option<String>,
+    pub safe_model_file_name: Option<String>,
+    pub probe_consent: bool,
+    pub allow_probe_execution: bool,
+    pub execution_attempted: bool,
+    pub probe_argument: String,
+    pub timeout_ms: u64,
+    pub duration_ms: u64,
+    pub exit_code: Option<i32>,
+    pub stdout_preview: String,
+    pub stderr_preview: String,
+    pub stdout_truncated: bool,
+    pub stderr_truncated: bool,
+    pub blockers: Vec<LocalRuntimeProbeWarning>,
+    pub warnings: Vec<LocalRuntimeProbeWarning>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub no_model_load: bool,
+    pub no_model_path_argument: bool,
+    pub no_llm_call: bool,
+    pub no_runtime_inference: bool,
+    pub no_persistence: bool,
+    pub no_artifact_write: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum LocalModelRuntimeHealthStatus {
     NotConfigured,
     ConfigPresent,
@@ -1054,6 +1107,206 @@ pub fn preview_llama_runtime_probe_readiness(
         no_model_load: true,
         no_llm_call: true,
         no_runtime_execution: true,
+        no_persistence: true,
+        no_artifact_write: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+    })
+}
+
+pub fn run_llama_runtime_version_probe(
+    root: impl Into<PathBuf>,
+    request: LocalRuntimeVersionProbePreviewRequest,
+) -> AegisResult<LocalRuntimeVersionProbePreview> {
+    let root = root.into();
+    let LocalRuntimeVersionProbePreviewRequest {
+        probe_readiness_preview_request,
+        allow_probe_execution,
+        timeout_ms,
+    } = request;
+    let readiness_preview = preview_llama_runtime_probe_readiness(root.clone(), probe_readiness_preview_request.clone())?;
+    let adapter_contract_request = &probe_readiness_preview_request.validation_preview_request.adapter_contract_request;
+    let normalized_executable_path = normalize_optional_path(adapter_contract_request.executable_path.clone())?;
+    let normalized_model_path = normalize_optional_path(adapter_contract_request.model_path.clone())?;
+    let timeout_ms = clamp_probe_timeout_ms(timeout_ms);
+    let probe_argument = "--version".to_string();
+    let safe_executable_file_name = readiness_preview.safe_executable_file_name.clone();
+    let safe_model_file_name = readiness_preview.safe_model_file_name.clone();
+    let mut blockers: Vec<LocalRuntimeProbeWarning> = readiness_preview
+        .blockers
+        .iter()
+        .map(probe_warning_blocker_from_adapter_contract)
+        .collect();
+    let mut warnings: Vec<LocalRuntimeProbeWarning> = readiness_preview
+        .warnings
+        .iter()
+        .map(probe_warning_from_adapter_contract)
+        .collect();
+    let mut execution_attempted = false;
+    let mut duration_ms = 0;
+    let mut exit_code = None;
+    let mut stdout_preview = String::new();
+    let mut stderr_preview = String::new();
+    let mut stdout_truncated = false;
+    let mut stderr_truncated = false;
+
+    let status = match readiness_preview.status {
+        LocalRuntimeProbeReadinessStatus::Blocked | LocalRuntimeProbeReadinessStatus::NeedsReview => {
+            push_probe_blocker(
+                &mut blockers,
+                "probe_readiness_not_ready_later",
+                "The llama.cpp probe-readiness preview must be ready later before a version probe can run.",
+            );
+            LocalRuntimeVersionProbeStatus::Blocked
+        }
+        LocalRuntimeProbeReadinessStatus::ProbeReadyLater => {
+            if !allow_probe_execution {
+                push_probe_blocker(
+                    &mut blockers,
+                    "probe_execution_not_allowed",
+                    "Probe execution was not allowed for this version probe.",
+                );
+                LocalRuntimeVersionProbeStatus::Blocked
+            } else {
+                match normalized_executable_path.as_deref() {
+                    Some(executable_path) => {
+                        let resolved_executable_path = resolve_runtime_path(&root, executable_path);
+                        match run_version_probe(&resolved_executable_path, timeout_ms) {
+                            Ok(execution) => {
+                                execution_attempted = true;
+                                let redactions = version_probe_output_redactions(
+                                    Some(resolved_executable_path.to_string_lossy().as_ref()),
+                                    safe_executable_file_name.as_deref(),
+                                    normalized_model_path.as_deref(),
+                                    safe_model_file_name.as_deref(),
+                                );
+                                let (stdout, stdout_is_truncated) = preview_probe_output_with_redactions(
+                                    &execution.stdout,
+                                    LOCAL_RUNTIME_PROBE_PREVIEW_LIMIT,
+                                    &redactions,
+                                );
+                                let (stderr, stderr_is_truncated) = preview_probe_output_with_redactions(
+                                    &execution.stderr,
+                                    LOCAL_RUNTIME_PROBE_PREVIEW_LIMIT,
+                                    &redactions,
+                                );
+                                stdout_preview = stdout;
+                                stderr_preview = stderr;
+                                stdout_truncated = stdout_is_truncated;
+                                stderr_truncated = stderr_is_truncated;
+                                if stdout_truncated {
+                                    push_probe_warning(
+                                        &mut warnings,
+                                        "stdout_truncated",
+                                        "Standard output was truncated to keep the version probe preview compact.",
+                                    );
+                                }
+                                if stderr_truncated {
+                                    push_probe_warning(
+                                        &mut warnings,
+                                        "stderr_truncated",
+                                        "Standard error was truncated to keep the version probe preview compact.",
+                                    );
+                                }
+                                if execution.timed_out {
+                                    push_probe_warning(
+                                        &mut warnings,
+                                        "timed_out",
+                                        "The version probe reached its timeout and was stopped.",
+                                    );
+                                }
+                                if let Some(exit_code_value) = execution.exit_code {
+                                    if exit_code_value != 0 {
+                                        push_probe_warning(
+                                            &mut warnings,
+                                            "non_zero_exit",
+                                            "The version probe exited with a non-zero status.",
+                                        );
+                                    }
+                                } else {
+                                    push_probe_warning(
+                                        &mut warnings,
+                                        "no_exit_code",
+                                        "The version probe did not report an exit code.",
+                                    );
+                                }
+                                duration_ms = execution.duration_ms;
+                                exit_code = execution.exit_code;
+                                if execution.timed_out {
+                                    LocalRuntimeVersionProbeStatus::TimedOut
+                                } else if execution.exit_code == Some(0) {
+                                    LocalRuntimeVersionProbeStatus::ProbeSucceeded
+                                } else {
+                                    LocalRuntimeVersionProbeStatus::ProbeFailed
+                                }
+                            }
+                            Err(_) => {
+                                push_probe_blocker(
+                                    &mut blockers,
+                                    "probe_start_failed",
+                                    "The version probe could not start.",
+                                );
+                                LocalRuntimeVersionProbeStatus::Blocked
+                            }
+                        }
+                    }
+                    None => {
+                        push_probe_blocker(
+                            &mut blockers,
+                            "executable_missing",
+                            "An executable path is required for this version probe.",
+                        );
+                        LocalRuntimeVersionProbeStatus::Blocked
+                    }
+                }
+            }
+        }
+    };
+
+    let summary = llama_runtime_version_probe_summary(
+        &status,
+        &readiness_preview.status,
+        allow_probe_execution,
+        safe_executable_file_name.as_deref(),
+        safe_model_file_name.as_deref(),
+    );
+
+    let next_required_actions = llama_runtime_version_probe_required_actions(
+        &readiness_preview.status,
+        allow_probe_execution,
+        &blockers,
+    );
+
+    Ok(LocalRuntimeVersionProbePreview {
+        status,
+        probe_readiness_status: readiness_preview.status,
+        validation_status: readiness_preview.validation_status,
+        adapter_contract_status: readiness_preview.adapter_contract_status,
+        adapter_kind: readiness_preview.adapter_kind,
+        normalized_model_family: readiness_preview.normalized_model_family,
+        normalized_model_format: readiness_preview.normalized_model_format,
+        safe_executable_file_name,
+        safe_model_file_name,
+        probe_consent: readiness_preview.probe_consent,
+        allow_probe_execution,
+        execution_attempted,
+        probe_argument,
+        timeout_ms,
+        duration_ms,
+        exit_code,
+        stdout_preview,
+        stderr_preview,
+        stdout_truncated,
+        stderr_truncated,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        no_model_load: true,
+        no_model_path_argument: true,
+        no_llm_call: true,
+        no_runtime_inference: true,
         no_persistence: true,
         no_artifact_write: true,
         no_registry_status_change: true,
@@ -2372,6 +2625,108 @@ fn llama_runtime_probe_readiness_summary(
     }
 }
 
+fn llama_runtime_version_probe_required_actions(
+    readiness_status: &LocalRuntimeProbeReadinessStatus,
+    allow_probe_execution: bool,
+    blockers: &[LocalRuntimeProbeWarning],
+) -> Vec<String> {
+    let mut next_required_actions = Vec::new();
+    match readiness_status {
+        LocalRuntimeProbeReadinessStatus::Blocked => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Review the llama.cpp probe-readiness preview before running a version-only probe.",
+            );
+        }
+        LocalRuntimeProbeReadinessStatus::NeedsReview => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Review the llama.cpp probe-readiness preview before trying the version probe again.",
+            );
+        }
+        LocalRuntimeProbeReadinessStatus::ProbeReadyLater => {
+            if !allow_probe_execution {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Enable version-probe execution to run the configured llama.cpp binary with --version only.",
+                );
+            } else if blockers.iter().any(|blocker| blocker.kind == "probe_start_failed") {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Review the configured executable before trying the version probe again.",
+                );
+            } else {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Review the bounded stdout and stderr previews before trying the version probe again later.",
+                );
+            }
+        }
+    }
+    next_required_actions
+}
+
+fn llama_runtime_version_probe_summary(
+    status: &LocalRuntimeVersionProbeStatus,
+    readiness_status: &LocalRuntimeProbeReadinessStatus,
+    allow_probe_execution: bool,
+    safe_executable_file_name: Option<&str>,
+    safe_model_file_name: Option<&str>,
+) -> String {
+    let executable_text = safe_executable_file_name
+        .map(|file_name| format!(" Configured executable file: {file_name}."))
+        .unwrap_or_default();
+    let model_text = safe_model_file_name
+        .map(|file_name| format!(" Configured model file: {file_name}."))
+        .unwrap_or_default();
+    match status {
+        LocalRuntimeVersionProbeStatus::Blocked => {
+            if !matches!(readiness_status, LocalRuntimeProbeReadinessStatus::ProbeReadyLater) {
+                format!(
+                    "The llama.cpp version probe preview is blocked until the probe-readiness preview is ready later.{executable_text}{model_text}"
+                )
+            } else if !allow_probe_execution {
+                format!(
+                    "The llama.cpp version probe preview is blocked until probe execution is allowed.{executable_text}{model_text}"
+                )
+            } else {
+                format!("The llama.cpp version probe preview is blocked.{executable_text}{model_text}")
+            }
+        }
+        LocalRuntimeVersionProbeStatus::ProbeSucceeded => {
+            format!(
+                "The llama.cpp version probe preview succeeded after running the configured executable with --version only.{executable_text}{model_text}"
+            )
+        }
+        LocalRuntimeVersionProbeStatus::ProbeFailed => {
+            format!(
+                "The llama.cpp version probe preview failed after running the configured executable with --version only.{executable_text}{model_text}"
+            )
+        }
+        LocalRuntimeVersionProbeStatus::TimedOut => {
+            format!(
+                "The llama.cpp version probe preview timed out after running the configured executable with --version only.{executable_text}{model_text}"
+            )
+        }
+    }
+}
+
+fn version_probe_output_redactions(
+    executable_path: Option<&str>,
+    safe_executable_file_name: Option<&str>,
+    model_path: Option<&str>,
+    safe_model_file_name: Option<&str>,
+) -> Vec<(String, String)> {
+    let mut redactions = Vec::new();
+    if let (Some(executable_path), Some(safe_executable_file_name)) = (executable_path, safe_executable_file_name) {
+        redactions.push((executable_path.to_string(), safe_executable_file_name.to_string()));
+    }
+    if let (Some(model_path), Some(safe_model_file_name)) = (model_path, safe_model_file_name) {
+        redactions.push((model_path.to_string(), safe_model_file_name.to_string()));
+    }
+    redactions
+}
+
 fn validation_status_label(status: &LocalRuntimeAdapterContractStatus) -> &'static str {
     match status {
         LocalRuntimeAdapterContractStatus::Blocked => "blocked",
@@ -2694,6 +3049,24 @@ fn push_probe_blocker(blockers: &mut Vec<LocalRuntimeProbeWarning>, kind: &str, 
             kind: kind.to_string(),
             message: message.to_string(),
         });
+    }
+}
+
+fn probe_warning_from_adapter_contract(
+    item: &LocalRuntimeAdapterContractWarning,
+) -> LocalRuntimeProbeWarning {
+    LocalRuntimeProbeWarning {
+        kind: item.kind.clone(),
+        message: item.message.clone(),
+    }
+}
+
+fn probe_warning_blocker_from_adapter_contract(
+    item: &LocalRuntimeAdapterContractBlocker,
+) -> LocalRuntimeProbeWarning {
+    LocalRuntimeProbeWarning {
+        kind: item.kind.clone(),
+        message: item.message.clone(),
     }
 }
 
@@ -3232,6 +3605,69 @@ fn main() {
         }
     }
 
+    fn version_probe_request(
+        validation_preview_request: LocalRuntimeValidationPreviewRequest,
+        probe_consent: bool,
+        allow_probe_execution: bool,
+        timeout_ms: Option<u64>,
+    ) -> LocalRuntimeVersionProbePreviewRequest {
+        LocalRuntimeVersionProbePreviewRequest {
+            probe_readiness_preview_request: probe_readiness_request(validation_preview_request, probe_consent),
+            allow_probe_execution,
+            timeout_ms,
+        }
+    }
+
+    fn version_probe_helper_executable(temp: &tempfile::TempDir, executable_name: &str) -> PathBuf {
+        let source_path = temp.path().join(format!("{executable_name}.rs"));
+        let executable_path = temp.path().join(executable_name);
+        let crate_name = source_path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("version_probe_helper")
+            .chars()
+            .map(|value| if value.is_ascii_alphanumeric() || value == '_' { value } else { '_' })
+            .collect::<String>();
+        let source = r#"
+use std::{env, thread, time::Duration};
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let exe_name = env::current_exe()
+        .ok()
+        .and_then(|path| path.file_name().and_then(|value| value.to_str()).map(|value| value.to_string()))
+        .unwrap_or_default();
+    println!("stdout marker");
+    println!("args={}", args.join(" | "));
+    println!("exe_name={}", exe_name);
+    println!("{}", "S".repeat(5000));
+    eprintln!("stderr marker");
+    eprintln!("args={}", args.join(" | "));
+    eprintln!("exe_name={}", exe_name);
+    eprintln!("{}", "E".repeat(5000));
+    if exe_name.contains("slow") {
+        thread::sleep(Duration::from_millis(750));
+    }
+    if exe_name.contains("fail") {
+        std::process::exit(7);
+    }
+}
+"#;
+        fs::write(&source_path, source).unwrap();
+        let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+        let status = Command::new(rustc)
+            .arg("--crate-name")
+            .arg(&crate_name)
+            .arg("--edition=2021")
+            .arg(&source_path)
+            .arg("-o")
+            .arg(&executable_path)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        executable_path
+    }
+
     fn assert_llama_runtime_probe_readiness_boundary_fields(
         preview: &LocalRuntimeProbeReadinessPreview,
     ) {
@@ -3241,6 +3677,20 @@ fn main() {
         assert!(preview.no_model_load);
         assert!(preview.no_llm_call);
         assert!(preview.no_runtime_execution);
+        assert!(preview.no_persistence);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
+    fn assert_llama_runtime_version_probe_boundary_fields(
+        preview: &LocalRuntimeVersionProbePreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.no_model_load);
+        assert!(preview.no_model_path_argument);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_runtime_inference);
         assert!(preview.no_persistence);
         assert!(preview.no_artifact_write);
         assert!(preview.no_registry_status_change);
@@ -3264,6 +3714,27 @@ fn main() {
             assert!(!debug.contains(temp_path.as_ref()));
             assert!(!json.contains(temp_path.as_ref()));
             assert_llama_runtime_probe_readiness_boundary_fields(preview);
+        }
+        first
+    }
+
+    fn assert_llama_runtime_version_probe_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: LocalRuntimeVersionProbePreviewRequest,
+    ) -> LocalRuntimeVersionProbePreview {
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let first = run_llama_runtime_version_probe(temp.path(), request.clone()).unwrap();
+        let second = run_llama_runtime_version_probe(temp.path(), request).unwrap();
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_llama_runtime_version_probe_boundary_fields(preview);
         }
         first
     }
@@ -4077,6 +4548,314 @@ fn main() {
         ]);
         assert!(!temp.path().join(".aegis").exists());
         assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn local_runtime_version_probe_preview_blocks_when_readiness_is_blocked() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_llama_runtime_version_probe_deterministic_and_path_free(
+            &temp,
+            version_probe_request(
+                llama_runtime_validation_request(
+                    Some(""),
+                    Some(""),
+                    None,
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                true,
+                true,
+                Some(1_500),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeVersionProbeStatus::Blocked);
+        assert_eq!(result.probe_readiness_status, LocalRuntimeProbeReadinessStatus::Blocked);
+        assert_eq!(result.validation_status, LocalRuntimeValidationStatus::Blocked);
+        assert!(!result.execution_attempted);
+        assert_eq!(result.probe_argument, "--version");
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "runtime_validation_not_ready_later"));
+        assert_llama_runtime_version_probe_boundary_fields(&result);
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn local_runtime_version_probe_preview_blocks_when_readiness_needs_review() {
+        let temp = tempfile::tempdir().unwrap();
+        let executable_path = temp.path().join("llama-server.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&executable_path, "placeholder").unwrap();
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_version_probe_deterministic_and_path_free(
+            &temp,
+            version_probe_request(
+                llama_runtime_validation_request(
+                    Some(executable_path.to_string_lossy().as_ref()),
+                    Some(model_path.to_string_lossy().as_ref()),
+                    Some("experimental-family"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                true,
+                true,
+                Some(1_500),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeVersionProbeStatus::Blocked);
+        assert_eq!(result.probe_readiness_status, LocalRuntimeProbeReadinessStatus::NeedsReview);
+        assert_eq!(result.validation_status, LocalRuntimeValidationStatus::NeedsReview);
+        assert!(!result.execution_attempted);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "runtime_validation_not_ready_later"));
+        assert_llama_runtime_version_probe_boundary_fields(&result);
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn local_runtime_version_probe_preview_blocks_when_probe_execution_is_not_allowed() {
+        let temp = tempfile::tempdir().unwrap();
+        let executable_path = temp.path().join("llama-server.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&executable_path, "placeholder").unwrap();
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_version_probe_deterministic_and_path_free(
+            &temp,
+            version_probe_request(
+                llama_runtime_validation_request(
+                    Some(executable_path.to_string_lossy().as_ref()),
+                    Some(model_path.to_string_lossy().as_ref()),
+                    Some("llama"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                true,
+                false,
+                Some(1_500),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeVersionProbeStatus::Blocked);
+        assert_eq!(result.probe_readiness_status, LocalRuntimeProbeReadinessStatus::ProbeReadyLater);
+        assert_eq!(result.validation_status, LocalRuntimeValidationStatus::ValidationReadyLater);
+        assert!(!result.execution_attempted);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "probe_execution_not_allowed"));
+        assert!(result.next_required_actions.iter().any(|action| action.contains("Enable version-probe execution")));
+        assert_llama_runtime_version_probe_boundary_fields(&result);
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn local_runtime_version_probe_preview_reports_probe_succeeded_and_sanitizes_output() {
+        let temp = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let executable_path = version_probe_helper_executable(&helper, "version_probe_ok.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_version_probe_deterministic_and_path_free(
+            &temp,
+            version_probe_request(
+                llama_runtime_validation_request(
+                    Some(executable_path.to_string_lossy().as_ref()),
+                    Some(model_path.to_string_lossy().as_ref()),
+                    Some("llama"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                true,
+                true,
+                Some(1_500),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeVersionProbeStatus::ProbeSucceeded);
+        assert!(result.execution_attempted);
+        assert_eq!(result.probe_argument, "--version");
+        assert_eq!(result.exit_code, Some(0));
+        assert!(result.stdout_truncated);
+        assert!(result.stderr_truncated);
+        assert!(result.stdout_preview.contains("stdout marker"));
+        assert!(result.stderr_preview.contains("stderr marker"));
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        let helper_path = helper.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert!(!debug.contains(helper_path.as_ref()));
+        assert!(!json.contains(helper_path.as_ref()));
+        assert!(!result.stdout_preview.contains(temp_path.as_ref()));
+        assert!(!result.stderr_preview.contains(temp_path.as_ref()));
+        assert!(!result.stdout_preview.contains(helper_path.as_ref()));
+        assert!(!result.stderr_preview.contains(helper_path.as_ref()));
+        assert_eq!(result.safe_executable_file_name.as_deref(), Some("version_probe_ok.exe"));
+        assert_eq!(result.safe_model_file_name.as_deref(), Some("ready-model.gguf"));
+        assert!(result.no_model_load);
+        assert!(result.no_model_path_argument);
+        assert!(result.no_llm_call);
+        assert!(result.no_runtime_inference);
+        assert!(result.no_persistence);
+        assert!(result.no_artifact_write);
+        assert!(result.no_registry_status_change);
+        assert!(result.no_audit_write);
+        assert_llama_runtime_version_probe_boundary_fields(&result);
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn local_runtime_version_probe_preview_reports_probe_failed_for_nonzero_exit() {
+        let temp = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let executable_path = version_probe_helper_executable(&helper, "version_probe_fail.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_version_probe_deterministic_and_path_free(
+            &temp,
+            version_probe_request(
+                llama_runtime_validation_request(
+                    Some(executable_path.to_string_lossy().as_ref()),
+                    Some(model_path.to_string_lossy().as_ref()),
+                    Some("llama"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                true,
+                true,
+                Some(1_500),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeVersionProbeStatus::ProbeFailed);
+        assert!(result.execution_attempted);
+        assert_eq!(result.exit_code, Some(7));
+        assert!(result.warnings.iter().any(|warning| warning.kind == "non_zero_exit"));
+        assert!(result.stdout_truncated);
+        assert!(result.stderr_truncated);
+        assert_llama_runtime_version_probe_boundary_fields(&result);
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn local_runtime_version_probe_preview_reports_timed_out_for_slow_executable() {
+        let temp = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let executable_path = version_probe_helper_executable(&helper, "version_probe_slow.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_version_probe_deterministic_and_path_free(
+            &temp,
+            version_probe_request(
+                llama_runtime_validation_request(
+                    Some(executable_path.to_string_lossy().as_ref()),
+                    Some(model_path.to_string_lossy().as_ref()),
+                    Some("llama"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                true,
+                true,
+                Some(50),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeVersionProbeStatus::TimedOut);
+        assert!(result.execution_attempted);
+        assert!(result.warnings.iter().any(|warning| warning.kind == "timed_out"));
+        assert!(result.stdout_truncated);
+        assert!(result.stderr_truncated);
+        assert_llama_runtime_version_probe_boundary_fields(&result);
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn local_runtime_version_probe_preview_reports_spawn_error_without_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let executable_path = helper.path().join("broken-version-probe.exe");
+        fs::write(&executable_path, "not an executable").unwrap();
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_version_probe_deterministic_and_path_free(
+            &temp,
+            version_probe_request(
+                llama_runtime_validation_request(
+                    Some(executable_path.to_string_lossy().as_ref()),
+                    Some(model_path.to_string_lossy().as_ref()),
+                    Some("llama"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                true,
+                true,
+                Some(1_500),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeVersionProbeStatus::Blocked);
+        assert!(!result.execution_attempted);
+        assert!(result.blockers.iter().any(|blocker| blocker.kind == "probe_start_failed"));
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        let helper_path = helper.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert!(!debug.contains(helper_path.as_ref()));
+        assert!(!json.contains(helper_path.as_ref()));
+        assert_llama_runtime_version_probe_boundary_fields(&result);
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn local_runtime_version_probe_preview_rejects_traversal_like_paths_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["..", "../probe.exe", "nested/../probe.exe", "nested\\..\\probe.exe"] {
+            let result = run_llama_runtime_version_probe(
+                temp.path(),
+                version_probe_request(
+                    llama_runtime_validation_request(
+                        Some(invalid),
+                        Some("model.gguf"),
+                        Some("llama"),
+                        Some("gguf"),
+                        Some(8192),
+                        Some(0),
+                        Some(8),
+                        Some(256),
+                        Some("template"),
+                    ),
+                    true,
+                    true,
+                    Some(1_500),
+                ),
+            );
+            assert!(matches!(result, Err(AegisError::LocalModelRuntimeInvalidPath)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
     }
 
     #[test]
