@@ -253,6 +253,60 @@ pub struct LocalRuntimeVersionProbePreview {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum LocalRuntimeCapabilityStatus {
+    Blocked,
+    NeedsReview,
+    CapabilityReadyLater,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeCapabilityPreviewRequest {
+    pub version_probe_preview_request: LocalRuntimeVersionProbePreviewRequest,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeCapabilityPreview {
+    pub status: LocalRuntimeCapabilityStatus,
+    pub version_probe_status: LocalRuntimeVersionProbeStatus,
+    pub probe_readiness_status: LocalRuntimeProbeReadinessStatus,
+    pub validation_status: LocalRuntimeValidationStatus,
+    pub adapter_contract_status: LocalRuntimeAdapterContractStatus,
+    pub adapter_kind: LocalRuntimeAdapterKind,
+    pub normalized_model_family: Option<String>,
+    pub normalized_model_format: String,
+    pub safe_executable_file_name: Option<String>,
+    pub safe_model_file_name: Option<String>,
+    pub probe_consent: bool,
+    pub allow_probe_execution: bool,
+    pub version_probe_execution_attempted: bool,
+    pub version_probe_exit_code: Option<i32>,
+    pub version_probe_timed_out: bool,
+    pub version_probe_stdout_preview: String,
+    pub version_probe_stderr_preview: String,
+    pub inferred_runtime_available: bool,
+    pub inferred_version_text: Option<String>,
+    pub capability_reasons: Vec<String>,
+    pub blockers: Vec<LocalRuntimeProbeWarning>,
+    pub warnings: Vec<LocalRuntimeProbeWarning>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub no_new_process_spawn: bool,
+    pub no_binary_probe_beyond_wrapped_version_probe: bool,
+    pub no_model_path_argument: bool,
+    pub no_model_file_read: bool,
+    pub no_model_load: bool,
+    pub no_runtime_inference: bool,
+    pub no_smoke_inference: bool,
+    pub no_llm_call: bool,
+    pub no_persistence: bool,
+    pub no_artifact_write: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum LocalModelRuntimeHealthStatus {
     NotConfigured,
     ConfigPresent,
@@ -1307,6 +1361,87 @@ pub fn run_llama_runtime_version_probe(
         no_model_path_argument: true,
         no_llm_call: true,
         no_runtime_inference: true,
+        no_persistence: true,
+        no_artifact_write: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+    })
+}
+
+pub fn preview_llama_runtime_capability(
+    root: impl Into<PathBuf>,
+    request: LocalRuntimeCapabilityPreviewRequest,
+) -> AegisResult<LocalRuntimeCapabilityPreview> {
+    let root = root.into();
+    let LocalRuntimeCapabilityPreviewRequest {
+        version_probe_preview_request,
+    } = request;
+    let version_probe_result = run_llama_runtime_version_probe(root, version_probe_preview_request)?;
+    let version_probe_status = version_probe_result.status.clone();
+    let status = llama_runtime_capability_status(&version_probe_status);
+    let inferred_version_text = match status {
+        LocalRuntimeCapabilityStatus::CapabilityReadyLater => infer_version_text_from_probe_result(
+            &version_probe_result.stdout_preview,
+            &version_probe_result.stderr_preview,
+        ),
+        LocalRuntimeCapabilityStatus::Blocked | LocalRuntimeCapabilityStatus::NeedsReview => None,
+    };
+    let inferred_runtime_available = matches!(
+        status,
+        LocalRuntimeCapabilityStatus::CapabilityReadyLater
+    );
+    let capability_reasons = llama_runtime_capability_reasons(
+        &status,
+        &version_probe_result,
+        inferred_version_text.as_deref(),
+    );
+    let blockers = version_probe_result.blockers.clone();
+    let warnings = version_probe_result.warnings.clone();
+    let next_required_actions = llama_runtime_capability_next_required_actions(
+        &status,
+        &version_probe_result,
+    );
+    let summary = llama_runtime_capability_summary(
+        &status,
+        &version_probe_result,
+        inferred_version_text.as_deref(),
+    );
+    let version_probe_timed_out = matches!(version_probe_status, LocalRuntimeVersionProbeStatus::TimedOut);
+
+    Ok(LocalRuntimeCapabilityPreview {
+        status,
+        version_probe_status: version_probe_status.clone(),
+        probe_readiness_status: version_probe_result.probe_readiness_status,
+        validation_status: version_probe_result.validation_status,
+        adapter_contract_status: version_probe_result.adapter_contract_status,
+        adapter_kind: version_probe_result.adapter_kind,
+        normalized_model_family: version_probe_result.normalized_model_family,
+        normalized_model_format: version_probe_result.normalized_model_format,
+        safe_executable_file_name: version_probe_result.safe_executable_file_name,
+        safe_model_file_name: version_probe_result.safe_model_file_name,
+        probe_consent: version_probe_result.probe_consent,
+        allow_probe_execution: version_probe_result.allow_probe_execution,
+        version_probe_execution_attempted: version_probe_result.execution_attempted,
+        version_probe_exit_code: version_probe_result.exit_code,
+        version_probe_timed_out,
+        version_probe_stdout_preview: version_probe_result.stdout_preview,
+        version_probe_stderr_preview: version_probe_result.stderr_preview,
+        inferred_runtime_available,
+        inferred_version_text,
+        capability_reasons,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        no_new_process_spawn: true,
+        no_binary_probe_beyond_wrapped_version_probe: true,
+        no_model_path_argument: true,
+        no_model_file_read: true,
+        no_model_load: true,
+        no_runtime_inference: true,
+        no_smoke_inference: true,
+        no_llm_call: true,
         no_persistence: true,
         no_artifact_write: true,
         no_registry_status_change: true,
@@ -2711,6 +2846,203 @@ fn llama_runtime_version_probe_summary(
     }
 }
 
+fn llama_runtime_capability_status(
+    version_probe_status: &LocalRuntimeVersionProbeStatus,
+) -> LocalRuntimeCapabilityStatus {
+    match version_probe_status {
+        LocalRuntimeVersionProbeStatus::Blocked => LocalRuntimeCapabilityStatus::Blocked,
+        LocalRuntimeVersionProbeStatus::TimedOut | LocalRuntimeVersionProbeStatus::ProbeFailed => {
+            LocalRuntimeCapabilityStatus::NeedsReview
+        }
+        LocalRuntimeVersionProbeStatus::ProbeSucceeded => {
+            LocalRuntimeCapabilityStatus::CapabilityReadyLater
+        }
+    }
+}
+
+fn extract_obvious_version_text_from_preview(preview: &str) -> Option<String> {
+    for line in preview.lines() {
+        let lower = line.to_ascii_lowercase();
+        if !lower.contains("version") {
+            continue;
+        }
+        for token in line.split_whitespace() {
+            let token = token.trim_matches(|value: char| {
+                !value.is_ascii_alphanumeric() && value != '.' && value != '-' && value != '+'
+            });
+            if token.is_empty() {
+                continue;
+            }
+            let token = token.strip_prefix('v').unwrap_or(token);
+            let normalized = token.trim_matches(|value: char| value == '.' || value == '-' || value == '+');
+            if normalized.chars().any(|value| value.is_ascii_digit())
+                && normalized
+                    .chars()
+                    .all(|value| value.is_ascii_alphanumeric() || matches!(value, '.' | '-' | '+'))
+            {
+                return Some(normalized.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn infer_version_text_from_probe_result(
+    stdout_preview: &str,
+    stderr_preview: &str,
+) -> Option<String> {
+    extract_obvious_version_text_from_preview(stdout_preview)
+        .or_else(|| extract_obvious_version_text_from_preview(stderr_preview))
+}
+
+fn llama_runtime_capability_reasons(
+    status: &LocalRuntimeCapabilityStatus,
+    version_probe_result: &LocalRuntimeVersionProbePreview,
+    inferred_version_text: Option<&str>,
+) -> Vec<String> {
+    let mut reasons = Vec::new();
+    match status {
+        LocalRuntimeCapabilityStatus::Blocked => {
+            push_unique_text(
+                &mut reasons,
+                "The llama.cpp capability preview is blocked until the wrapped version probe is ready later.",
+            );
+            push_unique_text(
+                &mut reasons,
+                "This capability preview does not add any new execution path beyond the wrapped version probe.",
+            );
+        }
+        LocalRuntimeCapabilityStatus::NeedsReview => {
+            if matches!(version_probe_result.status, LocalRuntimeVersionProbeStatus::TimedOut) {
+                push_unique_text(
+                    &mut reasons,
+                    "The wrapped version probe timed out and the capability preview needs review.",
+                );
+            } else {
+                push_unique_text(
+                    &mut reasons,
+                    "The wrapped version probe failed and the capability preview needs review.",
+                );
+            }
+        }
+        LocalRuntimeCapabilityStatus::CapabilityReadyLater => {
+            push_unique_text(
+                &mut reasons,
+                "The wrapped version probe succeeded, so the capability preview is ready later.",
+            );
+            if let Some(version_text) = inferred_version_text {
+                push_unique_text(
+                    &mut reasons,
+                    &format!("Detected obvious version text: {version_text}."),
+                );
+            } else {
+                push_unique_text(
+                    &mut reasons,
+                    "No obvious version text was found in the sanitized version-probe output.",
+                );
+            }
+        }
+    }
+    if let Some(model_family) = version_probe_result.normalized_model_family.as_deref() {
+        push_unique_text(
+            &mut reasons,
+            &format!(
+                "Configured model family context remains diagnostic only: {model_family}."
+            ),
+        );
+    }
+    reasons
+}
+
+fn llama_runtime_capability_next_required_actions(
+    status: &LocalRuntimeCapabilityStatus,
+    version_probe_result: &LocalRuntimeVersionProbePreview,
+) -> Vec<String> {
+    let mut next_required_actions = Vec::new();
+    match status {
+        LocalRuntimeCapabilityStatus::Blocked => {
+            if !matches!(
+                version_probe_result.probe_readiness_status,
+                LocalRuntimeProbeReadinessStatus::ProbeReadyLater
+            ) {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Review the version-probe readiness preview before trying capability preview again.",
+                );
+            } else if !version_probe_result.allow_probe_execution {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Enable version-probe execution before trying the capability preview again.",
+                );
+            } else {
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Review the version-probe blockers before trying the capability preview again.",
+                );
+            }
+        }
+        LocalRuntimeCapabilityStatus::NeedsReview => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Review the bounded version-probe output before using the capability preview later.",
+            );
+        }
+        LocalRuntimeCapabilityStatus::CapabilityReadyLater => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Review the bounded version-probe output before integrating runtime capability later.",
+            );
+        }
+    }
+    next_required_actions
+}
+
+fn llama_runtime_capability_summary(
+    status: &LocalRuntimeCapabilityStatus,
+    version_probe_result: &LocalRuntimeVersionProbePreview,
+    inferred_version_text: Option<&str>,
+) -> String {
+    let executable_text = version_probe_result
+        .safe_executable_file_name
+        .as_deref()
+        .map(|file_name| format!(" Configured executable file: {file_name}."))
+        .unwrap_or_default();
+    let model_text = version_probe_result
+        .safe_model_file_name
+        .as_deref()
+        .map(|file_name| format!(" Configured model file: {file_name}."))
+        .unwrap_or_default();
+    match status {
+        LocalRuntimeCapabilityStatus::Blocked => {
+            format!(
+                "The llama.cpp capability preview is blocked until the wrapped version probe is ready later.{executable_text}{model_text}"
+            )
+        }
+        LocalRuntimeCapabilityStatus::NeedsReview => {
+            if matches!(version_probe_result.status, LocalRuntimeVersionProbeStatus::TimedOut) {
+                format!(
+                    "The llama.cpp capability preview needs review because the wrapped version probe timed out.{executable_text}{model_text}"
+                )
+            } else {
+                format!(
+                    "The llama.cpp capability preview needs review because the wrapped version probe failed.{executable_text}{model_text}"
+                )
+            }
+        }
+        LocalRuntimeCapabilityStatus::CapabilityReadyLater => {
+            if let Some(version_text) = inferred_version_text {
+                format!(
+                    "The llama.cpp capability preview is ready later because the wrapped version probe succeeded. Inferred version text: {version_text}.{executable_text}{model_text}"
+                )
+            } else {
+                format!(
+                    "The llama.cpp capability preview is ready later because the wrapped version probe succeeded, but no obvious version text was found.{executable_text}{model_text}"
+                )
+            }
+        }
+    }
+}
+
 fn version_probe_output_redactions(
     executable_path: Option<&str>,
     safe_executable_file_name: Option<&str>,
@@ -3618,7 +3950,11 @@ fn main() {
         }
     }
 
-    fn version_probe_helper_executable(temp: &tempfile::TempDir, executable_name: &str) -> PathBuf {
+    fn version_probe_helper_executable_with_source(
+        temp: &tempfile::TempDir,
+        executable_name: &str,
+        source: &str,
+    ) -> PathBuf {
         let source_path = temp.path().join(format!("{executable_name}.rs"));
         let executable_path = temp.path().join(executable_name);
         let crate_name = source_path
@@ -3628,6 +3964,22 @@ fn main() {
             .chars()
             .map(|value| if value.is_ascii_alphanumeric() || value == '_' { value } else { '_' })
             .collect::<String>();
+        fs::write(&source_path, source).unwrap();
+        let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+        let status = Command::new(rustc)
+            .arg("--crate-name")
+            .arg(&crate_name)
+            .arg("--edition=2021")
+            .arg(&source_path)
+            .arg("-o")
+            .arg(&executable_path)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        executable_path
+    }
+
+    fn version_probe_helper_executable(temp: &tempfile::TempDir, executable_name: &str) -> PathBuf {
         let source = r#"
 use std::{env, thread, time::Duration};
 
@@ -3653,19 +4005,7 @@ fn main() {
     }
 }
 "#;
-        fs::write(&source_path, source).unwrap();
-        let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
-        let status = Command::new(rustc)
-            .arg("--crate-name")
-            .arg(&crate_name)
-            .arg("--edition=2021")
-            .arg(&source_path)
-            .arg("-o")
-            .arg(&executable_path)
-            .status()
-            .unwrap();
-        assert!(status.success());
-        executable_path
+        version_probe_helper_executable_with_source(temp, executable_name, source)
     }
 
     fn assert_llama_runtime_probe_readiness_boundary_fields(
@@ -3695,6 +4035,61 @@ fn main() {
         assert!(preview.no_artifact_write);
         assert!(preview.no_registry_status_change);
         assert!(preview.no_audit_write);
+    }
+
+    fn capability_request(
+        validation_preview_request: LocalRuntimeValidationPreviewRequest,
+        probe_consent: bool,
+        allow_probe_execution: bool,
+        timeout_ms: Option<u64>,
+    ) -> LocalRuntimeCapabilityPreviewRequest {
+        LocalRuntimeCapabilityPreviewRequest {
+            version_probe_preview_request: version_probe_request(
+                validation_preview_request,
+                probe_consent,
+                allow_probe_execution,
+                timeout_ms,
+            ),
+        }
+    }
+
+    fn assert_llama_runtime_capability_boundary_fields(
+        preview: &LocalRuntimeCapabilityPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.no_new_process_spawn);
+        assert!(preview.no_binary_probe_beyond_wrapped_version_probe);
+        assert!(preview.no_model_path_argument);
+        assert!(preview.no_model_file_read);
+        assert!(preview.no_model_load);
+        assert!(preview.no_runtime_inference);
+        assert!(preview.no_smoke_inference);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_persistence);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
+    fn assert_llama_runtime_capability_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: LocalRuntimeCapabilityPreviewRequest,
+    ) -> LocalRuntimeCapabilityPreview {
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let first = preview_llama_runtime_capability(temp.path(), request.clone()).unwrap();
+        let second = preview_llama_runtime_capability(temp.path(), request).unwrap();
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_llama_runtime_capability_boundary_fields(preview);
+        }
+        first
     }
 
     fn assert_llama_runtime_probe_readiness_deterministic_and_path_free(
@@ -4856,6 +5251,249 @@ fn main() {
             assert!(matches!(result, Err(AegisError::LocalModelRuntimeInvalidPath)));
             assert!(!temp.path().join(".aegis").exists());
         }
+    }
+
+    #[test]
+    fn local_runtime_capability_preview_blocks_when_version_probe_is_blocked() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_llama_runtime_capability_deterministic_and_path_free(
+            &temp,
+            capability_request(
+                llama_runtime_validation_request(
+                    Some(""),
+                    Some(""),
+                    None,
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                true,
+                true,
+                Some(1_500),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeCapabilityStatus::Blocked);
+        assert_eq!(result.version_probe_status, LocalRuntimeVersionProbeStatus::Blocked);
+        assert!(!result.version_probe_execution_attempted);
+        assert!(!result.version_probe_timed_out);
+        assert!(!result.inferred_runtime_available);
+        assert!(result
+            .capability_reasons
+            .iter()
+            .any(|reason| reason.contains("wrapped version probe is ready later")));
+        assert_llama_runtime_capability_boundary_fields(&result);
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn local_runtime_capability_preview_needs_review_when_version_probe_failed() {
+        let temp = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let executable_path = version_probe_helper_executable(&helper, "version_probe_fail.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_capability_deterministic_and_path_free(
+            &temp,
+            capability_request(
+                llama_runtime_validation_request(
+                    Some(executable_path.to_string_lossy().as_ref()),
+                    Some(model_path.to_string_lossy().as_ref()),
+                    Some("llama"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                true,
+                true,
+                Some(1_500),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeCapabilityStatus::NeedsReview);
+        assert_eq!(result.version_probe_status, LocalRuntimeVersionProbeStatus::ProbeFailed);
+        assert!(result.version_probe_execution_attempted);
+        assert!(!result.version_probe_timed_out);
+        assert_eq!(result.version_probe_exit_code, Some(7));
+        assert!(!result.inferred_runtime_available);
+        assert!(result
+            .capability_reasons
+            .iter()
+            .any(|reason| reason.contains("wrapped version probe failed")));
+        assert_llama_runtime_capability_boundary_fields(&result);
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn local_runtime_capability_preview_needs_review_when_version_probe_times_out() {
+        let temp = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let executable_path = version_probe_helper_executable(&helper, "version_probe_slow.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_capability_deterministic_and_path_free(
+            &temp,
+            capability_request(
+                llama_runtime_validation_request(
+                    Some(executable_path.to_string_lossy().as_ref()),
+                    Some(model_path.to_string_lossy().as_ref()),
+                    Some("llama"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                true,
+                true,
+                Some(50),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeCapabilityStatus::NeedsReview);
+        assert_eq!(result.version_probe_status, LocalRuntimeVersionProbeStatus::TimedOut);
+        assert!(result.version_probe_execution_attempted);
+        assert!(result.version_probe_timed_out);
+        assert!(!result.inferred_runtime_available);
+        assert!(result
+            .capability_reasons
+            .iter()
+            .any(|reason| reason.contains("timed out")));
+        assert_llama_runtime_capability_boundary_fields(&result);
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn local_runtime_capability_preview_is_ready_later_when_version_probe_succeeds_without_obvious_version_text() {
+        let temp = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let executable_path = version_probe_helper_executable(&helper, "version_probe_ok.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_capability_deterministic_and_path_free(
+            &temp,
+            capability_request(
+                llama_runtime_validation_request(
+                    Some(executable_path.to_string_lossy().as_ref()),
+                    Some(model_path.to_string_lossy().as_ref()),
+                    Some("llama"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                true,
+                true,
+                Some(1_500),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeCapabilityStatus::CapabilityReadyLater);
+        assert_eq!(result.version_probe_status, LocalRuntimeVersionProbeStatus::ProbeSucceeded);
+        assert!(result.version_probe_execution_attempted);
+        assert!(!result.version_probe_timed_out);
+        assert!(result.inferred_runtime_available);
+        assert!(result.inferred_version_text.is_none());
+        assert!(result
+            .capability_reasons
+            .iter()
+            .any(|reason| reason.contains("ready later")));
+        assert_llama_runtime_capability_boundary_fields(&result);
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn local_runtime_capability_preview_extracts_version_text_and_sanitizes_output() {
+        let temp = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let model_path_literal = format!("{:?}", model_path.to_string_lossy().to_string());
+        let source = r#"
+use std::{env, thread, time::Duration};
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let exe_name = env::current_exe()
+        .ok()
+        .and_then(|path| path.file_name().and_then(|value| value.to_str()).map(|value| value.to_string()))
+        .unwrap_or_default();
+    println!("stdout marker");
+    println!("args={}", args.join(" | "));
+    println!("model_path={}", MODEL_PATH);
+    println!("llama.cpp version 1.2.3");
+    println!("exe_name={}", exe_name);
+    println!("{}", "S".repeat(5000));
+    eprintln!("stderr marker");
+    eprintln!("args={}", args.join(" | "));
+    eprintln!("model_path={}", MODEL_PATH);
+    eprintln!("llama.cpp version 1.2.3");
+    eprintln!("exe_name={}", exe_name);
+    eprintln!("{}", "E".repeat(5000));
+    if exe_name.contains("slow") {
+        thread::sleep(Duration::from_millis(750));
+    }
+    if exe_name.contains("fail") {
+        std::process::exit(7);
+    }
+}
+"#
+        .replace("MODEL_PATH", &model_path_literal);
+        let executable_path =
+            version_probe_helper_executable_with_source(&helper, "version_probe_version.exe", &source);
+        let result = assert_llama_runtime_capability_deterministic_and_path_free(
+            &temp,
+            capability_request(
+                llama_runtime_validation_request(
+                    Some(executable_path.to_string_lossy().as_ref()),
+                    Some(model_path.to_string_lossy().as_ref()),
+                    Some("llama"),
+                    Some("gguf"),
+                    Some(8192),
+                    Some(0),
+                    Some(8),
+                    Some(256),
+                    Some("template"),
+                ),
+                true,
+                true,
+                Some(1_500),
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeCapabilityStatus::CapabilityReadyLater);
+        assert_eq!(result.version_probe_status, LocalRuntimeVersionProbeStatus::ProbeSucceeded);
+        assert!(result.inferred_runtime_available);
+        assert_eq!(result.inferred_version_text.as_deref(), Some("1.2.3"));
+        assert!(result.version_probe_stdout_preview.contains("args="));
+        assert!(result.version_probe_stdout_preview.contains("--version"));
+        assert!(result.version_probe_stdout_preview.contains("llama.cpp version 1.2.3"));
+        assert!(result.version_probe_stderr_preview.contains("llama.cpp version 1.2.3"));
+        assert!(!result.version_probe_stdout_preview.contains(model_path.to_string_lossy().as_ref()));
+        assert!(!result.version_probe_stderr_preview.contains(model_path.to_string_lossy().as_ref()));
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        let helper_path = helper.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert!(!debug.contains(helper_path.as_ref()));
+        assert!(!json.contains(helper_path.as_ref()));
+        assert!(result
+            .capability_reasons
+            .iter()
+            .any(|reason| reason.contains("Detected obvious version text: 1.2.3")));
+        assert_llama_runtime_capability_boundary_fields(&result);
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+        assert!(!temp.path().join(".aegis").exists());
     }
 
     #[test]

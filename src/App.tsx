@@ -429,6 +429,52 @@ type LocalRuntimeVersionProbePreview = {
   no_audit_write: boolean;
 };
 
+type LocalRuntimeCapabilityStatus = "blocked" | "needs_review" | "capability_ready_later";
+
+type LocalRuntimeCapabilityPreviewRequest = {
+  version_probe_preview_request: LocalRuntimeVersionProbePreviewRequest;
+};
+
+type LocalRuntimeCapabilityPreview = {
+  status: LocalRuntimeCapabilityStatus;
+  version_probe_status: LocalRuntimeVersionProbeStatus;
+  probe_readiness_status: LocalRuntimeProbeReadinessStatus;
+  validation_status: LocalRuntimeValidationStatus;
+  adapter_contract_status: LocalRuntimeAdapterContractStatus;
+  adapter_kind: LocalRuntimeAdapterKind;
+  normalized_model_family: string | null;
+  normalized_model_format: string;
+  safe_executable_file_name: string | null;
+  safe_model_file_name: string | null;
+  probe_consent: boolean;
+  allow_probe_execution: boolean;
+  version_probe_execution_attempted: boolean;
+  version_probe_exit_code: number | null;
+  version_probe_timed_out: boolean;
+  version_probe_stdout_preview: string;
+  version_probe_stderr_preview: string;
+  inferred_runtime_available: boolean;
+  inferred_version_text: string | null;
+  capability_reasons: string[];
+  blockers: LocalRuntimeProbeWarning[];
+  warnings: LocalRuntimeProbeWarning[];
+  next_required_actions: string[];
+  summary: string;
+  preview_only: boolean;
+  no_new_process_spawn: boolean;
+  no_binary_probe_beyond_wrapped_version_probe: boolean;
+  no_model_path_argument: boolean;
+  no_model_file_read: boolean;
+  no_model_load: boolean;
+  no_runtime_inference: boolean;
+  no_smoke_inference: boolean;
+  no_llm_call: boolean;
+  no_persistence: boolean;
+  no_artifact_write: boolean;
+  no_registry_status_change: boolean;
+  no_audit_write: boolean;
+};
+
 type ScholarChatGroundedAnswerBuildPlanStatus =
   | "blocked"
   | "needs_review"
@@ -1630,6 +1676,10 @@ export default function App() {
   const [localRuntimeProbeValidationError, setLocalRuntimeProbeValidationError] = createSignal<string | null>(null);
   const [localRuntimeProbeLoading, setLocalRuntimeProbeLoading] = createSignal(false);
   const [localRuntimeProbeHasRun, setLocalRuntimeProbeHasRun] = createSignal(false);
+  const [localRuntimeCapabilityResult, setLocalRuntimeCapabilityResult] = createSignal<LocalRuntimeCapabilityPreview | null>(null);
+  const [localRuntimeCapabilityError, setLocalRuntimeCapabilityError] = createSignal<string | null>(null);
+  const [localRuntimeCapabilityLoading, setLocalRuntimeCapabilityLoading] = createSignal(false);
+  const [localRuntimeCapabilityHasRun, setLocalRuntimeCapabilityHasRun] = createSignal(false);
   const [localRuntimeSmokePrompt, setLocalRuntimeSmokePrompt] = createSignal("Say READY in one short sentence.");
   const [localRuntimeSmokeAllowExecution, setLocalRuntimeSmokeAllowExecution] = createSignal(false);
   const [localRuntimeSmokeTimeoutMs, setLocalRuntimeSmokeTimeoutMs] = createSignal("3000");
@@ -2152,7 +2202,14 @@ export default function App() {
     setLocalRuntimeProbeError(null);
     setLocalRuntimeProbeValidationError(null);
     setLocalRuntimeProbeHasRun(false);
+    clearLocalRuntimeCapabilityPreview();
     clearScholarChatDraftInferencePreview();
+  }
+
+  function clearLocalRuntimeCapabilityPreview() {
+    setLocalRuntimeCapabilityResult(null);
+    setLocalRuntimeCapabilityError(null);
+    setLocalRuntimeCapabilityHasRun(false);
   }
 
   function clearLocalRuntimeSmokePreview() {
@@ -3319,6 +3376,17 @@ export default function App() {
     };
   }
 
+  function buildLocalRuntimeCapabilityPreviewRequest(): LocalRuntimeCapabilityPreviewRequest | null {
+    const versionProbePreviewRequest = buildLocalRuntimeVersionProbePreviewRequest();
+    if (!versionProbePreviewRequest) {
+      return null;
+    }
+
+    return {
+      version_probe_preview_request: versionProbePreviewRequest,
+    };
+  }
+
   async function previewLocalRuntimeProbeReadiness() {
     if (localRuntimeProbeReadinessPreviewLoading()) {
       return;
@@ -3369,6 +3437,7 @@ export default function App() {
     setLocalRuntimeProbeError(null);
     setLocalRuntimeProbeValidationError(null);
     setLocalRuntimeProbeResult(null);
+    clearLocalRuntimeCapabilityPreview();
     try {
       const result = await invoke<LocalRuntimeVersionProbePreview>("run_llama_runtime_version_probe", {
         root: ".",
@@ -3379,6 +3448,36 @@ export default function App() {
       setLocalRuntimeProbeError(sanitizeBackendError(err));
     } finally {
       setLocalRuntimeProbeLoading(false);
+    }
+  }
+
+  async function previewLocalRuntimeCapability() {
+    if (localRuntimeCapabilityLoading()) {
+      return;
+    }
+
+    const request = buildLocalRuntimeCapabilityPreviewRequest();
+    if (!request) {
+      setLocalRuntimeCapabilityHasRun(true);
+      setLocalRuntimeCapabilityResult(null);
+      setLocalRuntimeCapabilityError(null);
+      return;
+    }
+
+    setLocalRuntimeCapabilityHasRun(true);
+    setLocalRuntimeCapabilityLoading(true);
+    setLocalRuntimeCapabilityError(null);
+    setLocalRuntimeCapabilityResult(null);
+    try {
+      const result = await invoke<LocalRuntimeCapabilityPreview>("preview_llama_runtime_capability", {
+        root: ".",
+        request,
+      });
+      setLocalRuntimeCapabilityResult(result);
+    } catch (err) {
+      setLocalRuntimeCapabilityError(sanitizeBackendError(err));
+    } finally {
+      setLocalRuntimeCapabilityLoading(false);
     }
   }
 
@@ -6143,15 +6242,139 @@ export default function App() {
             ) : (
               <p>No llama.cpp version probe preview loaded yet.</p>
             )
-          ) : (
-            <p>No llama.cpp version probe preview loaded yet.</p>
-          )}
+        ) : (
+          <p>No llama.cpp version probe preview loaded yet.</p>
+        )}
+      </div>
+      <div class="artifact-overview">
+        <h3>llama.cpp capability preview</h3>
+        <p class="muted">
+          Capability preview only - this derives a path-free diagnostic summary from the version probe result. It does not run inference, pass a model path, load/read a model, call an LLM, or persist settings/artifacts.
+        </p>
+        <p class="muted">Uses the current validation and version-probe inputs above, plus explicit version-probe execution consent.</p>
+        <div class="hero-actions">
+          <button onClick={previewLocalRuntimeCapability} disabled={localRuntimeCapabilityLoading()}>
+            {localRuntimeCapabilityLoading() ? "Previewing..." : "Preview llama.cpp runtime capability"}
+          </button>
         </div>
-        <div class="artifact-overview">
-          <h3>Runtime invocation plan</h3>
-          <p class="muted">
-            Read-only preview of the future local runtime invocation. It uses the current Scholar Chat prompt and optional prompt-pack estimate, but it never starts a process or persists configuration.
-          </p>
+        <p class="muted">{localRuntimeProbeExecutableSummary()}</p>
+        {localRuntimeProbeValidationError() && <p class="error">{localRuntimeProbeValidationError()}</p>}
+        {localRuntimeCapabilityError() && <p class="error">{localRuntimeCapabilityError()}</p>}
+        {localRuntimeCapabilityLoading() ? (
+          <p>Previewing llama.cpp runtime capability...</p>
+        ) : localRuntimeCapabilityHasRun() ? (
+          localRuntimeCapabilityResult() ? (
+            <>
+              {renderMetricGrid([
+                { label: "Status", value: formatSnakeCaseLabel(localRuntimeCapabilityResult()!.status) },
+                { label: "Version probe status", value: formatSnakeCaseLabel(localRuntimeCapabilityResult()!.version_probe_status) },
+                { label: "Probe readiness", value: formatSnakeCaseLabel(localRuntimeCapabilityResult()!.probe_readiness_status) },
+                { label: "Validation status", value: formatSnakeCaseLabel(localRuntimeCapabilityResult()!.validation_status) },
+                { label: "Adapter contract status", value: formatSnakeCaseLabel(localRuntimeCapabilityResult()!.adapter_contract_status) },
+                { label: "Adapter kind", value: formatSnakeCaseLabel(localRuntimeCapabilityResult()!.adapter_kind) },
+                { label: "Probe consent", value: localRuntimeCapabilityResult()!.probe_consent ? "yes" : "no" },
+                { label: "Allow probe execution", value: localRuntimeCapabilityResult()!.allow_probe_execution ? "yes" : "no" },
+                { label: "Version probe attempted", value: localRuntimeCapabilityResult()!.version_probe_execution_attempted ? "yes" : "no" },
+                { label: "Version probe timed out", value: localRuntimeCapabilityResult()!.version_probe_timed_out ? "yes" : "no" },
+                { label: "Version probe exit code", value: localRuntimeCapabilityResult()!.version_probe_exit_code ?? "missing" },
+                { label: "Inferred runtime available", value: localRuntimeCapabilityResult()!.inferred_runtime_available ? "yes" : "no" },
+                { label: "Inferred version text", value: localRuntimeCapabilityResult()!.inferred_version_text ?? "none" },
+              ])}
+              <div class="contract-meta">
+                <div><span>Executable file</span><strong>{localRuntimeCapabilityResult()!.safe_executable_file_name ?? "not configured"}</strong></div>
+                <div><span>Model file</span><strong>{localRuntimeCapabilityResult()!.safe_model_file_name ?? "not configured"}</strong></div>
+                <div><span>Preview only</span><strong>{localRuntimeCapabilityResult()!.preview_only ? "yes" : "no"}</strong></div>
+                <div><span>No new process spawn</span><strong>{localRuntimeCapabilityResult()!.no_new_process_spawn ? "yes" : "no"}</strong></div>
+                <div><span>No binary probe beyond wrapped version probe</span><strong>{localRuntimeCapabilityResult()!.no_binary_probe_beyond_wrapped_version_probe ? "yes" : "no"}</strong></div>
+                <div><span>No model path argument</span><strong>{localRuntimeCapabilityResult()!.no_model_path_argument ? "yes" : "no"}</strong></div>
+                <div><span>No model file read</span><strong>{localRuntimeCapabilityResult()!.no_model_file_read ? "yes" : "no"}</strong></div>
+                <div><span>No model load</span><strong>{localRuntimeCapabilityResult()!.no_model_load ? "yes" : "no"}</strong></div>
+                <div><span>No runtime inference</span><strong>{localRuntimeCapabilityResult()!.no_runtime_inference ? "yes" : "no"}</strong></div>
+                <div><span>No smoke inference</span><strong>{localRuntimeCapabilityResult()!.no_smoke_inference ? "yes" : "no"}</strong></div>
+                <div><span>No LLM call</span><strong>{localRuntimeCapabilityResult()!.no_llm_call ? "yes" : "no"}</strong></div>
+                <div><span>No persistence</span><strong>{localRuntimeCapabilityResult()!.no_persistence ? "yes" : "no"}</strong></div>
+                <div><span>No artifact write</span><strong>{localRuntimeCapabilityResult()!.no_artifact_write ? "yes" : "no"}</strong></div>
+                <div><span>No registry status change</span><strong>{localRuntimeCapabilityResult()!.no_registry_status_change ? "yes" : "no"}</strong></div>
+                <div><span>No audit write</span><strong>{localRuntimeCapabilityResult()!.no_audit_write ? "yes" : "no"}</strong></div>
+              </div>
+              {localRuntimeCapabilityResult()!.summary && <p><strong>Summary:</strong> {localRuntimeCapabilityResult()!.summary}</p>}
+              {localRuntimeCapabilityResult()!.capability_reasons.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Capability reasons</h4>
+                  <ul>
+                    {localRuntimeCapabilityResult()!.capability_reasons.map((reason) => (
+                      <li>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p>No capability reasons.</p>
+              )}
+              <h4>Version probe stdout preview</h4>
+              {localRuntimeCapabilityResult()!.version_probe_stdout_preview ? (
+                <pre>{localRuntimeCapabilityResult()!.version_probe_stdout_preview}</pre>
+              ) : (
+                <p>No stdout captured.</p>
+              )}
+              <h4>Version probe stderr preview</h4>
+              {localRuntimeCapabilityResult()!.version_probe_stderr_preview ? (
+                <pre>{localRuntimeCapabilityResult()!.version_probe_stderr_preview}</pre>
+              ) : (
+                <p>No stderr captured.</p>
+              )}
+              {localRuntimeCapabilityResult()!.blockers.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Blockers</h4>
+                  <ul>
+                    {localRuntimeCapabilityResult()!.blockers.map((blocker) => (
+                      <li>
+                        <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                        <div>{blocker.message}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p>No capability blockers.</p>
+              )}
+              {localRuntimeCapabilityResult()!.warnings.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Warnings</h4>
+                  <ul>
+                    {localRuntimeCapabilityResult()!.warnings.map((warning) => (
+                      <li>
+                        <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                        <div>{warning.message}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p>No capability warnings.</p>
+              )}
+              <h4>Next required actions</h4>
+              {localRuntimeCapabilityResult()!.next_required_actions.length > 0 ? (
+                <ul>
+                  {localRuntimeCapabilityResult()!.next_required_actions.map((item) => (
+                    <li>{item}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No next required actions.</p>
+              )}
+            </>
+          ) : (
+            <p>No llama.cpp capability preview loaded yet.</p>
+          )
+        ) : (
+          <p>No llama.cpp capability preview loaded yet.</p>
+        )}
+      </div>
+      <div class="artifact-overview">
+        <h3>Runtime invocation plan</h3>
+        <p class="muted">
+          Read-only preview of the future local runtime invocation. It uses the current Scholar Chat prompt and optional prompt-pack estimate, but it never starts a process or persists configuration.
+        </p>
           <div class="form-row">
             <label>
               Max output tokens
