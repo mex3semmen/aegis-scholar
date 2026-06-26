@@ -71,6 +71,7 @@ use scholar_chat::{
     preview_scholar_chat_grounded_answer_execution_readiness as preview_scholar_chat_grounded_answer_execution_readiness_impl,
     preview_scholar_chat_grounded_answer_execution_plan as preview_scholar_chat_grounded_answer_execution_plan_impl,
     preview_scholar_chat_runtime_diagnostic_bridge as preview_scholar_chat_runtime_diagnostic_bridge_impl,
+    preview_scholar_chat_runtime_diagnostic_result as preview_scholar_chat_runtime_diagnostic_result_impl,
     preview_scholar_chat_grounded_answer_write_eligibility as preview_scholar_chat_grounded_answer_write_eligibility_impl,
     preview_scholar_chat_request as preview_scholar_chat_request_impl,
     preview_scholar_chat_evidence_plan as preview_scholar_chat_evidence_plan_impl,
@@ -93,6 +94,8 @@ use scholar_chat::{
     ScholarChatGroundedDraftReadinessPreview,
     ScholarChatRuntimeDiagnosticBridgePreview,
     ScholarChatRuntimeDiagnosticBridgePreviewRequest,
+    ScholarChatRuntimeDiagnosticResultPreview,
+    ScholarChatRuntimeDiagnosticResultPreviewRequest,
     ScholarChatRequest,
     ScholarChatEvidencePlanResponse,
     ScholarChatPromptPackPreviewResponse,
@@ -541,6 +544,15 @@ fn preview_scholar_chat_runtime_diagnostic_bridge(
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn preview_scholar_chat_runtime_diagnostic_result(
+    root: String,
+    request: ScholarChatRuntimeDiagnosticResultPreviewRequest,
+) -> Result<ScholarChatRuntimeDiagnosticResultPreview, String> {
+    preview_scholar_chat_runtime_diagnostic_result_impl(root, request)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -592,6 +604,7 @@ pub fn run() {
             preview_scholar_chat_evidence_plan,
             preview_scholar_chat_prompt_pack,
             preview_scholar_chat_runtime_diagnostic_bridge,
+            preview_scholar_chat_runtime_diagnostic_result,
             preview_local_model_runtime_health,
             preview_local_runtime_invocation_plan,
             preview_llama_runtime_adapter_contract,
