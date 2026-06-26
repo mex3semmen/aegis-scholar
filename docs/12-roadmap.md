@@ -1490,6 +1490,8 @@ Do not implement:
 
 Phase 96.0 adds a backend-only Scholar Chat runtime diagnostic result preview that classifies an already-provided smoke diagnostic preview/result for future Scholar Chat use. It does not run smoke diagnostics, does not run inference, and does not create artifacts, persistence, registry changes, or audit writes.
 
+Phase 96.1 adds a UI/docs sync for the runtime diagnostic result preview. It surfaces the already-loaded smoke diagnostic preview/result, does not run smoke diagnostics or inference, and does not create artifacts, persistence, registry changes, or audit writes.
+
 Do not implement:
 
 - runtime execution

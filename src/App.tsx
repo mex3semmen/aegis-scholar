@@ -987,6 +987,64 @@ type ScholarChatRuntimeDiagnosticBridgePreview = {
   no_audit_write: boolean;
 };
 
+type ScholarChatRuntimeDiagnosticResultStatus =
+  | "blocked"
+  | "needs_review"
+  | "runtime_diagnostic_failed"
+  | "runtime_diagnostic_succeeded_later";
+
+type ScholarChatRuntimeDiagnosticResultPreviewRequest = {
+  bridge_preview_request: ScholarChatRuntimeDiagnosticBridgePreviewRequest;
+  diagnostic_preview: LocalRuntimeSmokeDiagnosticPreview;
+};
+
+type ScholarChatRuntimeDiagnosticResultPreview = {
+  status: ScholarChatRuntimeDiagnosticResultStatus;
+  bridge_status: ScholarChatRuntimeDiagnosticBridgeStatus;
+  smoke_diagnostic_status: LocalRuntimeSmokeDiagnosticStatus;
+  smoke_execution_plan_status: LocalRuntimeSmokeExecutionPlanStatus;
+  smoke_readiness_status: LocalRuntimeSmokeReadinessStatus;
+  capability_status: LocalRuntimeCapabilityStatus;
+  version_probe_status: LocalRuntimeVersionProbeStatus;
+  probe_readiness_status: LocalRuntimeProbeReadinessStatus;
+  validation_status: LocalRuntimeValidationStatus;
+  adapter_contract_status: LocalRuntimeAdapterContractStatus;
+  adapter_kind: LocalRuntimeAdapterKind;
+  normalized_model_family: string | null;
+  normalized_model_format: string;
+  safe_executable_file_name: string | null;
+  safe_model_file_name: string | null;
+  diagnostic_prompt_char_count: number;
+  max_output_tokens: number;
+  timeout_ms: number;
+  exit_code: number | null;
+  stdout_preview: string;
+  stderr_preview: string;
+  stdout_truncated: boolean;
+  stderr_truncated: boolean;
+  runtime_result_reasons: string[];
+  blockers: LocalRuntimeSmokeInferenceBlocker[];
+  warnings: LocalRuntimeSmokeInferenceWarning[];
+  next_required_actions: string[];
+  summary: string;
+  preview_only: boolean;
+  diagnostic_result_only: boolean;
+  no_smoke_execution: boolean;
+  no_runtime_inference: boolean;
+  no_new_process_spawn: boolean;
+  no_llm_call: boolean;
+  no_answer_generated: boolean;
+  no_answer_draft_created: boolean;
+  no_grounded_answer_created: boolean;
+  no_final_answer_created: boolean;
+  no_grounding_applied: boolean;
+  no_evidence_pack_built: boolean;
+  no_persistence: boolean;
+  no_artifact_write: boolean;
+  no_registry_status_change: boolean;
+  no_audit_write: boolean;
+};
+
 type LocalModelRuntimeKind = "llama_cpp" | "none";
 
 type LocalModelRuntimeHealthStatus =
@@ -1840,6 +1898,11 @@ export default function App() {
   const [scholarChatRuntimeDiagnosticBridgeValidationError, setScholarChatRuntimeDiagnosticBridgeValidationError] = createSignal<string | null>(null);
   const [scholarChatRuntimeDiagnosticBridgeLoading, setScholarChatRuntimeDiagnosticBridgeLoading] = createSignal(false);
   const [scholarChatRuntimeDiagnosticBridgeHasRun, setScholarChatRuntimeDiagnosticBridgeHasRun] = createSignal(false);
+  const [scholarChatRuntimeDiagnosticResultPreview, setScholarChatRuntimeDiagnosticResultPreview] = createSignal<ScholarChatRuntimeDiagnosticResultPreview | null>(null);
+  const [scholarChatRuntimeDiagnosticResultError, setScholarChatRuntimeDiagnosticResultError] = createSignal<string | null>(null);
+  const [scholarChatRuntimeDiagnosticResultValidationError, setScholarChatRuntimeDiagnosticResultValidationError] = createSignal<string | null>(null);
+  const [scholarChatRuntimeDiagnosticResultLoading, setScholarChatRuntimeDiagnosticResultLoading] = createSignal(false);
+  const [scholarChatRuntimeDiagnosticResultHasRun, setScholarChatRuntimeDiagnosticResultHasRun] = createSignal(false);
   const [localRuntimeSmokeExecutionPlanPreview, setLocalRuntimeSmokeExecutionPlanPreview] = createSignal<LocalRuntimeSmokeExecutionPlanPreview | null>(null);
   const [localRuntimeSmokeExecutionPlanError, setLocalRuntimeSmokeExecutionPlanError] = createSignal<string | null>(null);
   const [localRuntimeSmokeExecutionPlanValidationError, setLocalRuntimeSmokeExecutionPlanValidationError] = createSignal<string | null>(null);
@@ -2443,6 +2506,7 @@ export default function App() {
     setLocalRuntimeSmokeError(null);
     setLocalRuntimeSmokeValidationError(null);
     setLocalRuntimeSmokeHasRun(false);
+    clearScholarChatRuntimeDiagnosticResultPreview();
   }
 
   function clearLocalRuntimeSmokeReadinessPreview() {
@@ -2568,6 +2632,14 @@ export default function App() {
     setScholarChatRuntimeDiagnosticBridgeError(null);
     setScholarChatRuntimeDiagnosticBridgeValidationError(null);
     setScholarChatRuntimeDiagnosticBridgeHasRun(false);
+    clearScholarChatRuntimeDiagnosticResultPreview();
+  }
+
+  function clearScholarChatRuntimeDiagnosticResultPreview() {
+    setScholarChatRuntimeDiagnosticResultPreview(null);
+    setScholarChatRuntimeDiagnosticResultError(null);
+    setScholarChatRuntimeDiagnosticResultValidationError(null);
+    setScholarChatRuntimeDiagnosticResultHasRun(false);
   }
 
   function normalizeOptionalTextInput(value: string) {
@@ -3380,6 +3452,7 @@ export default function App() {
       return;
     }
 
+    clearScholarChatRuntimeDiagnosticResultPreview();
     const request = buildScholarChatRuntimeDiagnosticBridgeRequest(trimmedPrompt);
     if (!request) {
       setScholarChatRuntimeDiagnosticBridgePreview(null);
@@ -3403,6 +3476,67 @@ export default function App() {
       setScholarChatRuntimeDiagnosticBridgeError(sanitizeBackendError(err));
     } finally {
       setScholarChatRuntimeDiagnosticBridgeLoading(false);
+    }
+  }
+
+  function buildScholarChatRuntimeDiagnosticResultRequest(
+    trimmedPrompt: string,
+    diagnosticPreview: LocalRuntimeSmokeDiagnosticPreview,
+  ): ScholarChatRuntimeDiagnosticResultPreviewRequest | null {
+    const bridgePreviewRequest = buildScholarChatRuntimeDiagnosticBridgeRequest(trimmedPrompt);
+    if (!bridgePreviewRequest) {
+      return null;
+    }
+
+    return {
+      bridge_preview_request: bridgePreviewRequest,
+      diagnostic_preview: diagnosticPreview,
+    };
+  }
+
+  async function previewScholarChatRuntimeDiagnosticResult() {
+    const trimmedPrompt = scholarChatPrompt().trim();
+    if (!trimmedPrompt) {
+      setScholarChatRuntimeDiagnosticResultPreview(null);
+      setScholarChatRuntimeDiagnosticResultError(null);
+      setScholarChatRuntimeDiagnosticResultValidationError("Prompt is required to preview the Scholar Chat runtime diagnostic result.");
+      return;
+    }
+    if (scholarChatRuntimeDiagnosticResultLoading()) {
+      return;
+    }
+
+    const diagnosticPreview = localRuntimeSmokeResult();
+    if (!diagnosticPreview) {
+      setScholarChatRuntimeDiagnosticResultPreview(null);
+      setScholarChatRuntimeDiagnosticResultError(null);
+      setScholarChatRuntimeDiagnosticResultValidationError("A loaded smoke diagnostic preview is required before previewing the Scholar Chat runtime diagnostic result.");
+      return;
+    }
+
+    const request = buildScholarChatRuntimeDiagnosticResultRequest(trimmedPrompt, diagnosticPreview);
+    if (!request) {
+      setScholarChatRuntimeDiagnosticResultPreview(null);
+      setScholarChatRuntimeDiagnosticResultError(null);
+      setScholarChatRuntimeDiagnosticResultValidationError("Local runtime inputs must be valid before previewing the Scholar Chat runtime diagnostic result.");
+      return;
+    }
+
+    setScholarChatRuntimeDiagnosticResultHasRun(true);
+    setScholarChatRuntimeDiagnosticResultLoading(true);
+    setScholarChatRuntimeDiagnosticResultError(null);
+    setScholarChatRuntimeDiagnosticResultValidationError(null);
+    setScholarChatRuntimeDiagnosticResultPreview(null);
+    try {
+      const result = await invoke<ScholarChatRuntimeDiagnosticResultPreview>("preview_scholar_chat_runtime_diagnostic_result", {
+        root: ".",
+        request,
+      });
+      setScholarChatRuntimeDiagnosticResultPreview(result);
+    } catch (err) {
+      setScholarChatRuntimeDiagnosticResultError(sanitizeBackendError(err));
+    } finally {
+      setScholarChatRuntimeDiagnosticResultLoading(false);
     }
   }
 
@@ -5949,6 +6083,148 @@ export default function App() {
             )
           ) : (
             <p>No Scholar Chat runtime diagnostic bridge preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>Runtime diagnostic result</h3>
+          <p class="muted">
+            Result preview only - this classifies an already-loaded smoke diagnostic preview for future Scholar Chat use. It does not run smoke diagnostics, does not run inference, does not call an LLM, does not generate a Scholar Chat answer, and does not write artifacts.
+          </p>
+          <p class="muted">It uses the current Scholar Chat request and the latest loaded smoke diagnostic preview.</p>
+          <div class="hero-actions">
+            <button onClick={previewScholarChatRuntimeDiagnosticResult} disabled={scholarChatRuntimeDiagnosticResultLoading()}>
+              {scholarChatRuntimeDiagnosticResultLoading() ? "Previewing..." : "Preview Scholar Chat runtime diagnostic result"}
+            </button>
+          </div>
+          {scholarChatRuntimeDiagnosticResultValidationError() && <p class="error">{scholarChatRuntimeDiagnosticResultValidationError()}</p>}
+          {scholarChatRuntimeDiagnosticResultError() && <p class="error">{scholarChatRuntimeDiagnosticResultError()}</p>}
+          {scholarChatRuntimeDiagnosticResultLoading() ? (
+            <p>Previewing Scholar Chat runtime diagnostic result...</p>
+          ) : scholarChatRuntimeDiagnosticResultHasRun() ? (
+            scholarChatRuntimeDiagnosticResultPreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(scholarChatRuntimeDiagnosticResultPreview()!.status) },
+                  { label: "Bridge status", value: formatSnakeCaseLabel(scholarChatRuntimeDiagnosticResultPreview()!.bridge_status) },
+                  { label: "Smoke diagnostic status", value: formatSnakeCaseLabel(scholarChatRuntimeDiagnosticResultPreview()!.smoke_diagnostic_status) },
+                  { label: "Smoke execution plan", value: formatSnakeCaseLabel(scholarChatRuntimeDiagnosticResultPreview()!.smoke_execution_plan_status) },
+                  { label: "Smoke readiness", value: formatSnakeCaseLabel(scholarChatRuntimeDiagnosticResultPreview()!.smoke_readiness_status) },
+                  { label: "Capability status", value: formatSnakeCaseLabel(scholarChatRuntimeDiagnosticResultPreview()!.capability_status) },
+                  { label: "Version probe status", value: formatSnakeCaseLabel(scholarChatRuntimeDiagnosticResultPreview()!.version_probe_status) },
+                  { label: "Probe readiness", value: formatSnakeCaseLabel(scholarChatRuntimeDiagnosticResultPreview()!.probe_readiness_status) },
+                  { label: "Validation status", value: formatSnakeCaseLabel(scholarChatRuntimeDiagnosticResultPreview()!.validation_status) },
+                  { label: "Adapter contract status", value: formatSnakeCaseLabel(scholarChatRuntimeDiagnosticResultPreview()!.adapter_contract_status) },
+                  { label: "Adapter kind", value: formatSnakeCaseLabel(scholarChatRuntimeDiagnosticResultPreview()!.adapter_kind) },
+                  { label: "Prompt chars", value: scholarChatRuntimeDiagnosticResultPreview()!.diagnostic_prompt_char_count },
+                  { label: "Max output tokens", value: scholarChatRuntimeDiagnosticResultPreview()!.max_output_tokens },
+                  { label: "Timeout ms", value: scholarChatRuntimeDiagnosticResultPreview()!.timeout_ms },
+                  { label: "Exit code", value: scholarChatRuntimeDiagnosticResultPreview()!.exit_code ?? "missing" },
+                  { label: "Stdout truncated", value: scholarChatRuntimeDiagnosticResultPreview()!.stdout_truncated ? "yes" : "no" },
+                  { label: "Stderr truncated", value: scholarChatRuntimeDiagnosticResultPreview()!.stderr_truncated ? "yes" : "no" },
+                ])}
+                {scholarChatRuntimeDiagnosticResultPreview()!.safe_executable_file_name ? (
+                  <p><strong>Executable file name:</strong> {scholarChatRuntimeDiagnosticResultPreview()!.safe_executable_file_name}</p>
+                ) : null}
+                {scholarChatRuntimeDiagnosticResultPreview()!.safe_model_file_name ? (
+                  <p><strong>Model file name:</strong> {scholarChatRuntimeDiagnosticResultPreview()!.safe_model_file_name}</p>
+                ) : null}
+                <p><strong>Normalized model family:</strong> {scholarChatRuntimeDiagnosticResultPreview()!.normalized_model_family ?? "none"}</p>
+                <p><strong>Normalized model format:</strong> {scholarChatRuntimeDiagnosticResultPreview()!.normalized_model_format}</p>
+                <p class="muted">{scholarChatRuntimeDiagnosticResultPreview()!.summary}</p>
+                {scholarChatRuntimeDiagnosticResultPreview()!.runtime_result_reasons.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Runtime diagnostic result reasons</h4>
+                    <ul>
+                      {scholarChatRuntimeDiagnosticResultPreview()!.runtime_result_reasons.map((reason) => (
+                        <li>{reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No runtime diagnostic result reasons.</p>
+                )}
+                {scholarChatRuntimeDiagnosticResultPreview()!.stdout_preview ? (
+                  <>
+                    <h4>Stdout preview</h4>
+                    <pre>{scholarChatRuntimeDiagnosticResultPreview()!.stdout_preview}</pre>
+                  </>
+                ) : (
+                  <p>No stdout captured.</p>
+                )}
+                {scholarChatRuntimeDiagnosticResultPreview()!.stderr_preview ? (
+                  <>
+                    <h4>Stderr preview</h4>
+                    <pre>{scholarChatRuntimeDiagnosticResultPreview()!.stderr_preview}</pre>
+                  </>
+                ) : (
+                  <p>No stderr captured.</p>
+                )}
+                {scholarChatRuntimeDiagnosticResultPreview()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {scholarChatRuntimeDiagnosticResultPreview()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No runtime diagnostic result blockers.</p>
+                )}
+                {scholarChatRuntimeDiagnosticResultPreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {scholarChatRuntimeDiagnosticResultPreview()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No runtime diagnostic result warnings.</p>
+                )}
+                {scholarChatRuntimeDiagnosticResultPreview()!.next_required_actions.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Next required actions</h4>
+                    <ul>
+                      {scholarChatRuntimeDiagnosticResultPreview()!.next_required_actions.map((action) => (
+                        <li>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No next required actions.</p>
+                )}
+                <div class="contract-meta">
+                  <div><span>Preview only</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.preview_only ? "yes" : "no"}</strong></div>
+                  <div><span>Diagnostic result only</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.diagnostic_result_only ? "yes" : "no"}</strong></div>
+                  <div><span>No smoke execution</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.no_smoke_execution ? "yes" : "no"}</strong></div>
+                  <div><span>No runtime inference</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.no_runtime_inference ? "yes" : "no"}</strong></div>
+                  <div><span>No new process spawn</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.no_new_process_spawn ? "yes" : "no"}</strong></div>
+                  <div><span>No LLM call</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.no_llm_call ? "yes" : "no"}</strong></div>
+                  <div><span>No answer generated</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.no_answer_generated ? "yes" : "no"}</strong></div>
+                  <div><span>No answer draft created</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.no_answer_draft_created ? "yes" : "no"}</strong></div>
+                  <div><span>No grounded answer created</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.no_grounded_answer_created ? "yes" : "no"}</strong></div>
+                  <div><span>No final answer created</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.no_final_answer_created ? "yes" : "no"}</strong></div>
+                  <div><span>No grounding applied</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.no_grounding_applied ? "yes" : "no"}</strong></div>
+                  <div><span>No Evidence Pack built</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.no_evidence_pack_built ? "yes" : "no"}</strong></div>
+                  <div><span>No persistence</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.no_persistence ? "yes" : "no"}</strong></div>
+                  <div><span>No artifact write</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.no_artifact_write ? "yes" : "no"}</strong></div>
+                  <div><span>No registry status change</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.no_registry_status_change ? "yes" : "no"}</strong></div>
+                  <div><span>No audit write</span><strong>{scholarChatRuntimeDiagnosticResultPreview()!.no_audit_write ? "yes" : "no"}</strong></div>
+                </div>
+              </>
+            ) : (
+              <p>No Scholar Chat runtime diagnostic result preview loaded yet.</p>
+            )
+          ) : (
+            <p>No Scholar Chat runtime diagnostic result preview loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">
