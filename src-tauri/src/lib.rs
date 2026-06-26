@@ -34,6 +34,7 @@ use local_runtime::{
     preview_llama_runtime_smoke_readiness as preview_llama_runtime_smoke_readiness_impl,
     preview_llama_runtime_smoke_execution_plan as preview_llama_runtime_smoke_execution_plan_impl,
     smoke_test_local_runtime_inference as smoke_test_local_runtime_inference_impl,
+    run_llama_runtime_smoke_diagnostic as run_llama_runtime_smoke_diagnostic_impl,
     probe_local_runtime_version as probe_local_runtime_version_impl,
     LocalModelRuntimeConfig,
     LocalModelRuntimeHealthPreview,
@@ -51,6 +52,8 @@ use local_runtime::{
     LocalRuntimeCapabilityPreviewRequest,
     LocalRuntimeSmokeInferenceRequest,
     LocalRuntimeSmokeInferenceResult,
+    LocalRuntimeSmokeDiagnosticPreview,
+    LocalRuntimeSmokeDiagnosticRequest,
     LocalRuntimeSmokeExecutionPlanPreview,
     LocalRuntimeSmokeExecutionPlanPreviewRequest,
     LocalRuntimeSmokeReadinessPreview,
@@ -529,6 +532,15 @@ fn smoke_test_local_runtime_inference(
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn run_llama_runtime_smoke_diagnostic(
+    root: String,
+    request: LocalRuntimeSmokeDiagnosticRequest,
+) -> Result<LocalRuntimeSmokeDiagnosticPreview, String> {
+    run_llama_runtime_smoke_diagnostic_impl(root, request)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -588,7 +600,8 @@ pub fn run() {
             preview_llama_runtime_capability,
             preview_llama_runtime_smoke_readiness,
             preview_llama_runtime_smoke_execution_plan,
-            smoke_test_local_runtime_inference
+            smoke_test_local_runtime_inference,
+            run_llama_runtime_smoke_diagnostic,
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");

@@ -614,6 +614,66 @@ pub struct LocalRuntimeSmokeInferenceResult {
     pub output_classification: LocalRuntimeSmokeInferenceOutputClassification,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LocalRuntimeSmokeDiagnosticStatus {
+    Blocked,
+    SmokeSucceeded,
+    SmokeFailed,
+    TimedOut,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeSmokeDiagnosticRequest {
+    pub smoke_execution_plan_preview_request: LocalRuntimeSmokeExecutionPlanPreviewRequest,
+    pub allow_smoke_execution: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalRuntimeSmokeDiagnosticPreview {
+    pub status: LocalRuntimeSmokeDiagnosticStatus,
+    pub smoke_execution_plan_status: LocalRuntimeSmokeExecutionPlanStatus,
+    pub smoke_readiness_status: LocalRuntimeSmokeReadinessStatus,
+    pub capability_status: LocalRuntimeCapabilityStatus,
+    pub version_probe_status: LocalRuntimeVersionProbeStatus,
+    pub probe_readiness_status: LocalRuntimeProbeReadinessStatus,
+    pub validation_status: LocalRuntimeValidationStatus,
+    pub adapter_contract_status: LocalRuntimeAdapterContractStatus,
+    pub adapter_kind: LocalRuntimeAdapterKind,
+    pub normalized_model_family: Option<String>,
+    pub normalized_model_format: String,
+    pub safe_executable_file_name: Option<String>,
+    pub safe_model_file_name: Option<String>,
+    pub probe_consent: bool,
+    pub allow_probe_execution: bool,
+    pub smoke_consent: bool,
+    pub allow_smoke_execution: bool,
+    pub execution_attempted: bool,
+    pub normalized_diagnostic_prompt: String,
+    pub diagnostic_prompt_char_count: usize,
+    pub max_output_tokens: u32,
+    pub timeout_ms: u64,
+    pub duration_ms: u64,
+    pub exit_code: Option<i32>,
+    pub stdout_preview: String,
+    pub stderr_preview: String,
+    pub stdout_truncated: bool,
+    pub stderr_truncated: bool,
+    pub blockers: Vec<LocalRuntimeSmokeInferenceBlocker>,
+    pub warnings: Vec<LocalRuntimeSmokeInferenceWarning>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub diagnostic_only: bool,
+    pub not_scholar_chat_answer: bool,
+    pub no_answer_generated: bool,
+    pub no_grounding_applied: bool,
+    pub no_evidence_pack_used: bool,
+    pub no_persistence: bool,
+    pub no_artifact_write: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
 pub fn preview_local_model_runtime_health(
     root: impl Into<PathBuf>,
     config: LocalModelRuntimeConfig,
@@ -2269,6 +2329,210 @@ pub fn smoke_test_local_runtime_inference(
             ))
         }
     }
+}
+
+pub fn run_llama_runtime_smoke_diagnostic(
+    root: impl Into<PathBuf>,
+    request: LocalRuntimeSmokeDiagnosticRequest,
+) -> AegisResult<LocalRuntimeSmokeDiagnosticPreview> {
+    let root = root.into();
+    let LocalRuntimeSmokeDiagnosticRequest {
+        smoke_execution_plan_preview_request,
+        allow_smoke_execution,
+    } = request;
+    let smoke_execution_plan_preview =
+        preview_llama_runtime_smoke_execution_plan(&root, smoke_execution_plan_preview_request.clone())?;
+    let smoke_execution_plan_status = smoke_execution_plan_preview.status.clone();
+    let smoke_readiness_status = smoke_execution_plan_preview.smoke_readiness_status.clone();
+    let capability_status = smoke_execution_plan_preview.capability_status.clone();
+    let version_probe_status = smoke_execution_plan_preview.version_probe_status.clone();
+    let probe_readiness_status = smoke_execution_plan_preview.probe_readiness_status.clone();
+    let validation_status = smoke_execution_plan_preview.validation_status.clone();
+    let adapter_contract_status = smoke_execution_plan_preview.adapter_contract_status.clone();
+    let adapter_kind = smoke_execution_plan_preview.adapter_kind.clone();
+    let normalized_model_family = smoke_execution_plan_preview.normalized_model_family.clone();
+    let normalized_model_format = smoke_execution_plan_preview.normalized_model_format.clone();
+    let safe_executable_file_name = smoke_execution_plan_preview.safe_executable_file_name.clone();
+    let safe_model_file_name = smoke_execution_plan_preview.safe_model_file_name.clone();
+    let probe_consent = smoke_execution_plan_preview.probe_consent;
+    let allow_probe_execution = smoke_execution_plan_preview.allow_probe_execution;
+    let smoke_consent = smoke_execution_plan_preview.smoke_consent;
+    let normalized_diagnostic_prompt = smoke_execution_plan_preview.normalized_diagnostic_prompt.clone();
+    let diagnostic_prompt_char_count = smoke_execution_plan_preview.diagnostic_prompt_char_count;
+    let max_output_tokens = smoke_execution_plan_preview.max_output_tokens;
+    let timeout_ms = smoke_execution_plan_preview.timeout_ms;
+
+    let mut blockers: Vec<LocalRuntimeSmokeInferenceBlocker> = smoke_execution_plan_preview
+        .blockers
+        .iter()
+        .map(|blocker| LocalRuntimeSmokeInferenceBlocker {
+            kind: blocker.kind.clone(),
+            message: blocker.message.clone(),
+        })
+        .collect();
+    let mut warnings: Vec<LocalRuntimeSmokeInferenceWarning> = smoke_execution_plan_preview
+        .warnings
+        .iter()
+        .map(|warning| LocalRuntimeSmokeInferenceWarning {
+            kind: warning.kind.clone(),
+            message: warning.message.clone(),
+        })
+        .collect();
+    push_smoke_warning(
+        &mut warnings,
+        "boundary",
+        "This is a diagnostic smoke execution only; it does not generate a Scholar Chat answer, ground claims, build an Evidence Pack, or persist settings or artifacts.",
+    );
+
+    let mut execution_attempted = false;
+    let mut duration_ms = 0;
+    let mut exit_code = None;
+    let mut stdout_preview = String::new();
+    let mut stderr_preview = String::new();
+    let mut stdout_truncated = false;
+    let mut stderr_truncated = false;
+    let mut status = LocalRuntimeSmokeDiagnosticStatus::Blocked;
+    let mut next_required_actions = smoke_execution_plan_preview.next_required_actions.clone();
+
+    if !matches!(smoke_execution_plan_status, LocalRuntimeSmokeExecutionPlanStatus::PlanReadyLater) {
+        push_smoke_blocker(
+            &mut blockers,
+            "smoke_execution_plan_not_ready_later",
+            "The smoke execution plan must be ready later before diagnostic smoke execution can begin.",
+        );
+        push_unique_text(
+            &mut next_required_actions,
+            "Resolve the smoke execution plan before running diagnostic smoke execution.",
+        );
+    } else if !allow_smoke_execution {
+        push_smoke_blocker(
+            &mut blockers,
+            "smoke_execution_consent_missing",
+            "Diagnostic smoke execution consent was not given.",
+        );
+        push_unique_text(
+            &mut next_required_actions,
+            "Grant diagnostic smoke execution consent.",
+        );
+    } else {
+        let smoke_inference_request = LocalRuntimeSmokeInferenceRequest {
+            runtime_config: smoke_runtime_config_from_execution_plan_request(
+                &smoke_execution_plan_preview_request,
+            ),
+            allow_execution: true,
+            prompt: Some(normalized_diagnostic_prompt.clone()),
+            timeout_ms: Some(timeout_ms),
+            max_output_tokens: Some(max_output_tokens),
+        };
+        let smoke_result = smoke_test_local_runtime_inference(&root, smoke_inference_request)?;
+        execution_attempted = smoke_result.execution_attempted;
+        duration_ms = smoke_result.duration_ms;
+        exit_code = smoke_result.exit_code;
+        stdout_preview = smoke_result.stdout_preview;
+        stderr_preview = smoke_result.stderr_preview;
+        stdout_truncated = smoke_warning_has_kind(&smoke_result.warnings, "stdout_truncated");
+        stderr_truncated = smoke_warning_has_kind(&smoke_result.warnings, "stderr_truncated");
+        blockers.extend(smoke_result.blockers);
+        warnings.extend(smoke_result.warnings);
+        match smoke_result.status {
+            LocalRuntimeSmokeInferenceStatus::InferenceSucceeded => {
+                status = LocalRuntimeSmokeDiagnosticStatus::SmokeSucceeded;
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Review the diagnostic smoke output before proceeding.",
+                );
+            }
+            LocalRuntimeSmokeInferenceStatus::TimedOut => {
+                status = LocalRuntimeSmokeDiagnosticStatus::TimedOut;
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Review the diagnostic smoke output and timeout conditions before proceeding.",
+                );
+            }
+            LocalRuntimeSmokeInferenceStatus::InferenceFailed
+            | LocalRuntimeSmokeInferenceStatus::Blocked
+            | LocalRuntimeSmokeInferenceStatus::NotConfigured
+            | LocalRuntimeSmokeInferenceStatus::ModelMissing
+            | LocalRuntimeSmokeInferenceStatus::ExecutableMissing => {
+                status = LocalRuntimeSmokeDiagnosticStatus::SmokeFailed;
+                push_unique_text(
+                    &mut next_required_actions,
+                    "Review the diagnostic smoke output and stderr before proceeding.",
+                );
+            }
+        }
+    }
+
+    let summary = match status {
+        LocalRuntimeSmokeDiagnosticStatus::Blocked => {
+            if matches!(smoke_execution_plan_status, LocalRuntimeSmokeExecutionPlanStatus::Blocked)
+            {
+                "The diagnostic smoke execution is blocked because the smoke execution plan is blocked.".to_string()
+            } else if matches!(
+                smoke_execution_plan_status,
+                LocalRuntimeSmokeExecutionPlanStatus::NeedsReview
+            ) {
+                "The diagnostic smoke execution is blocked because the smoke execution plan still needs review.".to_string()
+            } else if !allow_smoke_execution {
+                "The diagnostic smoke execution is blocked until explicit execution consent is granted.".to_string()
+            } else {
+                "The diagnostic smoke execution is blocked because the smoke probe could not run.".to_string()
+            }
+        }
+        LocalRuntimeSmokeDiagnosticStatus::SmokeSucceeded => {
+            "The diagnostic smoke execution succeeded and remains diagnostic-only.".to_string()
+        }
+        LocalRuntimeSmokeDiagnosticStatus::SmokeFailed => {
+            "The diagnostic smoke execution failed and remains diagnostic-only.".to_string()
+        }
+        LocalRuntimeSmokeDiagnosticStatus::TimedOut => {
+            "The diagnostic smoke execution timed out and remains diagnostic-only.".to_string()
+        }
+    };
+
+    Ok(LocalRuntimeSmokeDiagnosticPreview {
+        status,
+        smoke_execution_plan_status,
+        smoke_readiness_status,
+        capability_status,
+        version_probe_status,
+        probe_readiness_status,
+        validation_status,
+        adapter_contract_status,
+        adapter_kind,
+        normalized_model_family,
+        normalized_model_format,
+        safe_executable_file_name,
+        safe_model_file_name,
+        probe_consent,
+        allow_probe_execution,
+        smoke_consent,
+        allow_smoke_execution,
+        execution_attempted,
+        normalized_diagnostic_prompt,
+        diagnostic_prompt_char_count,
+        max_output_tokens,
+        timeout_ms,
+        duration_ms,
+        exit_code,
+        stdout_preview,
+        stderr_preview,
+        stdout_truncated,
+        stderr_truncated,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        diagnostic_only: true,
+        not_scholar_chat_answer: true,
+        no_answer_generated: true,
+        no_grounding_applied: true,
+        no_evidence_pack_used: true,
+        no_persistence: true,
+        no_artifact_write: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+    })
 }
 
 struct PathInspection {
@@ -4220,6 +4484,30 @@ fn build_smoke_result(
     }
 }
 
+fn smoke_warning_has_kind(warnings: &[LocalRuntimeSmokeInferenceWarning], kind: &str) -> bool {
+    warnings.iter().any(|warning| warning.kind == kind)
+}
+
+fn smoke_runtime_config_from_execution_plan_request(
+    request: &LocalRuntimeSmokeExecutionPlanPreviewRequest,
+) -> LocalModelRuntimeConfig {
+    let adapter_contract_request = &request
+        .smoke_readiness_preview_request
+        .capability_preview_request
+        .version_probe_preview_request
+        .probe_readiness_preview_request
+        .validation_preview_request
+        .adapter_contract_request;
+    LocalModelRuntimeConfig {
+        runtime_kind: LocalModelRuntimeKind::LlamaCpp,
+        model_path: adapter_contract_request.model_path.clone(),
+        executable_path: adapter_contract_request.executable_path.clone(),
+        context_window: adapter_contract_request.context_window_tokens,
+        gpu_layers: adapter_contract_request.gpu_layers,
+        temperature: None,
+    }
+}
+
 fn push_smoke_warning(warnings: &mut Vec<LocalRuntimeSmokeInferenceWarning>, kind: &str, message: &str) {
     if !warnings.iter().any(|warning| warning.kind == kind && warning.message == message) {
         warnings.push(LocalRuntimeSmokeInferenceWarning {
@@ -4900,6 +5188,26 @@ fn main() {
         }
     }
 
+    fn smoke_diagnostic_request(
+        capability_preview_request: LocalRuntimeCapabilityPreviewRequest,
+        smoke_consent: bool,
+        diagnostic_prompt: Option<&str>,
+        max_output_tokens: Option<u32>,
+        timeout_ms: Option<u64>,
+        allow_smoke_execution: bool,
+    ) -> LocalRuntimeSmokeDiagnosticRequest {
+        LocalRuntimeSmokeDiagnosticRequest {
+            smoke_execution_plan_preview_request: smoke_execution_plan_request(
+                capability_preview_request,
+                smoke_consent,
+                diagnostic_prompt,
+                max_output_tokens,
+                timeout_ms,
+            ),
+            allow_smoke_execution,
+        }
+    }
+
     fn smoke_readiness_helper_executable(temp: &tempfile::TempDir, executable_name: &str) -> PathBuf {
         let marker_path = temp.path().join("smoke_readiness_unexpected_call.txt");
         let marker_literal = format!("{:?}", marker_path.to_string_lossy().to_string());
@@ -4966,6 +5274,20 @@ fn main() {
         assert!(preview.no_evidence_pack_used);
     }
 
+    fn assert_llama_runtime_smoke_diagnostic_boundary_fields(
+        preview: &LocalRuntimeSmokeDiagnosticPreview,
+    ) {
+        assert!(preview.diagnostic_only);
+        assert!(preview.not_scholar_chat_answer);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_grounding_applied);
+        assert!(preview.no_evidence_pack_used);
+        assert!(preview.no_persistence);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
     fn assert_llama_runtime_smoke_readiness_deterministic_and_path_free(
         temp: &tempfile::TempDir,
         request: LocalRuntimeSmokeReadinessPreviewRequest,
@@ -5004,6 +5326,27 @@ fn main() {
             assert!(!debug.contains(temp_path.as_ref()));
             assert!(!json.contains(temp_path.as_ref()));
             assert_llama_runtime_smoke_execution_plan_boundary_fields(preview);
+        }
+        first
+    }
+
+    fn assert_llama_runtime_smoke_diagnostic_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: LocalRuntimeSmokeDiagnosticRequest,
+    ) -> LocalRuntimeSmokeDiagnosticPreview {
+        let before_entries = fs::read_dir(temp.path()).unwrap().count();
+        let first = run_llama_runtime_smoke_diagnostic(temp.path(), request.clone()).unwrap();
+        let second = run_llama_runtime_smoke_diagnostic(temp.path(), request).unwrap();
+        let after_entries = fs::read_dir(temp.path()).unwrap().count();
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_llama_runtime_smoke_diagnostic_boundary_fields(preview);
         }
         first
     }
@@ -6918,6 +7261,417 @@ fn main() {
         assert!(!helper.path().join("smoke_readiness_unexpected_call.txt").exists());
         assert_llama_runtime_smoke_execution_plan_boundary_fields(&result);
         assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn local_runtime_smoke_diagnostic_preview_blocks_when_smoke_execution_plan_is_blocked() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_llama_runtime_smoke_diagnostic_deterministic_and_path_free(
+            &temp,
+            smoke_diagnostic_request(
+                capability_request(
+                    llama_runtime_validation_request(
+                        Some(""),
+                        Some(""),
+                        None,
+                        Some("gguf"),
+                        Some(8192),
+                        Some(0),
+                        Some(8),
+                        Some(256),
+                        Some("template"),
+                    ),
+                    true,
+                    true,
+                    Some(1_500),
+                ),
+                true,
+                Some("Diagnostic smoke prompt."),
+                Some(8),
+                Some(1_500),
+                true,
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeSmokeDiagnosticStatus::Blocked);
+        assert_eq!(
+            result.smoke_execution_plan_status,
+            LocalRuntimeSmokeExecutionPlanStatus::Blocked
+        );
+        assert!(!result.execution_attempted);
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "smoke_execution_plan_not_ready_later"));
+        assert_llama_runtime_smoke_diagnostic_boundary_fields(&result);
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn local_runtime_smoke_diagnostic_preview_blocks_when_smoke_execution_plan_needs_review() {
+        let temp = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let executable_path = smoke_readiness_helper_executable(&helper, "smoke_diagnostic_plan.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_smoke_diagnostic_deterministic_and_path_free(
+            &temp,
+            smoke_diagnostic_request(
+                capability_request(
+                    llama_runtime_validation_request(
+                        Some(executable_path.to_string_lossy().as_ref()),
+                        Some(model_path.to_string_lossy().as_ref()),
+                        Some("experimental-family"),
+                        Some("gguf"),
+                        Some(8192),
+                        Some(0),
+                        Some(8),
+                        Some(256),
+                        Some("template"),
+                    ),
+                    true,
+                    true,
+                    Some(1_500),
+                ),
+                true,
+                Some("Diagnostic smoke prompt."),
+                Some(8),
+                Some(1_500),
+                true,
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeSmokeDiagnosticStatus::Blocked);
+        assert_eq!(
+            result.smoke_execution_plan_status,
+            LocalRuntimeSmokeExecutionPlanStatus::Blocked
+        );
+        assert!(!result.execution_attempted);
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "smoke_execution_plan_not_ready_later"));
+        assert_llama_runtime_smoke_diagnostic_boundary_fields(&result);
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn local_runtime_smoke_diagnostic_preview_blocks_when_smoke_execution_consent_is_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let executable_path = smoke_readiness_helper_executable(&helper, "smoke_diagnostic_ready.exe");
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_smoke_diagnostic_deterministic_and_path_free(
+            &temp,
+            smoke_diagnostic_request(
+                capability_request(
+                    llama_runtime_validation_request(
+                        Some(executable_path.to_string_lossy().as_ref()),
+                        Some(model_path.to_string_lossy().as_ref()),
+                        Some("llama"),
+                        Some("gguf"),
+                        Some(8192),
+                        Some(0),
+                        Some(8),
+                        Some(256),
+                        Some("template"),
+                    ),
+                    true,
+                    true,
+                    Some(1_500),
+                ),
+                true,
+                Some("Diagnostic smoke prompt."),
+                Some(8),
+                Some(1_500),
+                false,
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeSmokeDiagnosticStatus::Blocked);
+        assert_eq!(
+            result.smoke_execution_plan_status,
+            LocalRuntimeSmokeExecutionPlanStatus::PlanReadyLater
+        );
+        assert!(!result.execution_attempted);
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind == "smoke_execution_consent_missing"));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("consent")));
+        assert_llama_runtime_smoke_diagnostic_boundary_fields(&result);
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn local_runtime_smoke_diagnostic_preview_succeeds_with_redacted_and_bounded_output() {
+        let temp = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let source = r#"
+use std::{env, thread, time::Duration};
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let exe_name = env::current_exe()
+        .ok()
+        .and_then(|path| path.file_name().and_then(|value| value.to_str()).map(|value| value.to_string()))
+        .unwrap_or_default();
+    println!("stdout marker");
+    println!("args={}", args.join(" | "));
+    println!("llama.cpp version 1.2.3");
+    println!("exe_name={}", exe_name);
+    println!("{}", "S".repeat(5000));
+    eprintln!("stderr marker");
+    eprintln!("args={}", args.join(" | "));
+    eprintln!("llama.cpp version 1.2.3");
+    eprintln!("exe_name={}", exe_name);
+    eprintln!("{}", "E".repeat(5000));
+    if exe_name.contains("slow") {
+        thread::sleep(Duration::from_millis(750));
+    }
+}
+"#;
+        let executable_path =
+            version_probe_helper_executable_with_source(&helper, "smoke_diagnostic_ready.exe", &source);
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_smoke_diagnostic_deterministic_and_path_free(
+            &temp,
+            smoke_diagnostic_request(
+                capability_request(
+                    llama_runtime_validation_request(
+                        Some(executable_path.to_string_lossy().as_ref()),
+                        Some(model_path.to_string_lossy().as_ref()),
+                        Some("llama"),
+                        Some("gguf"),
+                        Some(8192),
+                        Some(0),
+                        Some(8),
+                        Some(256),
+                        Some("template"),
+                    ),
+                    true,
+                    true,
+                    Some(1_500),
+                ),
+                true,
+                Some("Say READY in one short sentence."),
+                Some(8),
+                Some(1_500),
+                true,
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeSmokeDiagnosticStatus::SmokeSucceeded);
+        assert!(result.execution_attempted);
+        assert!(result.stdout_truncated);
+        assert!(result.stderr_truncated);
+        assert_eq!(result.exit_code, Some(0));
+        assert_eq!(result.safe_model_file_name.as_deref(), Some("ready-model.gguf"));
+        assert_eq!(
+            result.safe_executable_file_name.as_deref(),
+            Some("smoke_diagnostic_ready.exe")
+        );
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        let helper_path = helper.path().to_string_lossy();
+        let model_path_text = model_path.to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert!(!debug.contains(helper_path.as_ref()));
+        assert!(!json.contains(helper_path.as_ref()));
+        assert!(!debug.contains(model_path_text.as_ref()));
+        assert!(!json.contains(model_path_text.as_ref()));
+        assert!(result
+            .stdout_preview
+            .contains("stdout marker"));
+        assert!(!result.stdout_preview.contains(temp_path.as_ref()));
+        assert!(!result.stdout_preview.contains(helper_path.as_ref()));
+        assert!(!result.stdout_preview.contains(model_path_text.as_ref()));
+        assert!(!result.stderr_preview.contains(temp_path.as_ref()));
+        assert!(!result.stderr_preview.contains(helper_path.as_ref()));
+        assert!(!result.stderr_preview.contains(model_path_text.as_ref()));
+        assert_llama_runtime_smoke_diagnostic_boundary_fields(&result);
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn local_runtime_smoke_diagnostic_preview_fails_with_redacted_and_bounded_output() {
+        let temp = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let source = r#"
+use std::{env, thread, time::Duration};
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let exe_name = env::current_exe()
+        .ok()
+        .and_then(|path| path.file_name().and_then(|value| value.to_str()).map(|value| value.to_string()))
+        .unwrap_or_default();
+    println!("stdout marker");
+    println!("args={}", args.join(" | "));
+    println!("llama.cpp version 1.2.3");
+    println!("exe_name={}", exe_name);
+    println!("{}", "S".repeat(5000));
+    eprintln!("stderr marker");
+    eprintln!("args={}", args.join(" | "));
+    eprintln!("llama.cpp version 1.2.3");
+    eprintln!("exe_name={}", exe_name);
+    eprintln!("{}", "E".repeat(5000));
+    if args.iter().any(|arg| matches!(arg.as_str(), "-p" | "--prompt" | "-n" | "--max_output_tokens" | "-m" | "--ctx-size" | "-ngl")) {
+        std::process::exit(7);
+    }
+}
+"#;
+        let executable_path =
+            version_probe_helper_executable_with_source(&helper, "smoke_diagnostic_fail.exe", &source);
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_smoke_diagnostic_deterministic_and_path_free(
+            &temp,
+            smoke_diagnostic_request(
+                capability_request(
+                    llama_runtime_validation_request(
+                        Some(executable_path.to_string_lossy().as_ref()),
+                        Some(model_path.to_string_lossy().as_ref()),
+                        Some("llama"),
+                        Some("gguf"),
+                        Some(8192),
+                        Some(0),
+                        Some(8),
+                        Some(256),
+                        Some("template"),
+                    ),
+                    true,
+                    true,
+                    Some(1_500),
+                ),
+                true,
+                Some("Say FAIL in one short sentence."),
+                Some(8),
+                Some(1_500),
+                true,
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeSmokeDiagnosticStatus::SmokeFailed);
+        assert!(result.execution_attempted);
+        assert_eq!(result.exit_code, Some(7));
+        assert!(result.stdout_truncated);
+        assert!(result.stderr_truncated);
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.kind == "non_zero_exit"));
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        let helper_path = helper.path().to_string_lossy();
+        let model_path_text = model_path.to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert!(!debug.contains(helper_path.as_ref()));
+        assert!(!json.contains(helper_path.as_ref()));
+        assert!(!debug.contains(model_path_text.as_ref()));
+        assert!(!json.contains(model_path_text.as_ref()));
+        assert!(!result.stdout_preview.contains(temp_path.as_ref()));
+        assert!(!result.stdout_preview.contains(helper_path.as_ref()));
+        assert!(!result.stdout_preview.contains(model_path_text.as_ref()));
+        assert!(!result.stderr_preview.contains(temp_path.as_ref()));
+        assert!(!result.stderr_preview.contains(helper_path.as_ref()));
+        assert!(!result.stderr_preview.contains(model_path_text.as_ref()));
+        assert_llama_runtime_smoke_diagnostic_boundary_fields(&result);
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn local_runtime_smoke_diagnostic_preview_times_out_with_redacted_and_bounded_output() {
+        let temp = tempfile::tempdir().unwrap();
+        let helper = tempfile::tempdir().unwrap();
+        let source = r#"
+use std::{env, thread, time::Duration};
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let exe_name = env::current_exe()
+        .ok()
+        .and_then(|path| path.file_name().and_then(|value| value.to_str()).map(|value| value.to_string()))
+        .unwrap_or_default();
+    println!("stdout marker");
+    println!("args={}", args.join(" | "));
+    println!("llama.cpp version 1.2.3");
+    println!("exe_name={}", exe_name);
+    println!("{}", "S".repeat(5000));
+    eprintln!("stderr marker");
+    eprintln!("args={}", args.join(" | "));
+    eprintln!("llama.cpp version 1.2.3");
+    eprintln!("exe_name={}", exe_name);
+    eprintln!("{}", "E".repeat(5000));
+    if args.iter().any(|arg| matches!(arg.as_str(), "-p" | "--prompt" | "-n" | "--max_output_tokens" | "-m" | "--ctx-size" | "-ngl")) {
+        thread::sleep(Duration::from_millis(750));
+    }
+}
+"#;
+        let executable_path =
+            version_probe_helper_executable_with_source(&helper, "smoke_diagnostic_slow.exe", &source);
+        let model_path = temp.path().join("ready-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        let result = assert_llama_runtime_smoke_diagnostic_deterministic_and_path_free(
+            &temp,
+            smoke_diagnostic_request(
+                capability_request(
+                    llama_runtime_validation_request(
+                        Some(executable_path.to_string_lossy().as_ref()),
+                        Some(model_path.to_string_lossy().as_ref()),
+                        Some("llama"),
+                        Some("gguf"),
+                        Some(8192),
+                        Some(0),
+                        Some(8),
+                        Some(256),
+                        Some("template"),
+                    ),
+                    true,
+                    true,
+                    Some(1_500),
+                ),
+                true,
+                Some("SLEEP and say READY in one short sentence."),
+                Some(8),
+                Some(150),
+                true,
+            ),
+        );
+        assert_eq!(result.status, LocalRuntimeSmokeDiagnosticStatus::TimedOut);
+        assert!(result.execution_attempted);
+        assert!(result.stdout_truncated);
+        assert!(result.stderr_truncated);
+        assert!(result.warnings.iter().any(|warning| warning.kind == "timed_out"));
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        let helper_path = helper.path().to_string_lossy();
+        let model_path_text = model_path.to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert!(!debug.contains(helper_path.as_ref()));
+        assert!(!json.contains(helper_path.as_ref()));
+        assert!(!debug.contains(model_path_text.as_ref()));
+        assert!(!json.contains(model_path_text.as_ref()));
+        assert!(!result.stdout_preview.contains(temp_path.as_ref()));
+        assert!(!result.stdout_preview.contains(helper_path.as_ref()));
+        assert!(!result.stdout_preview.contains(model_path_text.as_ref()));
+        assert!(!result.stderr_preview.contains(temp_path.as_ref()));
+        assert!(!result.stderr_preview.contains(helper_path.as_ref()));
+        assert!(!result.stderr_preview.contains(model_path_text.as_ref()));
+        assert_llama_runtime_smoke_diagnostic_boundary_fields(&result);
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
     }
 
     #[test]
