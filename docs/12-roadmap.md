@@ -1470,6 +1470,22 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 95 - Scholar Chat Runtime Diagnostic Bridge
+
+Phase 95.1 adds a UI/docs sync for the preview-only Scholar Chat runtime diagnostic bridge. It remains preview-only, does not run runtime execution, does not generate answers, and does not create artifacts, persistence, registry changes, or audit writes.
+
+Do not implement:
+
+- Scholar Chat answer generation
+- runtime execution
+- artifact writes
+- persistence
+- registry status changes
+- audit writes
+- source import
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
