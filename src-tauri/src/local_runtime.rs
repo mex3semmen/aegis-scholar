@@ -7505,7 +7505,7 @@ fn main() {
         let temp = tempfile::tempdir().unwrap();
         let helper = tempfile::tempdir().unwrap();
         let source = r#"
-use std::{env, thread, time::Duration};
+use std::env;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -7612,7 +7612,7 @@ fn main() {
     eprintln!("llama.cpp version 1.2.3");
     eprintln!("exe_name={}", exe_name);
     eprintln!("{}", "E".repeat(5000));
-    if args.iter().any(|arg| matches!(arg.as_str(), "-p" | "--prompt" | "-n" | "--max_output_tokens" | "-m" | "--ctx-size" | "-ngl")) {
+    if exe_name.contains("slow") {
         thread::sleep(Duration::from_millis(750));
     }
 }

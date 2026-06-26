@@ -33,7 +33,6 @@ use local_runtime::{
     preview_llama_runtime_capability as preview_llama_runtime_capability_impl,
     preview_llama_runtime_smoke_readiness as preview_llama_runtime_smoke_readiness_impl,
     preview_llama_runtime_smoke_execution_plan as preview_llama_runtime_smoke_execution_plan_impl,
-    smoke_test_local_runtime_inference as smoke_test_local_runtime_inference_impl,
     run_llama_runtime_smoke_diagnostic as run_llama_runtime_smoke_diagnostic_impl,
     probe_local_runtime_version as probe_local_runtime_version_impl,
     LocalModelRuntimeConfig,
@@ -50,8 +49,6 @@ use local_runtime::{
     LocalRuntimeVersionProbePreviewRequest,
     LocalRuntimeCapabilityPreview,
     LocalRuntimeCapabilityPreviewRequest,
-    LocalRuntimeSmokeInferenceRequest,
-    LocalRuntimeSmokeInferenceResult,
     LocalRuntimeSmokeDiagnosticPreview,
     LocalRuntimeSmokeDiagnosticRequest,
     LocalRuntimeSmokeExecutionPlanPreview,
@@ -524,15 +521,6 @@ fn probe_local_runtime_version(root: String, request: LocalRuntimeProbeRequest) 
 }
 
 #[tauri::command]
-fn smoke_test_local_runtime_inference(
-    root: String,
-    request: LocalRuntimeSmokeInferenceRequest,
-) -> Result<LocalRuntimeSmokeInferenceResult, String> {
-    smoke_test_local_runtime_inference_impl(root, request)
-        .map_err(to_user_error)
-}
-
-#[tauri::command]
 fn run_llama_runtime_smoke_diagnostic(
     root: String,
     request: LocalRuntimeSmokeDiagnosticRequest,
@@ -600,7 +588,6 @@ pub fn run() {
             preview_llama_runtime_capability,
             preview_llama_runtime_smoke_readiness,
             preview_llama_runtime_smoke_execution_plan,
-            smoke_test_local_runtime_inference,
             run_llama_runtime_smoke_diagnostic,
         ])
         .run(tauri::generate_context!())
