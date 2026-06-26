@@ -1,4 +1,4 @@
-import { createSignal, onMount } from "solid-js";
+import { createSignal, onMount, Setter } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 
 type CorpusStatus = {
@@ -824,6 +824,53 @@ type LocalRuntimeAdapterContractPreview = {
   no_audit_write: boolean;
 };
 
+type LocalRuntimeValidationStatus =
+  | "blocked"
+  | "needs_review"
+  | "validation_ready_later";
+
+type LocalRuntimeValidationPreviewRequest = {
+  adapter_contract_request: LocalRuntimeAdapterContractPreviewRequest;
+};
+
+type LocalRuntimeValidationPreview = {
+  status: LocalRuntimeValidationStatus;
+  adapter_contract_status: LocalRuntimeAdapterContractStatus;
+  adapter_kind: LocalRuntimeAdapterKind;
+  normalized_model_family: string | null;
+  normalized_model_format: string;
+  executable_path_present: boolean;
+  model_path_present: boolean;
+  executable_exists: boolean;
+  model_exists: boolean;
+  executable_is_file: boolean;
+  model_is_file: boolean;
+  model_extension_valid: boolean;
+  safe_executable_file_name?: string | null;
+  safe_model_file_name?: string | null;
+  context_window_tokens: number | null;
+  gpu_layers: number | null;
+  threads: number | null;
+  batch_size: number | null;
+  chat_template_present: boolean;
+  missing_inputs: string[];
+  validation_reasons: string[];
+  blockers: LocalRuntimeAdapterContractBlocker[];
+  warnings: LocalRuntimeAdapterContractWarning[];
+  next_required_actions: string[];
+  summary: string;
+  preview_only: boolean;
+  no_process_spawn: boolean;
+  no_binary_probe: boolean;
+  no_model_load: boolean;
+  no_llm_call: boolean;
+  no_runtime_execution: boolean;
+  no_persistence: boolean;
+  no_artifact_write: boolean;
+  no_registry_status_change: boolean;
+  no_audit_write: boolean;
+};
+
 type LocalModelRuntimeHealthPreview = {
   status: LocalModelRuntimeHealthStatus;
   runtime_kind: LocalModelRuntimeKind;
@@ -1463,6 +1510,11 @@ export default function App() {
   const [localRuntimeAdapterValidationError, setLocalRuntimeAdapterValidationError] = createSignal<string | null>(null);
   const [localRuntimeAdapterLoading, setLocalRuntimeAdapterLoading] = createSignal(false);
   const [localRuntimeAdapterHasRun, setLocalRuntimeAdapterHasRun] = createSignal(false);
+  const [localRuntimeValidationPreview, setLocalRuntimeValidationPreview] = createSignal<LocalRuntimeValidationPreview | null>(null);
+  const [localRuntimeValidationPreviewError, setLocalRuntimeValidationPreviewError] = createSignal<string | null>(null);
+  const [localRuntimeValidationPreviewInputError, setLocalRuntimeValidationPreviewInputError] = createSignal<string | null>(null);
+  const [localRuntimeValidationPreviewLoading, setLocalRuntimeValidationPreviewLoading] = createSignal(false);
+  const [localRuntimeValidationPreviewHasRun, setLocalRuntimeValidationPreviewHasRun] = createSignal(false);
   const [localRuntimePreview, setLocalRuntimePreview] = createSignal<LocalModelRuntimeHealthPreview | null>(null);
   const [localRuntimeError, setLocalRuntimeError] = createSignal<string | null>(null);
   const [localRuntimeValidationError, setLocalRuntimeValidationError] = createSignal<string | null>(null);
@@ -2019,6 +2071,14 @@ export default function App() {
     setLocalRuntimeAdapterError(null);
     setLocalRuntimeAdapterValidationError(null);
     setLocalRuntimeAdapterHasRun(false);
+    clearLocalRuntimeValidationPreview();
+  }
+
+  function clearLocalRuntimeValidationPreview() {
+    setLocalRuntimeValidationPreview(null);
+    setLocalRuntimeValidationPreviewError(null);
+    setLocalRuntimeValidationPreviewInputError(null);
+    setLocalRuntimeValidationPreviewHasRun(false);
   }
 
   function clearScholarChatAnswerReadinessPreview() {
@@ -2999,26 +3059,28 @@ export default function App() {
     }
   }
 
-  function buildLocalRuntimeAdapterContractPreviewRequest(): LocalRuntimeAdapterContractPreviewRequest | null {
+  function buildLocalRuntimeAdapterContractPreviewRequest(
+    setValidationError: Setter<string | null>,
+  ): LocalRuntimeAdapterContractPreviewRequest | null {
     const contextWindowTokens = parseOptionalIntegerInput(
       localRuntimeAdapterContextWindowTokens(),
       "Context window tokens",
-      setLocalRuntimeAdapterValidationError,
+      setValidationError,
     );
     const gpuLayers = parseOptionalIntegerInput(
       localRuntimeAdapterGpuLayers(),
       "GPU layers",
-      setLocalRuntimeAdapterValidationError,
+      setValidationError,
     );
     const threads = parseOptionalIntegerInput(
       localRuntimeAdapterThreads(),
       "Threads",
-      setLocalRuntimeAdapterValidationError,
+      setValidationError,
     );
     const batchSize = parseOptionalIntegerInput(
       localRuntimeAdapterBatchSize(),
       "Batch size",
-      setLocalRuntimeAdapterValidationError,
+      setValidationError,
     );
 
     if (
@@ -3049,7 +3111,7 @@ export default function App() {
       return;
     }
 
-    const request = buildLocalRuntimeAdapterContractPreviewRequest();
+    const request = buildLocalRuntimeAdapterContractPreviewRequest(setLocalRuntimeAdapterValidationError);
     if (!request) {
       setLocalRuntimeAdapterHasRun(true);
       setLocalRuntimeAdapterPreview(null);
@@ -3072,6 +3134,50 @@ export default function App() {
       setLocalRuntimeAdapterError(sanitizeBackendError(err));
     } finally {
       setLocalRuntimeAdapterLoading(false);
+    }
+  }
+
+  function buildLocalRuntimeValidationPreviewRequest(): LocalRuntimeValidationPreviewRequest | null {
+    const adapterContractRequest = buildLocalRuntimeAdapterContractPreviewRequest(
+      setLocalRuntimeValidationPreviewInputError,
+    );
+    if (!adapterContractRequest) {
+      return null;
+    }
+
+    return {
+      adapter_contract_request: adapterContractRequest,
+    };
+  }
+
+  async function previewLocalRuntimeValidation() {
+    if (localRuntimeValidationPreviewLoading()) {
+      return;
+    }
+
+    const request = buildLocalRuntimeValidationPreviewRequest();
+    if (!request) {
+      setLocalRuntimeValidationPreviewHasRun(true);
+      setLocalRuntimeValidationPreview(null);
+      setLocalRuntimeValidationPreviewError(null);
+      return;
+    }
+
+    setLocalRuntimeValidationPreviewHasRun(true);
+    setLocalRuntimeValidationPreviewLoading(true);
+    setLocalRuntimeValidationPreviewError(null);
+    setLocalRuntimeValidationPreviewInputError(null);
+    setLocalRuntimeValidationPreview(null);
+    try {
+      const result = await invoke<LocalRuntimeValidationPreview>("preview_llama_runtime_validation", {
+        root: ".",
+        request,
+      });
+      setLocalRuntimeValidationPreview(result);
+    } catch (err) {
+      setLocalRuntimeValidationPreviewError(sanitizeBackendError(err));
+    } finally {
+      setLocalRuntimeValidationPreviewLoading(false);
     }
   }
 
@@ -5472,6 +5578,122 @@ export default function App() {
             )
           ) : (
             <p>No llama.cpp adapter contract preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>llama.cpp validation</h3>
+          <p class="muted">
+            Validation preview only - no binary was probed, no process was started, no model was loaded, no runtime execution or LLM call occurred, and no settings or artifacts were persisted.
+          </p>
+          <p class="muted">
+            Checks path presence plus lightweight metadata for a future GGUF runtime. It reuses the adapter contract inputs above.
+          </p>
+          <div class="hero-actions">
+            <button onClick={previewLocalRuntimeValidation} disabled={localRuntimeValidationPreviewLoading()}>
+              {localRuntimeValidationPreviewLoading() ? "Previewing..." : "Preview llama.cpp validation"}
+            </button>
+          </div>
+          {localRuntimeValidationPreviewInputError() && <p class="error">{localRuntimeValidationPreviewInputError()}</p>}
+          {localRuntimeValidationPreviewError() && <p class="error">{localRuntimeValidationPreviewError()}</p>}
+          {localRuntimeValidationPreviewLoading() ? (
+            <p>Previewing llama.cpp validation...</p>
+          ) : localRuntimeValidationPreviewHasRun() ? (
+            localRuntimeValidationPreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(localRuntimeValidationPreview()!.status) },
+                  { label: "Adapter contract status", value: formatSnakeCaseLabel(localRuntimeValidationPreview()!.adapter_contract_status) },
+                  { label: "Adapter kind", value: formatSnakeCaseLabel(localRuntimeValidationPreview()!.adapter_kind) },
+                  { label: "Normalized model family", value: localRuntimeValidationPreview()!.normalized_model_family ?? "missing" },
+                  { label: "Normalized model format", value: localRuntimeValidationPreview()!.normalized_model_format },
+                  { label: "Executable path present", value: localRuntimeValidationPreview()!.executable_path_present ? "yes" : "no" },
+                  { label: "Executable exists", value: localRuntimeValidationPreview()!.executable_exists ? "yes" : "no" },
+                  { label: "Executable is file", value: localRuntimeValidationPreview()!.executable_is_file ? "yes" : "no" },
+                  { label: "Model path present", value: localRuntimeValidationPreview()!.model_path_present ? "yes" : "no" },
+                  { label: "Model exists", value: localRuntimeValidationPreview()!.model_exists ? "yes" : "no" },
+                  { label: "Model is file", value: localRuntimeValidationPreview()!.model_is_file ? "yes" : "no" },
+                  { label: "Model extension valid", value: localRuntimeValidationPreview()!.model_extension_valid ? "yes" : "no" },
+                  { label: "Context window tokens", value: localRuntimeValidationPreview()!.context_window_tokens ?? "missing" },
+                  { label: "GPU layers", value: localRuntimeValidationPreview()!.gpu_layers ?? "missing" },
+                  { label: "Threads", value: localRuntimeValidationPreview()!.threads ?? "missing" },
+                  { label: "Batch size", value: localRuntimeValidationPreview()!.batch_size ?? "missing" },
+                  { label: "Chat template present", value: localRuntimeValidationPreview()!.chat_template_present ? "yes" : "no" },
+                  { label: "Safe executable file name", value: localRuntimeValidationPreview()!.safe_executable_file_name ?? "not configured" },
+                  { label: "Safe model file name", value: localRuntimeValidationPreview()!.safe_model_file_name ?? "not configured" },
+                ])}
+                {localRuntimeValidationPreview()!.summary && <p><strong>Summary:</strong> {localRuntimeValidationPreview()!.summary}</p>}
+                <div class="contract-meta">
+                  <div><span>Preview only</span><strong>{localRuntimeValidationPreview()!.preview_only ? "yes" : "no"}</strong></div>
+                  <div><span>No process spawn</span><strong>{localRuntimeValidationPreview()!.no_process_spawn ? "yes" : "no"}</strong></div>
+                  <div><span>No binary probe</span><strong>{localRuntimeValidationPreview()!.no_binary_probe ? "yes" : "no"}</strong></div>
+                  <div><span>No model load</span><strong>{localRuntimeValidationPreview()!.no_model_load ? "yes" : "no"}</strong></div>
+                  <div><span>No runtime execution</span><strong>{localRuntimeValidationPreview()!.no_runtime_execution ? "yes" : "no"}</strong></div>
+                  <div><span>No LLM call</span><strong>{localRuntimeValidationPreview()!.no_llm_call ? "yes" : "no"}</strong></div>
+                  <div><span>No persistence</span><strong>{localRuntimeValidationPreview()!.no_persistence ? "yes" : "no"}</strong></div>
+                  <div><span>No artifact write</span><strong>{localRuntimeValidationPreview()!.no_artifact_write ? "yes" : "no"}</strong></div>
+                  <div><span>No registry status change</span><strong>{localRuntimeValidationPreview()!.no_registry_status_change ? "yes" : "no"}</strong></div>
+                  <div><span>No audit write</span><strong>{localRuntimeValidationPreview()!.no_audit_write ? "yes" : "no"}</strong></div>
+                </div>
+                <h4>Missing inputs</h4>
+                {localRuntimeValidationPreview()!.missing_inputs.length > 0 ? (
+                  <ul>
+                    {localRuntimeValidationPreview()!.missing_inputs.map((item) => (
+                      <li>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No missing inputs.</p>
+                )}
+                <h4>Validation reasons</h4>
+                {localRuntimeValidationPreview()!.validation_reasons.length > 0 ? (
+                  <ul>
+                    {localRuntimeValidationPreview()!.validation_reasons.map((item) => (
+                      <li>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No validation reasons.</p>
+                )}
+                <h4>Blockers</h4>
+                {localRuntimeValidationPreview()!.blockers.length > 0 ? (
+                  <ul>
+                    {localRuntimeValidationPreview()!.blockers.map((blocker) => (
+                      <li>
+                        <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>: {blocker.message}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No validation blockers.</p>
+                )}
+                <h4>Warnings</h4>
+                {localRuntimeValidationPreview()!.warnings.length > 0 ? (
+                  <ul>
+                    {localRuntimeValidationPreview()!.warnings.map((warning) => (
+                      <li>
+                        <strong>{formatSnakeCaseLabel(warning.kind)}</strong>: {warning.message}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No validation warnings.</p>
+                )}
+                <h4>Next required actions</h4>
+                {localRuntimeValidationPreview()!.next_required_actions.length > 0 ? (
+                  <ul>
+                    {localRuntimeValidationPreview()!.next_required_actions.map((item) => (
+                      <li>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No next required actions.</p>
+                )}
+              </>
+            ) : (
+              <p>No llama.cpp validation preview loaded yet.</p>
+            )
+          ) : (
+            <p>No llama.cpp validation preview loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">

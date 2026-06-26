@@ -1351,6 +1351,23 @@ Do not implement:
 - artifact writes
 - registry status changes
 - audit writes
+
+## Phase 88 - Llama Runtime Validation Preview
+
+Phase 88.0 adds a preview-only llama.cpp runtime validation layer on top of the adapter contract preview. It checks executable/model path presence and lightweight metadata for future GGUF runtime use, but it does not execute llama.cpp, probe binaries, load models, call an LLM, persist settings, or write artifacts. GGUF, Gemma, and related adapter values remain future runtime compatibility context, not bundled model support.
+
+Do not implement:
+
+- llama.cpp execution
+- binary probing
+- model loading
+- LLM calls
+- settings persistence
+- artifact writes
+- registry status changes
+- audit writes
+- source import
+- export/report/share workflows
 - Gemma download or bundling
 - model import
 - export/report/share workflows
