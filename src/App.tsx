@@ -1240,6 +1240,57 @@ type LocalRuntimeSmokeInferenceResult = {
   output_classification: LocalRuntimeSmokeInferenceOutputClassification;
 };
 
+type LocalRuntimeSmokeDiagnosticStatus = "blocked" | "smoke_succeeded" | "smoke_failed" | "timed_out";
+
+type LocalRuntimeSmokeDiagnosticRequest = {
+  smoke_execution_plan_preview_request: LocalRuntimeSmokeExecutionPlanPreviewRequest;
+  allow_smoke_execution: boolean;
+};
+
+type LocalRuntimeSmokeDiagnosticPreview = {
+  status: LocalRuntimeSmokeDiagnosticStatus;
+  smoke_execution_plan_status: LocalRuntimeSmokeExecutionPlanStatus;
+  smoke_readiness_status: LocalRuntimeSmokeReadinessStatus;
+  capability_status: LocalRuntimeCapabilityStatus;
+  version_probe_status: LocalRuntimeVersionProbeStatus;
+  probe_readiness_status: LocalRuntimeProbeReadinessStatus;
+  validation_status: LocalRuntimeValidationStatus;
+  adapter_contract_status: LocalRuntimeAdapterContractStatus;
+  adapter_kind: LocalRuntimeAdapterKind;
+  normalized_model_family?: string | null;
+  normalized_model_format: string;
+  safe_executable_file_name?: string | null;
+  safe_model_file_name?: string | null;
+  probe_consent: boolean;
+  allow_probe_execution: boolean;
+  smoke_consent: boolean;
+  allow_smoke_execution: boolean;
+  execution_attempted: boolean;
+  normalized_diagnostic_prompt: string;
+  diagnostic_prompt_char_count: number;
+  max_output_tokens: number;
+  timeout_ms: number;
+  duration_ms: number;
+  exit_code?: number | null;
+  stdout_preview: string;
+  stderr_preview: string;
+  stdout_truncated: boolean;
+  stderr_truncated: boolean;
+  blockers: LocalRuntimeSmokeInferenceBlocker[];
+  warnings: LocalRuntimeSmokeInferenceWarning[];
+  next_required_actions: string[];
+  summary: string;
+  diagnostic_only: boolean;
+  not_scholar_chat_answer: boolean;
+  no_answer_generated: boolean;
+  no_grounding_applied: boolean;
+  no_evidence_pack_used: boolean;
+  no_persistence: boolean;
+  no_artifact_write: boolean;
+  no_registry_status_change: boolean;
+  no_audit_write: boolean;
+};
+
 type LocalRuntimeInvocationPlanRequest = {
   runtime_config: LocalModelRuntimeConfig;
   prompt_text: string | null;
@@ -1803,7 +1854,7 @@ export default function App() {
   const [localRuntimeSmokeAllowExecution, setLocalRuntimeSmokeAllowExecution] = createSignal(false);
   const [localRuntimeSmokeTimeoutMs, setLocalRuntimeSmokeTimeoutMs] = createSignal("3000");
   const [localRuntimeSmokeMaxOutputTokens, setLocalRuntimeSmokeMaxOutputTokens] = createSignal("8");
-  const [localRuntimeSmokeResult, setLocalRuntimeSmokeResult] = createSignal<LocalRuntimeSmokeInferenceResult | null>(null);
+  const [localRuntimeSmokeResult, setLocalRuntimeSmokeResult] = createSignal<LocalRuntimeSmokeDiagnosticPreview | null>(null);
   const [localRuntimeSmokeError, setLocalRuntimeSmokeError] = createSignal<string | null>(null);
   const [localRuntimeSmokeValidationError, setLocalRuntimeSmokeValidationError] = createSignal<string | null>(null);
   const [localRuntimeSmokeLoading, setLocalRuntimeSmokeLoading] = createSignal(false);
@@ -3596,6 +3647,50 @@ export default function App() {
     }
   }
 
+  function buildLocalRuntimeSmokeDiagnosticRequest(): LocalRuntimeSmokeDiagnosticRequest | null {
+    const smokeExecutionPlanPreviewRequest = buildLocalRuntimeSmokeExecutionPlanPreviewRequest();
+    if (!smokeExecutionPlanPreviewRequest) {
+      return null;
+    }
+
+    return {
+      smoke_execution_plan_preview_request: smokeExecutionPlanPreviewRequest,
+      allow_smoke_execution: localRuntimeSmokeAllowExecution(),
+    };
+  }
+
+  async function previewLocalRuntimeSmokeDiagnostic() {
+    if (localRuntimeSmokeLoading()) {
+      return;
+    }
+
+    const request = buildLocalRuntimeSmokeDiagnosticRequest();
+    if (!request) {
+      setLocalRuntimeSmokeHasRun(true);
+      setLocalRuntimeSmokeResult(null);
+      setLocalRuntimeSmokeError(null);
+      setLocalRuntimeSmokeValidationError("Diagnostic smoke inputs could not be prepared.");
+      return;
+    }
+
+    setLocalRuntimeSmokeHasRun(true);
+    setLocalRuntimeSmokeLoading(true);
+    setLocalRuntimeSmokeError(null);
+    setLocalRuntimeSmokeValidationError(null);
+    setLocalRuntimeSmokeResult(null);
+    try {
+      const result = await invoke<LocalRuntimeSmokeDiagnosticPreview>("run_llama_runtime_smoke_diagnostic", {
+        root: ".",
+        request,
+      });
+      setLocalRuntimeSmokeResult(result);
+    } catch (err) {
+      setLocalRuntimeSmokeError(sanitizeBackendError(err));
+    } finally {
+      setLocalRuntimeSmokeLoading(false);
+    }
+  }
+
   async function previewLocalRuntimeProbeReadiness() {
     if (localRuntimeProbeReadinessPreviewLoading()) {
       return;
@@ -3719,89 +3814,6 @@ export default function App() {
       setLocalRuntimeSmokeReadinessError(sanitizeBackendError(err));
     } finally {
       setLocalRuntimeSmokeReadinessLoading(false);
-    }
-  }
-
-  async function previewLocalRuntimeSmokeInference() {
-    if (localRuntimeSmokeLoading()) {
-      return;
-    }
-
-    const contextWindow = parseOptionalIntegerInput(
-      localRuntimeContextWindow(),
-      "Context window",
-      setLocalRuntimeSmokeValidationError,
-    );
-    const gpuLayers = parseOptionalIntegerInput(
-      localRuntimeGpuLayers(),
-      "GPU layers",
-      setLocalRuntimeSmokeValidationError,
-    );
-    const temperature = parseOptionalNumberInput(
-      localRuntimeTemperature(),
-      "Temperature",
-      setLocalRuntimeSmokeValidationError,
-    );
-    const timeoutMs = parseOptionalIntegerInput(
-      localRuntimeSmokeTimeoutMs(),
-      "Smoke timeout",
-      setLocalRuntimeSmokeValidationError,
-    );
-    const maxOutputTokens = parseOptionalIntegerInput(
-      localRuntimeSmokeMaxOutputTokens(),
-      "Max output tokens",
-      setLocalRuntimeSmokeValidationError,
-    );
-    if (
-      contextWindow === undefined ||
-      gpuLayers === undefined ||
-      temperature === undefined ||
-      timeoutMs === undefined ||
-      maxOutputTokens === undefined
-    ) {
-      setLocalRuntimeSmokeHasRun(true);
-      setLocalRuntimeSmokeResult(null);
-      setLocalRuntimeSmokeError(null);
-      return;
-    }
-
-    const trimmedPrompt = localRuntimeSmokePrompt().trim();
-    if (!trimmedPrompt) {
-      setLocalRuntimeSmokeHasRun(true);
-      setLocalRuntimeSmokeResult(null);
-      setLocalRuntimeSmokeError(null);
-      setLocalRuntimeSmokeValidationError("Prompt is required to run a smoke inference probe.");
-      return;
-    }
-
-    setLocalRuntimeSmokeHasRun(true);
-    setLocalRuntimeSmokeLoading(true);
-    setLocalRuntimeSmokeError(null);
-    setLocalRuntimeSmokeValidationError(null);
-    setLocalRuntimeSmokeResult(null);
-    try {
-      const result = await invoke<LocalRuntimeSmokeInferenceResult>("smoke_test_local_runtime_inference", {
-        root: ".",
-        request: {
-          runtime_config: {
-            runtime_kind: localRuntimeKind(),
-            model_path: normalizeOptionalTextInput(localRuntimeModelPath()),
-            executable_path: normalizeOptionalTextInput(localRuntimeExecutablePath()),
-            context_window: contextWindow,
-            gpu_layers: gpuLayers,
-            temperature,
-          },
-          allow_execution: localRuntimeSmokeAllowExecution(),
-          prompt: trimmedPrompt,
-          timeout_ms: timeoutMs,
-          max_output_tokens: maxOutputTokens,
-        } satisfies LocalRuntimeSmokeInferenceRequest,
-      });
-      setLocalRuntimeSmokeResult(result);
-    } catch (err) {
-      setLocalRuntimeSmokeError(sanitizeBackendError(err));
-    } finally {
-      setLocalRuntimeSmokeLoading(false);
     }
   }
 
@@ -7002,12 +7014,15 @@ export default function App() {
           )}
         </div>
         <div class="artifact-overview">
-          <h3>Local runtime smoke test</h3>
+          <h3>llama.cpp smoke diagnostic</h3>
           <p class="muted">
-            Read-only smoke probe for the configured local runtime. It uses a tiny prompt only when execution is allowed, and it never persists a result, generates a Scholar Chat answer, or builds an Evidence Pack.
+            Diagnostic smoke only - this may run the configured llama.cpp executable with the configured model, but it does not generate a Scholar Chat answer, does not ground claims, does not use an Evidence Pack, and does not persist settings or artifacts.
+          </p>
+          <p class="muted">
+            It uses the current smoke execution plan preview as its consent gate and only runs when that plan is ready later and execution consent is enabled.
           </p>
           <label>
-            Prompt
+            Diagnostic prompt
             <textarea
               rows={3}
               value={localRuntimeSmokePrompt()}
@@ -7021,7 +7036,7 @@ export default function App() {
           </label>
           <div class="form-row">
             <label class="inline-field">
-              Allow execution
+              I understand this will run the configured llama.cpp executable for a diagnostic smoke inference only.
               <input
                 type="checkbox"
                 checked={localRuntimeSmokeAllowExecution()}
@@ -7058,44 +7073,58 @@ export default function App() {
               />
             </label>
           </div>
-          <p class="muted">Runtime diagnostic only - not a Scholar Chat answer.</p>
           <div class="hero-actions">
-            <button onClick={previewLocalRuntimeSmokeInference} disabled={localRuntimeSmokeLoading()}>
-              {localRuntimeSmokeLoading() ? "Previewing..." : "Run smoke inference probe"}
+            <button onClick={previewLocalRuntimeSmokeDiagnostic} disabled={localRuntimeSmokeLoading()}>
+              {localRuntimeSmokeLoading() ? "Running..." : "Run llama.cpp smoke diagnostic"}
             </button>
           </div>
           {localRuntimeSmokeValidationError() && <p class="error">{localRuntimeSmokeValidationError()}</p>}
           {localRuntimeSmokeError() && <p class="error">{localRuntimeSmokeError()}</p>}
           {localRuntimeSmokeLoading() ? (
-            <p>Running smoke inference probe...</p>
+            <p>Running llama.cpp smoke diagnostic...</p>
           ) : localRuntimeSmokeHasRun() ? (
             localRuntimeSmokeResult() ? (
               <>
                 {renderMetricGrid([
                   { label: "Status", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.status) },
-                  { label: "Output classification", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.output_classification) },
-                  { label: "Allow execution", value: localRuntimeSmokeResult()!.allow_execution ? "yes" : "no" },
+                  { label: "Smoke execution plan", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.smoke_execution_plan_status) },
+                  { label: "Smoke readiness", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.smoke_readiness_status) },
+                  { label: "Capability status", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.capability_status) },
+                  { label: "Version probe status", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.version_probe_status) },
+                  { label: "Probe readiness", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.probe_readiness_status) },
+                  { label: "Validation status", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.validation_status) },
+                  { label: "Adapter contract status", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.adapter_contract_status) },
+                  { label: "Adapter kind", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.adapter_kind) },
+                  { label: "Probe consent", value: localRuntimeSmokeResult()!.probe_consent ? "yes" : "no" },
+                  { label: "Allow probe execution", value: localRuntimeSmokeResult()!.allow_probe_execution ? "yes" : "no" },
+                  { label: "Smoke consent", value: localRuntimeSmokeResult()!.smoke_consent ? "yes" : "no" },
+                  { label: "Allow smoke execution", value: localRuntimeSmokeResult()!.allow_smoke_execution ? "yes" : "no" },
                   { label: "Execution attempted", value: localRuntimeSmokeResult()!.execution_attempted ? "yes" : "no" },
-                  { label: "Runtime kind", value: formatSnakeCaseLabel(localRuntimeSmokeResult()!.runtime_kind) },
-                  { label: "Prompt chars", value: localRuntimeSmokeResult()!.prompt_char_count },
+                  { label: "Prompt chars", value: localRuntimeSmokeResult()!.diagnostic_prompt_char_count },
                   { label: "Max output tokens", value: localRuntimeSmokeResult()!.max_output_tokens },
                   { label: "Timeout ms", value: localRuntimeSmokeResult()!.timeout_ms },
                   { label: "Duration ms", value: localRuntimeSmokeResult()!.duration_ms },
                   { label: "Exit code", value: localRuntimeSmokeResult()!.exit_code ?? "missing" },
+                  { label: "Stdout truncated", value: localRuntimeSmokeResult()!.stdout_truncated ? "yes" : "no" },
+                  { label: "Stderr truncated", value: localRuntimeSmokeResult()!.stderr_truncated ? "yes" : "no" },
                   { label: "Diagnostic only", value: localRuntimeSmokeResult()!.diagnostic_only ? "yes" : "no" },
+                  { label: "Not Scholar Chat answer", value: localRuntimeSmokeResult()!.not_scholar_chat_answer ? "yes" : "no" },
                   { label: "No answer generated", value: localRuntimeSmokeResult()!.no_answer_generated ? "yes" : "no" },
                   { label: "No grounding applied", value: localRuntimeSmokeResult()!.no_grounding_applied ? "yes" : "no" },
                   { label: "No Evidence Pack used", value: localRuntimeSmokeResult()!.no_evidence_pack_used ? "yes" : "no" },
-                  { label: "Not Scholar Chat answer", value: localRuntimeSmokeResult()!.not_scholar_chat_answer ? "yes" : "no" },
+                  { label: "No persistence", value: localRuntimeSmokeResult()!.no_persistence ? "yes" : "no" },
+                  { label: "No artifact write", value: localRuntimeSmokeResult()!.no_artifact_write ? "yes" : "no" },
+                  { label: "No registry status change", value: localRuntimeSmokeResult()!.no_registry_status_change ? "yes" : "no" },
+                  { label: "No audit write", value: localRuntimeSmokeResult()!.no_audit_write ? "yes" : "no" },
                 ])}
-                <p class="muted">This preview shows runtime diagnostics only; no grounded answer, Evidence Pack, or final answer is produced.</p>
+                <p class="muted">{localRuntimeSmokeResult()!.summary}</p>
                 {localRuntimeSmokeResult()!.safe_model_file_name ? (
                   <p><strong>Model file name:</strong> {localRuntimeSmokeResult()!.safe_model_file_name}</p>
                 ) : null}
                 {localRuntimeSmokeResult()!.safe_executable_file_name ? (
                   <p><strong>Executable file name:</strong> {localRuntimeSmokeResult()!.safe_executable_file_name}</p>
                 ) : null}
-                <p><strong>Normalized prompt:</strong> {localRuntimeSmokeResult()!.normalized_prompt}</p>
+                <p><strong>Normalized prompt:</strong> {localRuntimeSmokeResult()!.normalized_diagnostic_prompt}</p>
                 <h4>Stdout preview</h4>
                 {localRuntimeSmokeResult()!.stdout_preview ? (
                   <pre>{localRuntimeSmokeResult()!.stdout_preview}</pre>
@@ -7121,7 +7150,7 @@ export default function App() {
                     </ul>
                   </div>
                 ) : (
-                  <p>No smoke probe blockers.</p>
+                  <p>No smoke diagnostic blockers.</p>
                 )}
                 {localRuntimeSmokeResult()!.warnings.length > 0 ? (
                   <div class="warning-box">
@@ -7136,14 +7165,24 @@ export default function App() {
                     </ul>
                   </div>
                 ) : (
-                  <p>No smoke probe warnings.</p>
+                  <p>No smoke diagnostic warnings.</p>
+                )}
+                <h4>Next required actions</h4>
+                {localRuntimeSmokeResult()!.next_required_actions.length > 0 ? (
+                  <ul>
+                    {localRuntimeSmokeResult()!.next_required_actions.map((item) => (
+                      <li>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No next required actions.</p>
                 )}
               </>
             ) : (
-              <p>No smoke inference preview loaded yet.</p>
+              <p>No llama.cpp smoke diagnostic preview loaded yet.</p>
             )
           ) : (
-            <p>No smoke inference preview loaded yet.</p>
+            <p>No llama.cpp smoke diagnostic preview loaded yet.</p>
           )}
         </div>
       </section>

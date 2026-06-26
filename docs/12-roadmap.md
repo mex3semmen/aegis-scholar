@@ -1452,6 +1452,24 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 94 - Llama Runtime Smoke Diagnostic Execution
+
+Phase 94.0 adds a consent-gated diagnostic smoke execution path that may run the configured llama.cpp executable for smoke diagnostics only. It is not Scholar Chat answering and it does not create an answer, GroundedAnswer, FinalAnswer, Evidence Pack, artifact write, registry change, audit write, or persisted state.
+
+Do not implement:
+
+- Scholar Chat answer generation
+- grounded answer generation
+- final answer generation
+- Evidence Pack building
+- persistence
+- artifact writes
+- registry status changes
+- audit writes
+- source import
+- export/report/share workflows
+- routing/charts/frontend test framework
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
