@@ -73,6 +73,7 @@ use scholar_chat::{
     preview_scholar_chat_runtime_diagnostic_bridge as preview_scholar_chat_runtime_diagnostic_bridge_impl,
     preview_scholar_chat_runtime_diagnostic_result as preview_scholar_chat_runtime_diagnostic_result_impl,
     preview_scholar_chat_runtime_answer_pipeline_gate as preview_scholar_chat_runtime_answer_pipeline_gate_impl,
+    preview_scholar_chat_scientific_discipline_registry as preview_scholar_chat_scientific_discipline_registry_impl,
     preview_scholar_chat_grounded_answer_write_eligibility as preview_scholar_chat_grounded_answer_write_eligibility_impl,
     preview_scholar_chat_request as preview_scholar_chat_request_impl,
     preview_scholar_chat_evidence_plan as preview_scholar_chat_evidence_plan_impl,
@@ -99,6 +100,8 @@ use scholar_chat::{
     ScholarChatRuntimeDiagnosticResultPreviewRequest,
     ScholarChatRuntimeAnswerPipelineGatePreview,
     ScholarChatRuntimeAnswerPipelineGatePreviewRequest,
+    ScholarChatScientificDisciplineRegistryPreview,
+    ScholarChatScientificDisciplineRegistryPreviewRequest,
     ScholarChatRequest,
     ScholarChatEvidencePlanResponse,
     ScholarChatPromptPackPreviewResponse,
@@ -565,6 +568,15 @@ fn preview_scholar_chat_runtime_answer_pipeline_gate(
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn preview_scholar_chat_scientific_discipline_registry(
+    root: String,
+    request: ScholarChatScientificDisciplineRegistryPreviewRequest,
+) -> Result<ScholarChatScientificDisciplineRegistryPreview, String> {
+    preview_scholar_chat_scientific_discipline_registry_impl(root, request)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -618,6 +630,7 @@ pub fn run() {
             preview_scholar_chat_runtime_diagnostic_bridge,
             preview_scholar_chat_runtime_diagnostic_result,
             preview_scholar_chat_runtime_answer_pipeline_gate,
+            preview_scholar_chat_scientific_discipline_registry,
             preview_local_model_runtime_health,
             preview_local_runtime_invocation_plan,
             preview_llama_runtime_adapter_contract,

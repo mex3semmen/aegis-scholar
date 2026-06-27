@@ -92,6 +92,70 @@ pub struct ScholarChatResponse {
     pub warnings: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificDisciplineRegistryStatus {
+    Blocked,
+    ConceptMapped,
+    UnknownConcept,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificDisciplineScienceClass {
+    CoreScience,
+    MethodScience,
+    AppliedDomain,
+    CurriculumLayer,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificDisciplineRegistryPreviewRequest {
+    pub topic: String,
+    pub mode: Option<String>,
+    pub course_context: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificDisciplineRegistryPreview {
+    pub status: ScholarChatScientificDisciplineRegistryStatus,
+    pub normalized_topic: String,
+    pub normalized_mode: String,
+    pub recognized_concept: Option<String>,
+    pub label: Option<String>,
+    pub discipline_path: Vec<String>,
+    pub science_class: Option<ScholarChatScientificDisciplineScienceClass>,
+    pub parent_path: Vec<String>,
+    pub related_methods: Vec<String>,
+    pub appears_in: Vec<String>,
+    pub preferred_sources: Vec<String>,
+    pub curriculum_sources: Vec<String>,
+    pub canonical_mappings: Vec<String>,
+    pub planned_queries: Vec<String>,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub registry_preview_only: bool,
+    pub no_web_request: bool,
+    pub no_scraping: bool,
+    pub no_connector_call: bool,
+    pub no_source_import: bool,
+    pub no_local_file_indexing: bool,
+    pub no_bm25_index: bool,
+    pub no_vector_index: bool,
+    pub no_model_loading: bool,
+    pub no_runtime_inference: bool,
+    pub no_llm_call: bool,
+    pub no_answer_generated: bool,
+    pub no_evidence_pack_created: bool,
+    pub no_artifact_write: bool,
+    pub no_persistence: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScholarChatRetrievalCandidate {
     pub source_id: String,
@@ -1190,6 +1254,216 @@ pub fn preview_scholar_chat_prompt_pack(
         prompt_pack,
         context_items,
         warnings,
+    })
+}
+
+pub fn preview_scholar_chat_scientific_discipline_registry(
+    root: impl Into<PathBuf>,
+    request: ScholarChatScientificDisciplineRegistryPreviewRequest,
+) -> AegisResult<ScholarChatScientificDisciplineRegistryPreview> {
+    let _root = root.into();
+    let normalized_topic = normalize_scientific_topic_text(&request.topic);
+    let normalized_mode = normalize_scientific_mode(request.mode);
+    let topic_key = normalize_scientific_topic_key(&normalized_topic);
+    let mapped_entry = scientific_discipline_registry_entry(&topic_key);
+
+    let status = if normalized_topic.is_empty() {
+        ScholarChatScientificDisciplineRegistryStatus::Blocked
+    } else if mapped_entry.is_some() {
+        ScholarChatScientificDisciplineRegistryStatus::ConceptMapped
+    } else {
+        ScholarChatScientificDisciplineRegistryStatus::UnknownConcept
+    };
+
+    let mut blockers = Vec::new();
+    let mut warnings = vec![
+        "This is a scientific discipline registry preview only; no web requests, scraping, connectors, or local indexing were run.".to_string(),
+    ];
+    let mut next_required_actions = Vec::new();
+
+    match normalized_mode.as_str() {
+        "scientific_paper" => {
+            push_unique_text(
+                &mut warnings,
+                "Scientific Paper Mode will later prioritize research question decomposition, literature search, deduplication, and no fabricated citations.",
+            );
+            push_unique_text(
+                &mut next_required_actions,
+                "Future Scientific Paper Mode phases should prioritize research question decomposition, literature search, deduplication, and citation-safe planning.",
+            );
+        }
+        "course" => {
+            push_unique_text(
+                &mut warnings,
+                "Course Mode will later prioritize local course materials, module context, prerequisites, and learning path support.",
+            );
+            push_unique_text(
+                &mut next_required_actions,
+                "Future Course Mode phases should prioritize local course materials, module context, prerequisites, and learning path support.",
+            );
+        }
+        _ => {
+            push_unique_text(
+                &mut next_required_actions,
+                "Plan local evidence lookup first before later Scholar Chat answering.",
+            );
+        }
+    }
+
+    if normalized_topic.is_empty() {
+        blockers.push("topic_missing: Provide a scientific topic to preview.".to_string());
+        next_required_actions.push("Provide a scientific topic to preview the discipline registry.".to_string());
+    }
+
+    if let Some(entry) = &mapped_entry {
+        if request.course_context.as_deref().map(str::trim).filter(|value| !value.is_empty()).is_some()
+            && matches!(normalized_mode.as_str(), "course")
+        {
+            push_unique_text(
+                &mut warnings,
+                "Course context is preview-only and will later be mapped to curriculum metadata without local file indexing.",
+            );
+        }
+
+        let summary = format!(
+            "Scientific discipline preview mapped {} in {} mode.",
+            entry.label, normalized_mode
+        );
+
+        return Ok(ScholarChatScientificDisciplineRegistryPreview {
+            status,
+            normalized_topic,
+            normalized_mode,
+            recognized_concept: Some(entry.recognized_concept.to_string()),
+            label: Some(entry.label.to_string()),
+            discipline_path: entry
+                .discipline_path
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect(),
+            science_class: Some(entry.science_class.clone()),
+            parent_path: entry
+                .parent_path
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect(),
+            related_methods: entry
+                .related_methods
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect(),
+            appears_in: entry
+                .appears_in
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect(),
+            preferred_sources: entry
+                .preferred_sources
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect(),
+            curriculum_sources: entry
+                .curriculum_sources
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect(),
+            canonical_mappings: entry
+                .canonical_mappings
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect(),
+            planned_queries: entry
+                .planned_queries
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect(),
+            blockers,
+            warnings,
+            next_required_actions,
+            summary,
+            preview_only: true,
+            registry_preview_only: true,
+            no_web_request: true,
+            no_scraping: true,
+            no_connector_call: true,
+            no_source_import: true,
+            no_local_file_indexing: true,
+            no_bm25_index: true,
+            no_vector_index: true,
+            no_model_loading: true,
+            no_runtime_inference: true,
+            no_llm_call: true,
+            no_answer_generated: true,
+            no_evidence_pack_created: true,
+            no_artifact_write: true,
+            no_persistence: true,
+            no_registry_status_change: true,
+            no_audit_write: true,
+        });
+    }
+
+    if !normalized_topic.is_empty() {
+        push_unique_text(
+            &mut warnings,
+            "The topic is not yet in the local preview registry.",
+        );
+        push_unique_text(
+            &mut next_required_actions,
+            "Add a discipline registry mapping in a later phase.",
+        );
+    }
+
+    let mut planned_queries = Vec::new();
+    if !normalized_topic.is_empty() {
+        planned_queries.push(normalized_topic.clone());
+    }
+
+    let summary = if normalized_topic.is_empty() {
+        "Scientific discipline preview blocked because the topic is blank.".to_string()
+    } else {
+        format!(
+            "Scientific discipline preview did not yet recognize the topic '{}'.",
+            normalized_topic
+        )
+    };
+
+    Ok(ScholarChatScientificDisciplineRegistryPreview {
+        status,
+        normalized_topic,
+        normalized_mode,
+        recognized_concept: None,
+        label: None,
+        discipline_path: Vec::new(),
+        science_class: None,
+        parent_path: Vec::new(),
+        related_methods: Vec::new(),
+        appears_in: Vec::new(),
+        preferred_sources: Vec::new(),
+        curriculum_sources: Vec::new(),
+        canonical_mappings: Vec::new(),
+        planned_queries,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        registry_preview_only: true,
+        no_web_request: true,
+        no_scraping: true,
+        no_connector_call: true,
+        no_source_import: true,
+        no_local_file_indexing: true,
+        no_bm25_index: true,
+        no_vector_index: true,
+        no_model_loading: true,
+        no_runtime_inference: true,
+        no_llm_call: true,
+        no_answer_generated: true,
+        no_evidence_pack_created: true,
+        no_artifact_write: true,
+        no_persistence: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
     })
 }
 
@@ -5234,6 +5508,199 @@ fn normalize_selected_source_ids(source_ids: Vec<String>) -> AegisResult<(Vec<St
     Ok((selected_source_ids, selected_source_count))
 }
 
+#[derive(Clone)]
+struct ScientificDisciplineRegistryEntry {
+    recognized_concept: &'static str,
+    label: &'static str,
+    science_class: ScholarChatScientificDisciplineScienceClass,
+    discipline_path: &'static [&'static str],
+    parent_path: &'static [&'static str],
+    related_methods: &'static [&'static str],
+    appears_in: &'static [&'static str],
+    preferred_sources: &'static [&'static str],
+    curriculum_sources: &'static [&'static str],
+    canonical_mappings: &'static [&'static str],
+    planned_queries: &'static [&'static str],
+}
+
+fn normalize_scientific_topic_text(topic: &str) -> String {
+    topic.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn normalize_scientific_mode(mode: Option<String>) -> String {
+    let normalized_mode = mode
+        .as_deref()
+        .map(|value| {
+            let mut result = String::new();
+            let mut last_was_separator = false;
+            for ch in value.trim().chars() {
+                if ch.is_alphanumeric() {
+                    for lower in ch.to_lowercase() {
+                        result.push(lower);
+                    }
+                    last_was_separator = false;
+                } else if !result.is_empty() && !last_was_separator {
+                    result.push('_');
+                    last_was_separator = true;
+                }
+            }
+            result.trim_matches('_').to_string()
+        })
+        .unwrap_or_default();
+    match normalized_mode.as_str() {
+        "scientific_paper" | "course" | "scholar_chat" => normalized_mode,
+        _ => "scholar_chat".to_string(),
+    }
+}
+
+fn normalize_scientific_topic_key(topic: &str) -> String {
+    let mut normalized = String::new();
+    let mut last_was_separator = false;
+    let normalized_topic = topic.trim().to_lowercase().replace("d'", "d prime");
+    let mut chars = normalized_topic.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch.is_alphanumeric() {
+            for lower in ch.to_lowercase() {
+                normalized.push(lower);
+            }
+            last_was_separator = false;
+        } else if !normalized.is_empty() && !last_was_separator {
+            normalized.push(' ');
+            last_was_separator = true;
+        }
+    }
+    normalized.trim().to_string()
+}
+
+fn scientific_discipline_registry_entry(topic_key: &str) -> Option<ScientificDisciplineRegistryEntry> {
+    match topic_key {
+        "signalentdeckung"
+        | "signalentdeckungstheorie"
+        | "signal detection"
+        | "signal detection theory"
+        | "d prime" => Some(ScientificDisciplineRegistryEntry {
+            recognized_concept: "signal_detection_theory",
+            label: "Signalentdeckungstheorie",
+            science_class: ScholarChatScientificDisciplineScienceClass::CoreScience,
+            discipline_path: &[
+                "psychology",
+                "general_psychology",
+                "perception",
+                "psychophysics",
+                "signal_detection_theory",
+            ],
+            parent_path: &["psychology", "general_psychology", "perception", "psychophysics"],
+            related_methods: &["statistics", "probability_theory", "decision_theory", "roc_analysis"],
+            appears_in: &[
+                "perception_psychology",
+                "psychophysics",
+                "diagnostics",
+                "neuroscience",
+                "medical_testing",
+                "machine_learning_evaluation",
+            ],
+            preferred_sources: &[
+                "pubpsych",
+                "psycharchives",
+                "openalex",
+                "crossref",
+                "pubmed_if_biomedical_context",
+            ],
+            curriculum_sources: &["tu_darmstadt_module_handbook_candidate", "local_course_materials_later"],
+            canonical_mappings: &[
+                "psychology",
+                "general_psychology",
+                "psychophysics",
+                "signal_detection_theory",
+            ],
+            planned_queries: &[
+                "Signalentdeckungstheorie",
+                "signal detection theory",
+                "psychophysics signal detection",
+                "d prime criterion ROC",
+            ],
+        }),
+        "anova" | "varianzanalyse" | "analysis of variance" | "factorial anova" | "repeated measures anova" => Some(ScientificDisciplineRegistryEntry {
+            recognized_concept: "analysis_of_variance",
+            label: "ANOVA / Varianzanalyse",
+            science_class: ScholarChatScientificDisciplineScienceClass::CoreScience,
+            discipline_path: &["statistics", "inferential_statistics", "hypothesis_testing", "analysis_of_variance"],
+            parent_path: &["statistics", "inferential_statistics", "hypothesis_testing"],
+            related_methods: &["linear_models", "f_test", "effect_size", "post_hoc_tests", "repeated_measures"],
+            appears_in: &[
+                "psychology_methods",
+                "experimental_design",
+                "biomedical_statistics",
+                "education_research",
+            ],
+            preferred_sources: &[
+                "openalex",
+                "crossref",
+                "psycharchives_if_psychology_context",
+                "pubpsych_if_psychology_context",
+                "zbmath_if_theory_context",
+                "arxiv_if_theory_context",
+            ],
+            curriculum_sources: &["tu_darmstadt_module_handbook_candidate", "local_course_materials_later"],
+            canonical_mappings: &[
+                "statistics",
+                "inferential_statistics",
+                "hypothesis_testing",
+                "analysis_of_variance",
+            ],
+            planned_queries: &[
+                "ANOVA",
+                "Varianzanalyse",
+                "analysis of variance",
+                "factorial ANOVA",
+                "repeated measures ANOVA",
+            ],
+        }),
+        "hypothesentests"
+        | "hypothesentest"
+        | "hypothesis testing"
+        | "null hypothesis"
+        | "p value"
+        | "null hypothesis p value"
+        | "statistical power type i error type ii error"
+        | "confidence intervals hypothesis testing" => Some(ScientificDisciplineRegistryEntry {
+            recognized_concept: "hypothesis_testing",
+            label: "Hypothesentests",
+            science_class: ScholarChatScientificDisciplineScienceClass::CoreScience,
+            discipline_path: &["statistics", "inferential_statistics", "hypothesis_testing"],
+            parent_path: &["statistics", "inferential_statistics"],
+            related_methods: &[
+                "null_hypothesis",
+                "alternative_hypothesis",
+                "p_value",
+                "type_i_error",
+                "type_ii_error",
+                "power",
+                "confidence_intervals",
+            ],
+            appears_in: &["psychology_methods", "experimental_design", "biomedical_statistics", "data_analysis"],
+            preferred_sources: &[
+                "openalex",
+                "crossref",
+                "zbmath",
+                "arxiv",
+                "pubpsych_if_psychology_context",
+                "psycharchives_if_psychology_context",
+            ],
+            curriculum_sources: &["tu_darmstadt_module_handbook_candidate", "local_course_materials_later"],
+            canonical_mappings: &["statistics", "inferential_statistics", "hypothesis_testing"],
+            planned_queries: &[
+                "Hypothesentests",
+                "hypothesis testing",
+                "null hypothesis p value",
+                "statistical power type I error type II error",
+                "confidence intervals hypothesis testing",
+            ],
+        }),
+        _ => None,
+    }
+}
+
 fn preview_warnings(policy: &GroundingPolicy, selected_source_count: usize, kind: ScholarChatPreviewKind) -> Vec<String> {
     let mut warnings = Vec::new();
     if selected_source_count == 0 {
@@ -6163,6 +6630,18 @@ fn main() {
         }
     }
 
+    fn scientific_discipline_registry_request(
+        topic: &str,
+        mode: Option<&str>,
+        course_context: Option<&str>,
+    ) -> ScholarChatScientificDisciplineRegistryPreviewRequest {
+        ScholarChatScientificDisciplineRegistryPreviewRequest {
+            topic: topic.to_string(),
+            mode: mode.map(|value| value.to_string()),
+            course_context: course_context.map(|value| value.to_string()),
+        }
+    }
+
     fn runtime_diagnostic_result_request(
         bridge_preview_request: ScholarChatRuntimeDiagnosticBridgePreviewRequest,
         diagnostic_preview: LocalRuntimeSmokeDiagnosticPreview,
@@ -6592,6 +7071,29 @@ fn main() {
             assert_grounded_answer_execution_plan_boundary_fields(preview);
         }
         first
+    }
+
+    fn assert_scientific_discipline_registry_boundary_fields(
+        preview: &ScholarChatScientificDisciplineRegistryPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.registry_preview_only);
+        assert!(preview.no_web_request);
+        assert!(preview.no_scraping);
+        assert!(preview.no_connector_call);
+        assert!(preview.no_source_import);
+        assert!(preview.no_local_file_indexing);
+        assert!(preview.no_bm25_index);
+        assert!(preview.no_vector_index);
+        assert!(preview.no_model_loading);
+        assert!(preview.no_runtime_inference);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_persistence);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
     }
 
     fn assert_runtime_diagnostic_bridge_boundary_fields(
@@ -9503,6 +10005,277 @@ fn main() {
         assert_eq!(result.readiness_status, ScholarChatGroundedAnswerExecutionReadinessStatus::Blocked);
         assert_eq!(result.missing_inputs, vec!["execution_consent".to_string()]);
         assert!(result.blockers.iter().any(|blocker| blocker.kind == "execution_consent_missing"));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_discipline_registry_blocks_when_topic_is_blank() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_scientific_discipline_registry(
+            temp.path(),
+            scientific_discipline_registry_request("   ", Some("course"), Some("Module handbook")),
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatScientificDisciplineRegistryStatus::Blocked);
+        assert!(result.recognized_concept.is_none());
+        assert!(result.discipline_path.is_empty());
+        assert!(result.planned_queries.is_empty());
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("topic_missing")));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("Provide a scientific topic")));
+        assert_scientific_discipline_registry_boundary_fields(&result);
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert_eq!(count_entries_recursively(temp.path()), 0);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_discipline_registry_maps_signalentdeckung() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_scientific_discipline_registry(
+            temp.path(),
+            scientific_discipline_registry_request(" Signalentdeckung ", None, None),
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatScientificDisciplineRegistryStatus::ConceptMapped);
+        assert_eq!(result.normalized_topic, "Signalentdeckung");
+        assert_eq!(result.normalized_mode, "scholar_chat");
+        assert_eq!(result.recognized_concept.as_deref(), Some("signal_detection_theory"));
+        assert_eq!(result.label.as_deref(), Some("Signalentdeckungstheorie"));
+        assert_eq!(
+            result.discipline_path,
+            vec![
+                "psychology".to_string(),
+                "general_psychology".to_string(),
+                "perception".to_string(),
+                "psychophysics".to_string(),
+                "signal_detection_theory".to_string(),
+            ]
+        );
+        assert_eq!(
+            result.parent_path,
+            vec![
+                "psychology".to_string(),
+                "general_psychology".to_string(),
+                "perception".to_string(),
+                "psychophysics".to_string(),
+            ]
+        );
+        assert_eq!(
+            result.related_methods,
+            vec![
+                "statistics".to_string(),
+                "probability_theory".to_string(),
+                "decision_theory".to_string(),
+                "roc_analysis".to_string(),
+            ]
+        );
+        assert_eq!(
+            result.preferred_sources,
+            vec![
+                "pubpsych".to_string(),
+                "psycharchives".to_string(),
+                "openalex".to_string(),
+                "crossref".to_string(),
+                "pubmed_if_biomedical_context".to_string(),
+            ]
+        );
+        assert_eq!(
+            result.curriculum_sources,
+            vec![
+                "tu_darmstadt_module_handbook_candidate".to_string(),
+                "local_course_materials_later".to_string(),
+            ]
+        );
+        assert_eq!(
+            result.canonical_mappings,
+            vec![
+                "psychology".to_string(),
+                "general_psychology".to_string(),
+                "psychophysics".to_string(),
+                "signal_detection_theory".to_string(),
+            ]
+        );
+        assert_eq!(
+            result.planned_queries,
+            vec![
+                "Signalentdeckungstheorie".to_string(),
+                "signal detection theory".to_string(),
+                "psychophysics signal detection".to_string(),
+                "d prime criterion ROC".to_string(),
+            ]
+        );
+        assert_eq!(result.science_class, Some(ScholarChatScientificDisciplineScienceClass::CoreScience));
+        assert_scientific_discipline_registry_boundary_fields(&result);
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert_eq!(count_entries_recursively(temp.path()), 0);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_discipline_registry_maps_anova() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_scientific_discipline_registry(
+            temp.path(),
+            scientific_discipline_registry_request("ANOVA", Some("scientific_paper"), None),
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatScientificDisciplineRegistryStatus::ConceptMapped);
+        assert_eq!(result.recognized_concept.as_deref(), Some("analysis_of_variance"));
+        assert_eq!(result.label.as_deref(), Some("ANOVA / Varianzanalyse"));
+        assert_eq!(
+            result.discipline_path,
+            vec![
+                "statistics".to_string(),
+                "inferential_statistics".to_string(),
+                "hypothesis_testing".to_string(),
+                "analysis_of_variance".to_string(),
+            ]
+        );
+        assert_eq!(result.science_class, Some(ScholarChatScientificDisciplineScienceClass::CoreScience));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Scientific Paper Mode")));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("literature search")));
+        assert_scientific_discipline_registry_boundary_fields(&result);
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert_eq!(count_entries_recursively(temp.path()), 0);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_discipline_registry_maps_hypothesentests() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_scientific_discipline_registry(
+            temp.path(),
+            scientific_discipline_registry_request("Hypothesentests", Some("course"), Some("Module 123")),
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatScientificDisciplineRegistryStatus::ConceptMapped);
+        assert_eq!(result.recognized_concept.as_deref(), Some("hypothesis_testing"));
+        assert_eq!(result.label.as_deref(), Some("Hypothesentests"));
+        assert_eq!(
+            result.discipline_path,
+            vec![
+                "statistics".to_string(),
+                "inferential_statistics".to_string(),
+                "hypothesis_testing".to_string(),
+            ]
+        );
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Course Mode")));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("course materials")));
+        assert_scientific_discipline_registry_boundary_fields(&result);
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert_eq!(count_entries_recursively(temp.path()), 0);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_discipline_registry_returns_unknown_concept_for_unmapped_topic() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_scientific_discipline_registry(
+            temp.path(),
+            scientific_discipline_registry_request("Signal graph theory", None, None),
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatScientificDisciplineRegistryStatus::UnknownConcept);
+        assert_eq!(result.normalized_topic, "Signal graph theory");
+        assert!(result.recognized_concept.is_none());
+        assert!(result.discipline_path.is_empty());
+        assert_eq!(result.planned_queries, vec!["Signal graph theory".to_string()]);
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("not yet in the local preview registry")));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("Add a discipline registry mapping")));
+        assert_eq!(result.planned_queries, vec!["Signal graph theory".to_string()]);
+        assert_scientific_discipline_registry_boundary_fields(&result);
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert_eq!(count_entries_recursively(temp.path()), 0);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_discipline_registry_is_deterministic_and_path_free() {
+        let temp = tempfile::tempdir().unwrap();
+        let before_entries = count_entries_recursively(temp.path());
+        let first = preview_scholar_chat_scientific_discipline_registry(
+            temp.path(),
+            scientific_discipline_registry_request("  ANOVA  ", Some("scientific paper"), Some("Linear models")),
+        )
+        .unwrap();
+        let second = preview_scholar_chat_scientific_discipline_registry(
+            temp.path(),
+            scientific_discipline_registry_request("  ANOVA  ", Some("scientific paper"), Some("Linear models")),
+        )
+        .unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        assert!(!temp.path().join(".aegis").exists());
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_scientific_discipline_registry_boundary_fields(preview);
+        }
+    }
+
+    #[test]
+    fn scholar_chat_scientific_discipline_registry_body_does_not_call_execution_functions() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        let start = source
+            .find("pub fn preview_scholar_chat_scientific_discipline_registry")
+            .unwrap();
+        let end = source[start..]
+            .find("pub fn preview_scholar_chat_answer_readiness")
+            .unwrap();
+        let body = &source[start..start + end];
+        assert!(!body.contains("Command::new"));
+        assert!(!body.contains("reqwest"));
+        assert!(!body.contains("ureq"));
+        assert!(!body.contains("run_llama_runtime_smoke_diagnostic"));
+        assert!(!body.contains("smoke_test_local_runtime_inference"));
+        assert!(!body.contains("run_smoke_inference_probe"));
+        assert!(!body.contains("build_answer_draft"));
+        assert!(!body.contains("build_grounded_answer"));
+        assert!(!body.contains("build_final_answer"));
+        assert!(!body.contains("build_evidence_pack"));
+        assert!(!body.contains("export_answer_artifacts"));
     }
 
     #[test]
