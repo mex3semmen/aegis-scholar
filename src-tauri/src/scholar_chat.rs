@@ -16938,6 +16938,143 @@ fn main() {
         first
     }
 
+    fn assert_public_declaration_marker_count(source: &str, marker: &str) {
+        let count = source
+            .lines()
+            .filter(|line| line.trim_start().starts_with(marker))
+            .count();
+        assert_eq!(count, 1, "{marker} should be declared exactly once");
+    }
+
+    #[test]
+    fn scholar_chat_metadata_connector_public_dto_declarations_are_declared_once() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        for marker in [
+            "pub enum ScholarChatMetadataConnectorPlanStatus",
+            "pub enum ScholarChatMetadataConnectorStrategy",
+            "pub enum ScholarChatMetadataConnectorStepKind",
+            "pub struct ScholarChatMetadataConnectorSourceSelectionPlan",
+            "pub struct ScholarChatMetadataConnectorQueryPlan",
+            "pub struct ScholarChatMetadataDeduplicationPlan",
+            "pub struct ScholarChatMetadataAttributionPlan",
+            "pub struct ScholarChatMetadataCompliancePlan",
+            "pub struct ScholarChatMetadataConnectorStep",
+            "pub struct ScholarChatMetadataConnectorPlanRequest",
+            "pub struct ScholarChatMetadataConnectorPlanPreview",
+        ] {
+            assert_public_declaration_marker_count(source, marker);
+        }
+    }
+
+    #[test]
+    fn scholar_chat_metadata_connector_serde_values_are_snake_case() {
+        let status_cases = [
+            (
+                ScholarChatMetadataConnectorPlanStatus::Blocked,
+                "\"blocked\"",
+            ),
+            (
+                ScholarChatMetadataConnectorPlanStatus::ConnectorPlanReady,
+                "\"connector_plan_ready\"",
+            ),
+            (
+                ScholarChatMetadataConnectorPlanStatus::NeedsDisambiguation,
+                "\"needs_disambiguation\"",
+            ),
+            (
+                ScholarChatMetadataConnectorPlanStatus::UnknownConcept,
+                "\"unknown_concept\"",
+            ),
+            (
+                ScholarChatMetadataConnectorPlanStatus::NeedsMetadataSource,
+                "\"needs_metadata_source\"",
+            ),
+        ];
+        for (value, expected) in status_cases {
+            assert_eq!(serde_json::to_string(&value).unwrap(), expected);
+        }
+
+        let strategy_cases = [
+            (
+                ScholarChatMetadataConnectorStrategy::OpenalexAndCrossref,
+                "\"openalex_and_crossref\"",
+            ),
+            (
+                ScholarChatMetadataConnectorStrategy::OpenalexFirst,
+                "\"openalex_first\"",
+            ),
+            (
+                ScholarChatMetadataConnectorStrategy::CrossrefFirst,
+                "\"crossref_first\"",
+            ),
+            (
+                ScholarChatMetadataConnectorStrategy::MetadataSourceSelectionNeeded,
+                "\"metadata_source_selection_needed\"",
+            ),
+            (
+                ScholarChatMetadataConnectorStrategy::Blocked,
+                "\"blocked\"",
+            ),
+        ];
+        for (value, expected) in strategy_cases {
+            assert_eq!(serde_json::to_string(&value).unwrap(), expected);
+        }
+
+        let step_kind_cases = [
+            (
+                ScholarChatMetadataConnectorStepKind::QueryUnderstandingAlignment,
+                "\"query_understanding_alignment\"",
+            ),
+            (
+                ScholarChatMetadataConnectorStepKind::MetadataSourceSelection,
+                "\"metadata_source_selection\"",
+            ),
+            (
+                ScholarChatMetadataConnectorStepKind::OpenalexQueryPlan,
+                "\"openalex_query_plan\"",
+            ),
+            (
+                ScholarChatMetadataConnectorStepKind::CrossrefQueryPlan,
+                "\"crossref_query_plan\"",
+            ),
+            (
+                ScholarChatMetadataConnectorStepKind::ResultShapeMappingPlan,
+                "\"result_shape_mapping_plan\"",
+            ),
+            (
+                ScholarChatMetadataConnectorStepKind::DoiFilterPlan,
+                "\"doi_filter_plan\"",
+            ),
+            (
+                ScholarChatMetadataConnectorStepKind::OpenAccessFilterPlan,
+                "\"open_access_filter_plan\"",
+            ),
+            (
+                ScholarChatMetadataConnectorStepKind::YearFilterPlan,
+                "\"year_filter_plan\"",
+            ),
+            (
+                ScholarChatMetadataConnectorStepKind::DeduplicationPlan,
+                "\"deduplication_plan\"",
+            ),
+            (
+                ScholarChatMetadataConnectorStepKind::AttributionRequirementCheck,
+                "\"attribution_requirement_check\"",
+            ),
+            (
+                ScholarChatMetadataConnectorStepKind::ComplianceBoundaryCheck,
+                "\"compliance_boundary_check\"",
+            ),
+            (
+                ScholarChatMetadataConnectorStepKind::DownstreamEvidencePackAlignment,
+                "\"downstream_evidence_pack_alignment\"",
+            ),
+        ];
+        for (value, expected) in step_kind_cases {
+            assert_eq!(serde_json::to_string(&value).unwrap(), expected);
+        }
+    }
+
     #[test]
     fn scholar_chat_scientific_query_understanding_body_does_not_call_execution_functions() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
@@ -17756,18 +17893,140 @@ fn main() {
                 ScholarChatMetadataConnectorStepKind::DownstreamEvidencePackAlignment,
             ]
         );
+        assert!(preview.planned_connector_steps.iter().all(|step| step.preview_only));
+        assert!(preview.planned_connector_steps.iter().all(|step| step.active));
         assert!(preview
             .planned_connector_steps
             .iter()
-            .all(|step| step.preview_only && step.boundary_notes.iter().any(|note| note == "preview-only")));
+            .all(|step| step.boundary_notes.iter().any(|note| note == "preview-only")));
         assert!(preview
             .planned_connector_steps
             .iter()
             .all(|step| step.boundary_notes.iter().any(|note| note == "no web request")));
+        for note in [
+            "preview-only",
+            "no web request",
+            "no HTTP client",
+            "no API key read",
+            "no environment read",
+            "no scraping",
+            "no connector call",
+            "no metadata record write",
+            "no artifact write",
+            "no persistence",
+        ] {
+            assert!(preview
+                .planned_connector_steps
+                .iter()
+                .all(|step| step.boundary_notes.iter().any(|value| value == note)));
+        }
         assert!(preview.openalex_plan.summary.contains("preview-only"));
         assert!(preview.crossref_plan.summary.contains("preview-only"));
         assert!(preview.compliance_plan.external_metadata_only);
         assert!(preview.compliance_plan.no_fulltext_download);
+    }
+
+    #[test]
+    fn scholar_chat_metadata_connector_plan_preserves_query_plan_compliance_and_attribution_invariants() {
+        let preview = assert_metadata_connector_plan_deterministic_and_path_free(
+            &tempfile::tempdir().unwrap(),
+            metadata_connector_plan_request(
+                "Signalentdeckung",
+                Some("scientific_paper"),
+                None,
+                Some(vec!["psychology"]),
+                Some(vec!["source-a"]),
+                Some(vec!["pdf"]),
+                None,
+                Some(25),
+                Some(true),
+                Some(true),
+                Some(2018),
+                Some(2022),
+            ),
+        );
+
+        assert_eq!(preview.openalex_plan.source_id, "openalex");
+        assert_eq!(preview.openalex_plan.endpoint_family, "openalex_works");
+        assert!(!preview.openalex_plan.requires_api_key);
+        assert!(!preview.openalex_plan.will_call_api);
+        assert!(!preview.openalex_plan.will_fetch_url);
+        assert!(!preview.openalex_plan.will_scrape);
+        for field in [
+            "id",
+            "doi",
+            "title",
+            "display_name",
+            "publication_year",
+            "authorships",
+            "primary_location",
+            "open_access",
+            "cited_by_count",
+            "concepts",
+        ] {
+            assert!(preview
+                .openalex_plan
+                .expected_result_fields
+                .iter()
+                .any(|value| value == field));
+        }
+
+        assert_eq!(preview.crossref_plan.source_id, "crossref");
+        assert_eq!(preview.crossref_plan.endpoint_family, "crossref_works");
+        assert!(!preview.crossref_plan.requires_api_key);
+        assert!(!preview.crossref_plan.will_call_api);
+        assert!(!preview.crossref_plan.will_fetch_url);
+        assert!(!preview.crossref_plan.will_scrape);
+        for field in [
+            "DOI",
+            "title",
+            "author",
+            "issued",
+            "container-title",
+            "publisher",
+            "type",
+            "URL",
+            "is-referenced-by-count",
+        ] {
+            assert!(preview
+                .crossref_plan
+                .expected_result_fields
+                .iter()
+                .any(|value| value == field));
+        }
+
+        assert!(preview.compliance_plan.external_metadata_only);
+        assert!(preview.compliance_plan.no_fulltext_download);
+        assert!(preview.compliance_plan.no_scraping);
+        assert!(preview.compliance_plan.respects_rate_limits_later);
+        assert!(preview.compliance_plan.requires_terms_review_later);
+        assert!(!preview.compliance_plan.will_call_external_services);
+
+        assert!(!preview.attribution_plan.will_emit_attribution_now);
+        for note in [
+            "cite_metadata_provider_later",
+            "preserve_provider_record_ids_later",
+            "preserve_doi_and_source_url_later",
+            "include_access_date_later",
+            "no_fabricated_citations",
+        ] {
+            assert!(preview
+                .attribution_plan
+                .required_attribution_notes
+                .iter()
+                .any(|value| value == note));
+        }
+        for note in [
+            "metadata_preview_not_citation_evidence",
+            "full_citation_requires_verified_metadata_later",
+            "no_generated_sources",
+        ] {
+            assert!(preview
+                .attribution_plan
+                .citation_safety_notes
+                .iter()
+                .any(|value| value == note));
+        }
     }
 
     #[test]
