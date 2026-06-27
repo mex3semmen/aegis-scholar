@@ -1522,6 +1522,9 @@ It maps early example concepts, stays preview-only, and does not add web request
 Phase 98.1.1 adds local workspace hygiene guardrails for models, build output, and local research data.
 It is docs/.gitignore only and keeps local GGUF/GGML/Safetensors files, generated artifacts, and local corpus data outside Git until explicit app-managed storage is implemented.
 
+Phase 98.2 adds a backend-only Scientific Source Registry Preview.
+It maps source-family plans for early scientific concepts, stays preview-only, and does not add web requests, scraping, connector implementation, source import, local file indexing, BM25/vector index, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
+
 Do not implement:
 
 - web requests

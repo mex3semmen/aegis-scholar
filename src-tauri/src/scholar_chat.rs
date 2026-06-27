@@ -156,6 +156,107 @@ pub struct ScholarChatScientificDisciplineRegistryPreview {
     pub no_audit_write: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificSourceRegistryStatus {
+    Blocked,
+    SourcePlanReady,
+    UnknownConcept,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificSourceAccessClass {
+    OpenMetadata,
+    OpenFullText,
+    UserProvidedLocalFile,
+    UserAuthenticatedAccess,
+    RestrictedNoIngest,
+    CatalogOnly,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificSourcePriority {
+    Primary,
+    Supporting,
+    Conditional,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificSourceRegistryPreviewRequest {
+    pub topic: String,
+    pub mode: Option<String>,
+    pub course_context: Option<String>,
+    pub context_tags: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificSourceRegistrySourceFamily {
+    pub id: String,
+    pub label: String,
+    pub domain: String,
+    pub access_class: ScholarChatScientificSourceAccessClass,
+    pub priority: ScholarChatScientificSourcePriority,
+    pub applies_when: String,
+    pub active_for_current_context: bool,
+    pub planned_use: String,
+    pub query_roles: Vec<String>,
+    pub boundary_notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificSourceRegistrySourcePlan {
+    pub source_family_count: usize,
+    pub active_source_family_count: usize,
+    pub conditional_source_family_count: usize,
+    pub planned_metadata_query_count: usize,
+    pub summary: String,
+    pub steps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificSourceRegistryPreview {
+    pub status: ScholarChatScientificSourceRegistryStatus,
+    pub normalized_topic: String,
+    pub normalized_mode: String,
+    pub normalized_context_tags: Vec<String>,
+    pub discipline_status: ScholarChatScientificDisciplineRegistryStatus,
+    pub recognized_concept: Option<String>,
+    pub label: Option<String>,
+    pub source_plan: ScholarChatScientificSourceRegistrySourcePlan,
+    pub source_families: Vec<ScholarChatScientificSourceRegistrySourceFamily>,
+    pub preferred_source_ids: Vec<String>,
+    pub conditional_source_ids: Vec<String>,
+    pub excluded_source_ids: Vec<String>,
+    pub access_classes: Vec<ScholarChatScientificSourceAccessClass>,
+    pub planned_metadata_queries: Vec<String>,
+    pub ranking_hints: Vec<String>,
+    pub deduplication_hints: Vec<String>,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub source_registry_preview_only: bool,
+    pub no_web_request: bool,
+    pub no_scraping: bool,
+    pub no_connector_call: bool,
+    pub no_source_import: bool,
+    pub no_local_file_indexing: bool,
+    pub no_bm25_index: bool,
+    pub no_vector_index: bool,
+    pub no_model_loading: bool,
+    pub no_runtime_inference: bool,
+    pub no_llm_call: bool,
+    pub no_answer_generated: bool,
+    pub no_evidence_pack_created: bool,
+    pub no_artifact_write: bool,
+    pub no_persistence: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScholarChatRetrievalCandidate {
     pub source_id: String,
@@ -1315,6 +1416,19 @@ pub fn preview_scholar_chat_scientific_discipline_registry(
         next_required_actions.push("Provide a scientific topic to preview the discipline registry.".to_string());
     }
 
+    if normalized_topic.is_empty() {
+        // handled below
+    } else if mapped_entry.is_none() {
+        push_unique_text(
+            &mut warnings,
+            "The topic is not yet in the local preview registry.",
+        );
+        push_unique_text(
+            &mut next_required_actions,
+            "Add a discipline registry mapping in a later phase.",
+        );
+    }
+
     if let Some(entry) = &mapped_entry {
         if request.course_context.as_deref().map(str::trim).filter(|value| !value.is_empty()).is_some()
             && matches!(normalized_mode.as_str(), "course")
@@ -1448,6 +1562,546 @@ pub fn preview_scholar_chat_scientific_discipline_registry(
         summary,
         preview_only: true,
         registry_preview_only: true,
+        no_web_request: true,
+        no_scraping: true,
+        no_connector_call: true,
+        no_source_import: true,
+        no_local_file_indexing: true,
+        no_bm25_index: true,
+        no_vector_index: true,
+        no_model_loading: true,
+        no_runtime_inference: true,
+        no_llm_call: true,
+        no_answer_generated: true,
+        no_evidence_pack_created: true,
+        no_artifact_write: true,
+        no_persistence: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+    })
+}
+
+pub fn preview_scholar_chat_scientific_source_registry(
+    root: impl Into<PathBuf>,
+    request: ScholarChatScientificSourceRegistryPreviewRequest,
+) -> AegisResult<ScholarChatScientificSourceRegistryPreview> {
+    let root = root.into();
+    let normalized_topic = normalize_scientific_topic_text(&request.topic);
+    let normalized_mode = normalize_scientific_mode(request.mode);
+    let normalized_context_tags = normalize_scientific_context_tags(request.context_tags);
+    let discipline_preview = preview_scholar_chat_scientific_discipline_registry(
+        &root,
+        ScholarChatScientificDisciplineRegistryPreviewRequest {
+            topic: normalized_topic.clone(),
+            mode: Some(normalized_mode.clone()),
+            course_context: request.course_context.clone(),
+        },
+    )?;
+
+    let discipline_status = discipline_preview.status.clone();
+    let recognized_concept = discipline_preview.recognized_concept.clone();
+    let label = discipline_preview.label.clone();
+    let status = match discipline_status {
+        ScholarChatScientificDisciplineRegistryStatus::Blocked => ScholarChatScientificSourceRegistryStatus::Blocked,
+        ScholarChatScientificDisciplineRegistryStatus::ConceptMapped => {
+            ScholarChatScientificSourceRegistryStatus::SourcePlanReady
+        }
+        ScholarChatScientificDisciplineRegistryStatus::UnknownConcept => {
+            ScholarChatScientificSourceRegistryStatus::UnknownConcept
+        }
+    };
+
+    let mut source_families = Vec::new();
+    let mut preferred_source_ids = Vec::new();
+    let mut conditional_source_ids = Vec::new();
+    let mut excluded_source_ids = Vec::new();
+    let mut blockers = discipline_preview.blockers.clone();
+    let mut warnings = discipline_preview.warnings.clone();
+    let mut next_required_actions = discipline_preview.next_required_actions.clone();
+
+    if normalized_topic.is_empty() {
+        blockers.push("topic_missing: Provide a scientific topic to preview.".to_string());
+        next_required_actions.push("Provide a scientific topic to preview the source registry.".to_string());
+    } else if matches!(normalized_mode.as_str(), "scholar_chat") {
+        push_unique_text(
+            &mut next_required_actions,
+            "Later Scholar Chat should plan local evidence first before answering.",
+        );
+    }
+
+    if normalized_topic.is_empty() {
+        let summary = scientific_source_registry_plan_summary(&status, label.as_deref(), &normalized_mode);
+        let source_plan = ScholarChatScientificSourceRegistrySourcePlan {
+            source_family_count: 0,
+            active_source_family_count: 0,
+            conditional_source_family_count: 0,
+            planned_metadata_query_count: 0,
+            summary: summary.clone(),
+            steps: vec![
+                "Normalize topic, mode, and context tags.".to_string(),
+                "Ask the user to provide a scientific topic.".to_string(),
+            ],
+        };
+
+        return Ok(ScholarChatScientificSourceRegistryPreview {
+            status,
+            normalized_topic,
+            normalized_mode,
+            normalized_context_tags,
+            discipline_status,
+            recognized_concept: None,
+            label: None,
+            source_plan,
+            source_families,
+            preferred_source_ids,
+            conditional_source_ids,
+            excluded_source_ids,
+            access_classes: Vec::new(),
+            planned_metadata_queries: discipline_preview.planned_queries,
+            ranking_hints: Vec::new(),
+            deduplication_hints: Vec::new(),
+            blockers,
+            warnings,
+            next_required_actions,
+            summary,
+            preview_only: true,
+            source_registry_preview_only: true,
+            no_web_request: true,
+            no_scraping: true,
+            no_connector_call: true,
+            no_source_import: true,
+            no_local_file_indexing: true,
+            no_bm25_index: true,
+            no_vector_index: true,
+            no_model_loading: true,
+            no_runtime_inference: true,
+            no_llm_call: true,
+            no_answer_generated: true,
+            no_evidence_pack_created: true,
+            no_artifact_write: true,
+            no_persistence: true,
+            no_registry_status_change: true,
+            no_audit_write: true,
+        });
+    }
+
+    let course_context_mentions_psychology = scientific_context_mentions(&request.course_context, &["psychology", "psychologie"]);
+    let biomedical_context = scientific_context_tags_contain(
+        &normalized_context_tags,
+        &["biomedical", "medical", "neuroscience", "clinical", "diagnostics", "medicine"],
+    ) || scientific_context_mentions(&request.course_context, &["biomedical", "medical", "neuroscience", "clinical", "diagnostics", "medicine"]);
+    let psychology_context = scientific_context_tags_contain(&normalized_context_tags, &["psychology", "psychologie"]) || course_context_mentions_psychology;
+    let theory_context = scientific_context_tags_contain(
+        &normalized_context_tags,
+        &["theory", "mathematics", "math", "statistics", "statistical_theory"],
+    ) || scientific_context_mentions(&request.course_context, &["theory", "mathematics", "math", "statistics", "statistical_theory"]);
+
+    let (planned_metadata_queries, _ranking_hints, _deduplication_hints) = match recognized_concept.as_deref() {
+        Some("signal_detection_theory") => {
+            let pubmed_active = biomedical_context;
+            source_families = vec![
+                scientific_source_registry_family(
+                    "pubpsych",
+                    "PubPsych",
+                    "psychology",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Primary,
+                    "active for signal detection theory psychology metadata planning.",
+                    true,
+                    "psychology literature metadata planning",
+                    &["psychology metadata", "literature planning"],
+                    &["preview-only", "no scraping", "no connector call"],
+                ),
+                scientific_source_registry_family(
+                    "psycharchives",
+                    "PsychArchives",
+                    "psychology",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Primary,
+                    "active for signal detection theory psychology repository planning.",
+                    true,
+                    "psychology repository and source-family planning",
+                    &["repository planning", "psychology metadata"],
+                    &["preview-only", "no scraping", "no connector call"],
+                ),
+                scientific_source_registry_family(
+                    "openalex",
+                    "OpenAlex",
+                    "multidisciplinary",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Supporting,
+                    "active as multidisciplinary source-family metadata planning.",
+                    true,
+                    "broad multidisciplinary metadata planning",
+                    &["multidisciplinary metadata", "cross-domain mapping"],
+                    &["preview-only", "no web requests"],
+                ),
+                scientific_source_registry_family(
+                    "crossref",
+                    "Crossref",
+                    "multidisciplinary",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Supporting,
+                    "active as citation and DOI metadata planning.",
+                    true,
+                    "citation and DOI metadata planning",
+                    &["doi metadata", "citation metadata"],
+                    &["preview-only", "no web requests"],
+                ),
+                scientific_source_registry_family(
+                    "pubmed_if_biomedical_context",
+                    "PubMed if biomedical context",
+                    "medicine_biomedical_science",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Conditional,
+                    "active only when biomedical, medical, neuroscience, clinical, diagnostics, or medicine context is explicit.",
+                    pubmed_active,
+                    "biomedical metadata planning when context is explicit",
+                    &["biomedical context", "clinical metadata"],
+                    &["preview-only", "conditional on explicit biomedical context"],
+                ),
+            ];
+            preferred_source_ids = vec![
+                "pubpsych".to_string(),
+                "psycharchives".to_string(),
+                "openalex".to_string(),
+                "crossref".to_string(),
+            ];
+            conditional_source_ids = vec!["pubmed_if_biomedical_context".to_string()];
+            if !pubmed_active {
+                excluded_source_ids.push("pubmed_if_biomedical_context".to_string());
+            } else {
+                push_unique_text(
+                    &mut warnings,
+                    "PubMed is active because biomedical, medical, neuroscience, clinical, diagnostics, or medicine context is explicit.",
+                );
+            }
+            let planned_metadata_queries = vec![
+                "Signalentdeckungstheorie".to_string(),
+                "signal detection theory".to_string(),
+                "psychophysics signal detection".to_string(),
+                "d prime criterion ROC".to_string(),
+            ];
+            (
+                planned_metadata_queries.clone(),
+                vec![
+                    "Prefer psychology and psychophysics sources first.".to_string(),
+                    "Use biomedical sources only when biomedical context is explicit.".to_string(),
+                    "Prefer method and review sources later where available.".to_string(),
+                ],
+                vec![
+                    "Deduplicate later by DOI, title, and source identifiers.".to_string(),
+                    "Keep psychophysics records distinct from broader psychology metadata until later consolidation.".to_string(),
+                ],
+            )
+        }
+        Some("analysis_of_variance") => {
+            let psychology_context_active = psychology_context;
+            let theory_context_active = theory_context;
+            source_families = vec![
+                scientific_source_registry_family(
+                    "openalex",
+                    "OpenAlex",
+                    "multidisciplinary",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Primary,
+                    "active as a broad statistics and methods metadata source.",
+                    true,
+                    "broad statistics and methods metadata planning",
+                    &["methods metadata", "broad literature planning"],
+                    &["preview-only", "no scraping", "no connector call"],
+                ),
+                scientific_source_registry_family(
+                    "crossref",
+                    "Crossref",
+                    "multidisciplinary",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Primary,
+                    "active as a citation and DOI metadata source.",
+                    true,
+                    "citation and DOI metadata planning",
+                    &["doi metadata", "citation metadata"],
+                    &["preview-only", "no web requests"],
+                ),
+                scientific_source_registry_family(
+                    "pubpsych_if_psychology_context",
+                    "PubPsych if psychology context",
+                    "psychology",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Conditional,
+                    "active when psychology or psychologies context is explicit.",
+                    psychology_context_active,
+                    "psychology methods planning when psychology context is explicit",
+                    &["psychology context", "methods planning"],
+                    &["preview-only", "conditional on explicit psychology context"],
+                ),
+                scientific_source_registry_family(
+                    "psycharchives_if_psychology_context",
+                    "PsychArchives if psychology context",
+                    "psychology",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Conditional,
+                    "active when psychology or psychologies context is explicit.",
+                    psychology_context_active,
+                    "psychology repository planning when psychology context is explicit",
+                    &["psychology context", "repository planning"],
+                    &["preview-only", "conditional on explicit psychology context"],
+                ),
+                scientific_source_registry_family(
+                    "zbmath_if_theory_context",
+                    "zbMATH if theory context",
+                    "mathematics_statistics",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Conditional,
+                    "active when theory, mathematics, math, statistics, or statistical_theory context is explicit.",
+                    theory_context_active,
+                    "mathematics and statistics theory planning when theory context is explicit",
+                    &["theory context", "mathematics statistics"],
+                    &["preview-only", "conditional on explicit theory or statistics context"],
+                ),
+                scientific_source_registry_family(
+                    "arxiv_if_theory_context",
+                    "arXiv if theory context",
+                    "preprint",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Conditional,
+                    "active when theory, mathematics, math, statistics, or statistical_theory context is explicit.",
+                    theory_context_active,
+                    "preprint planning when theory context is explicit",
+                    &["theory context", "preprint planning"],
+                    &["preview-only", "conditional on explicit theory or statistics context"],
+                ),
+            ];
+            preferred_source_ids = vec!["openalex".to_string(), "crossref".to_string()];
+            conditional_source_ids = vec![
+                "pubpsych_if_psychology_context".to_string(),
+                "psycharchives_if_psychology_context".to_string(),
+                "zbmath_if_theory_context".to_string(),
+                "arxiv_if_theory_context".to_string(),
+            ];
+            if !psychology_context_active {
+                excluded_source_ids.extend([
+                    "pubpsych_if_psychology_context".to_string(),
+                    "psycharchives_if_psychology_context".to_string(),
+                ]);
+            }
+            if !theory_context_active {
+                excluded_source_ids.extend([
+                    "zbmath_if_theory_context".to_string(),
+                    "arxiv_if_theory_context".to_string(),
+                ]);
+            }
+            let planned_metadata_queries = vec![
+                "ANOVA".to_string(),
+                "Varianzanalyse".to_string(),
+                "analysis of variance".to_string(),
+                "factorial ANOVA".to_string(),
+                "repeated measures ANOVA".to_string(),
+            ];
+            (
+                planned_metadata_queries.clone(),
+                vec![
+                    "Prefer statistics and methods sources first.".to_string(),
+                    "Activate psychology-specific sources only when psychology context is explicit.".to_string(),
+                    "Activate theory sources only when theory or statistics context is explicit.".to_string(),
+                ],
+                vec![
+                    "Deduplicate later by DOI, title, and source identifiers.".to_string(),
+                    "Keep method and psychology records distinct until later consolidation.".to_string(),
+                ],
+            )
+        }
+        Some("hypothesis_testing") => {
+            let psychology_context_active = psychology_context;
+            source_families = vec![
+                scientific_source_registry_family(
+                    "openalex",
+                    "OpenAlex",
+                    "multidisciplinary",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Primary,
+                    "active as a broad methods and statistics metadata source.",
+                    true,
+                    "broad methods and statistics metadata planning",
+                    &["methods metadata", "broad literature planning"],
+                    &["preview-only", "no scraping", "no connector call"],
+                ),
+                scientific_source_registry_family(
+                    "crossref",
+                    "Crossref",
+                    "multidisciplinary",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Primary,
+                    "active as a citation and DOI metadata source.",
+                    true,
+                    "citation and DOI metadata planning",
+                    &["doi metadata", "citation metadata"],
+                    &["preview-only", "no web requests"],
+                ),
+                scientific_source_registry_family(
+                    "zbmath",
+                    "zbMATH Open",
+                    "mathematics_statistics",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Supporting,
+                    "active as a mathematics and statistics theory metadata source.",
+                    true,
+                    "math and statistics theory metadata planning",
+                    &["statistics theory", "math metadata"],
+                    &["preview-only", "no scraping"],
+                ),
+                scientific_source_registry_family(
+                    "arxiv",
+                    "arXiv",
+                    "preprint",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Supporting,
+                    "active as a preprint and methods metadata source.",
+                    true,
+                    "preprint methods metadata planning",
+                    &["preprint metadata", "methods planning"],
+                    &["preview-only", "no scraping"],
+                ),
+                scientific_source_registry_family(
+                    "pubpsych_if_psychology_context",
+                    "PubPsych if psychology context",
+                    "psychology",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Conditional,
+                    "active when psychology context is explicit.",
+                    psychology_context_active,
+                    "psychology methods planning when psychology context is explicit",
+                    &["psychology context", "methods planning"],
+                    &["preview-only", "conditional on explicit psychology context"],
+                ),
+                scientific_source_registry_family(
+                    "psycharchives_if_psychology_context",
+                    "PsychArchives if psychology context",
+                    "psychology",
+                    ScholarChatScientificSourceAccessClass::OpenMetadata,
+                    ScholarChatScientificSourcePriority::Conditional,
+                    "active when psychology context is explicit.",
+                    psychology_context_active,
+                    "psychology repository planning when psychology context is explicit",
+                    &["psychology context", "repository planning"],
+                    &["preview-only", "conditional on explicit psychology context"],
+                ),
+            ];
+            preferred_source_ids = vec![
+                "openalex".to_string(),
+                "crossref".to_string(),
+                "zbmath".to_string(),
+                "arxiv".to_string(),
+            ];
+            conditional_source_ids = vec![
+                "pubpsych_if_psychology_context".to_string(),
+                "psycharchives_if_psychology_context".to_string(),
+            ];
+            if !psychology_context_active {
+                excluded_source_ids.extend([
+                    "pubpsych_if_psychology_context".to_string(),
+                    "psycharchives_if_psychology_context".to_string(),
+                ]);
+            }
+            let planned_metadata_queries = vec![
+                "Hypothesentests".to_string(),
+                "hypothesis testing".to_string(),
+                "null hypothesis p value".to_string(),
+                "statistical power type I error type II error".to_string(),
+                "confidence intervals hypothesis testing".to_string(),
+            ];
+            (
+                planned_metadata_queries.clone(),
+                vec![
+                    "Prefer methods and statistics sources first.".to_string(),
+                    "Use psychology sources when applied psychology context is explicit.".to_string(),
+                    "Later phases should deduplicate by DOI, title, and source identifiers.".to_string(),
+                ],
+                vec![
+                    "Deduplicate later by DOI, title, and source identifiers.".to_string(),
+                    "Keep methods and psychology records distinct until later consolidation.".to_string(),
+                ],
+            )
+        }
+        _ => (
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        ),
+    };
+
+    let ranking_hints = scientific_source_registry_ranking_hints(
+        recognized_concept.as_deref(),
+        &normalized_mode,
+        &normalized_context_tags,
+        &request.course_context,
+    );
+    let deduplication_hints = scientific_source_registry_deduplication_hints(
+        recognized_concept.as_deref(),
+        &normalized_mode,
+    );
+
+    if matches!(normalized_mode.as_str(), "course") {
+        warnings.push("Course Mode will later prioritize local course materials, module context, prerequisites, and learning path support.".to_string());
+        next_required_actions.push("Future Course Mode phases should prioritize local course materials, module context, prerequisites, and learning path support.".to_string());
+    } else if matches!(normalized_mode.as_str(), "scientific_paper") {
+        warnings.push("Scientific Paper Mode will later prioritize literature search planning, deduplication, ranking, review/meta-analysis prioritization where appropriate, and citation-safe planning.".to_string());
+        next_required_actions.push("Future Scientific Paper Mode phases should prioritize literature search planning, deduplication, ranking, review/meta-analysis prioritization where appropriate, and citation-safe planning.".to_string());
+    }
+
+    let planned_metadata_queries = if recognized_concept.is_none() && !normalized_topic.is_empty() {
+        push_unique_text(
+            &mut warnings,
+            "The topic is not yet mapped through the discipline registry.",
+        );
+        push_unique_text(
+            &mut next_required_actions,
+            "Consider adding discipline mapping before expanding the source registry preview.",
+        );
+        vec![normalized_topic.clone()]
+    } else {
+        planned_metadata_queries
+    };
+    let access_classes = scientific_source_registry_access_classes(&source_families);
+    let source_family_count = source_families.len();
+    let active_source_family_count = source_families.iter().filter(|family| family.active_for_current_context).count();
+    let conditional_source_family_count = source_families
+        .iter()
+        .filter(|family| matches!(family.priority, ScholarChatScientificSourcePriority::Conditional))
+        .count();
+    let summary = scientific_source_registry_plan_summary(&status, label.as_deref(), &normalized_mode);
+    let source_plan = ScholarChatScientificSourceRegistrySourcePlan {
+        source_family_count,
+        active_source_family_count,
+        conditional_source_family_count,
+        planned_metadata_query_count: planned_metadata_queries.len(),
+        summary: summary.clone(),
+        steps: scientific_source_registry_plan_steps(&normalized_mode),
+    };
+
+    Ok(ScholarChatScientificSourceRegistryPreview {
+        status,
+        normalized_topic,
+        normalized_mode,
+        normalized_context_tags,
+        discipline_status,
+        recognized_concept,
+        label,
+        source_plan,
+        source_families,
+        preferred_source_ids,
+        conditional_source_ids,
+        excluded_source_ids,
+        access_classes,
+        planned_metadata_queries,
+        ranking_hints,
+        deduplication_hints,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        source_registry_preview_only: true,
         no_web_request: true,
         no_scraping: true,
         no_connector_call: true,
@@ -5508,6 +6162,182 @@ fn normalize_selected_source_ids(source_ids: Vec<String>) -> AegisResult<(Vec<St
     Ok((selected_source_ids, selected_source_count))
 }
 
+fn normalize_scientific_context_tags(tags: Option<Vec<String>>) -> Vec<String> {
+    let mut normalized_tags = BTreeSet::new();
+    if let Some(tags) = tags {
+        for tag in tags {
+            let normalized = normalize_scientific_tag_text(&tag);
+            if !normalized.is_empty() {
+                normalized_tags.insert(normalized);
+            }
+        }
+    }
+    normalized_tags.into_iter().collect()
+}
+
+fn normalize_scientific_tag_text(value: &str) -> String {
+    let mut normalized = String::new();
+    let mut last_was_separator = false;
+    for ch in value.trim().to_lowercase().chars() {
+        if ch.is_alphanumeric() {
+            normalized.push(ch);
+            last_was_separator = false;
+        } else if matches!(ch, ' ' | '-') && !normalized.is_empty() && !last_was_separator {
+            normalized.push('_');
+            last_was_separator = true;
+        } else if matches!(ch, ' ' | '-') && normalized.is_empty() {
+            continue;
+        } else if !normalized.is_empty() && !last_was_separator {
+            normalized.push('_');
+            last_was_separator = true;
+        }
+    }
+    normalized.trim_matches('_').to_string()
+}
+
+fn scientific_context_mentions(context: &Option<String>, needles: &[&str]) -> bool {
+    let Some(context) = context.as_deref() else {
+        return false;
+    };
+    let context = context.to_lowercase();
+    needles.iter().any(|needle| context.contains(needle))
+}
+
+fn scientific_context_tags_contain(tags: &[String], needles: &[&str]) -> bool {
+    tags.iter().any(|tag| needles.iter().any(|needle| tag == needle || tag.contains(needle)))
+}
+
+fn scientific_source_registry_family(
+    id: &str,
+    label: &str,
+    domain: &str,
+    access_class: ScholarChatScientificSourceAccessClass,
+    priority: ScholarChatScientificSourcePriority,
+    applies_when: &str,
+    active_for_current_context: bool,
+    planned_use: &str,
+    query_roles: &[&str],
+    boundary_notes: &[&str],
+) -> ScholarChatScientificSourceRegistrySourceFamily {
+    ScholarChatScientificSourceRegistrySourceFamily {
+        id: id.to_string(),
+        label: label.to_string(),
+        domain: domain.to_string(),
+        access_class,
+        priority,
+        applies_when: applies_when.to_string(),
+        active_for_current_context,
+        planned_use: planned_use.to_string(),
+        query_roles: query_roles.iter().map(|value| (*value).to_string()).collect(),
+        boundary_notes: boundary_notes.iter().map(|value| (*value).to_string()).collect(),
+    }
+}
+
+fn scientific_source_registry_access_classes(
+    source_families: &[ScholarChatScientificSourceRegistrySourceFamily],
+) -> Vec<ScholarChatScientificSourceAccessClass> {
+    let mut access_classes = Vec::new();
+    for family in source_families {
+        if !access_classes.contains(&family.access_class) {
+            access_classes.push(family.access_class.clone());
+        }
+    }
+    access_classes
+}
+
+fn scientific_source_registry_plan_summary(status: &ScholarChatScientificSourceRegistryStatus, label: Option<&str>, normalized_mode: &str) -> String {
+    match status {
+        ScholarChatScientificSourceRegistryStatus::Blocked => {
+            "Scientific source registry preview blocked because the topic is blank.".to_string()
+        }
+        ScholarChatScientificSourceRegistryStatus::UnknownConcept => {
+            format!(
+                "Scientific source registry preview could not yet map the topic '{}' in {} mode.",
+                label.unwrap_or("unknown topic"),
+                normalized_mode
+            )
+        }
+        ScholarChatScientificSourceRegistryStatus::SourcePlanReady => {
+            format!(
+                "Scientific source registry preview is ready later for {} in {} mode.",
+                label.unwrap_or("the mapped concept"),
+                normalized_mode
+            )
+        }
+    }
+}
+
+fn scientific_source_registry_plan_steps(normalized_mode: &str) -> Vec<String> {
+    let mut steps = vec![
+        "Normalize topic, mode, and context tags.".to_string(),
+        "Map the topic through the scientific discipline registry preview.".to_string(),
+        "Select active source families for the current context.".to_string(),
+        "Plan metadata-only queries before later retrieval or indexing.".to_string(),
+    ];
+    if normalized_mode == "scientific_paper" {
+        steps.push("Prefer literature-search planning, deduplication, and citation-safe follow-up phases.".to_string());
+    } else if normalized_mode == "course" {
+        steps.push("Prefer curriculum metadata, module context, prerequisites, and learning-path support in later phases.".to_string());
+    } else {
+        steps.push("Plan local evidence first before later Scholar Chat answering.".to_string());
+    }
+    steps
+}
+
+fn scientific_source_registry_ranking_hints(
+    recognized_concept: Option<&str>,
+    normalized_mode: &str,
+    normalized_context_tags: &[String],
+    course_context: &Option<String>,
+) -> Vec<String> {
+    let mut hints = Vec::new();
+    match recognized_concept {
+        Some("signal_detection_theory") => {
+            hints.push("Prefer psychology and psychophysics sources first.".to_string());
+            hints.push("Use biomedical sources only when biomedical context is explicit.".to_string());
+            hints.push("Prefer method and review sources later where available.".to_string());
+        }
+        Some("analysis_of_variance") => {
+            hints.push("Prefer statistics and methods sources first.".to_string());
+            hints.push("Activate psychology-specific sources only when psychology context is explicit.".to_string());
+            hints.push("Activate theory sources only when theory or statistics context is explicit.".to_string());
+        }
+        Some("hypothesis_testing") => {
+            hints.push("Prefer methods and statistics sources first.".to_string());
+            hints.push("Use psychology sources when applied psychology context is explicit.".to_string());
+            hints.push("Later phases should deduplicate by DOI, title, and source identifiers.".to_string());
+        }
+        _ => {}
+    }
+    if normalized_mode == "course" {
+        hints.push("Course Mode should favor curriculum metadata and local course materials later.".to_string());
+    }
+    if scientific_context_tags_contain(normalized_context_tags, &["biomedical", "medical", "neuroscience", "clinical", "diagnostics", "medicine"]) {
+        hints.push("Biomedical context can activate biomedical source families later.".to_string());
+    }
+    if scientific_context_mentions(course_context, &["psychology", "psychologie"]) {
+        hints.push("Course context can activate psychology-specific source families later.".to_string());
+    }
+    hints
+}
+
+fn scientific_source_registry_deduplication_hints(
+    recognized_concept: Option<&str>,
+    normalized_mode: &str,
+) -> Vec<String> {
+    let mut hints = vec![
+        "Deduplicate later by DOI, title, and source identifiers.".to_string(),
+        "Keep source-family provenance when merging overlapping metadata records.".to_string(),
+    ];
+    if recognized_concept == Some("signal_detection_theory") {
+        hints.push("Deduplicate psychophysics records against broader psychology metadata later.".to_string());
+    }
+    if normalized_mode == "scientific_paper" {
+        hints.push("Deduplicate review and preprint records before evidence-pack planning later.".to_string());
+    }
+    hints
+}
+
 #[derive(Clone)]
 struct ScientificDisciplineRegistryEntry {
     recognized_concept: &'static str,
@@ -6642,6 +7472,20 @@ fn main() {
         }
     }
 
+    fn scientific_source_registry_request(
+        topic: &str,
+        mode: Option<&str>,
+        course_context: Option<&str>,
+        context_tags: Option<Vec<&str>>,
+    ) -> ScholarChatScientificSourceRegistryPreviewRequest {
+        ScholarChatScientificSourceRegistryPreviewRequest {
+            topic: topic.to_string(),
+            mode: mode.map(|value| value.to_string()),
+            course_context: course_context.map(|value| value.to_string()),
+            context_tags: context_tags.map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
+        }
+    }
+
     fn runtime_diagnostic_result_request(
         bridge_preview_request: ScholarChatRuntimeDiagnosticBridgePreviewRequest,
         diagnostic_preview: LocalRuntimeSmokeDiagnosticPreview,
@@ -7078,6 +7922,29 @@ fn main() {
     ) {
         assert!(preview.preview_only);
         assert!(preview.registry_preview_only);
+        assert!(preview.no_web_request);
+        assert!(preview.no_scraping);
+        assert!(preview.no_connector_call);
+        assert!(preview.no_source_import);
+        assert!(preview.no_local_file_indexing);
+        assert!(preview.no_bm25_index);
+        assert!(preview.no_vector_index);
+        assert!(preview.no_model_loading);
+        assert!(preview.no_runtime_inference);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_persistence);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
+    fn assert_scientific_source_registry_boundary_fields(
+        preview: &ScholarChatScientificSourceRegistryPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.source_registry_preview_only);
         assert!(preview.no_web_request);
         assert!(preview.no_scraping);
         assert!(preview.no_connector_call);
@@ -10270,6 +11137,378 @@ fn main() {
         assert!(!body.contains("ureq"));
         assert!(!body.contains("run_llama_runtime_smoke_diagnostic"));
         assert!(!body.contains("smoke_test_local_runtime_inference"));
+        assert!(!body.contains("run_smoke_inference_probe"));
+        assert!(!body.contains("build_answer_draft"));
+        assert!(!body.contains("build_grounded_answer"));
+        assert!(!body.contains("build_final_answer"));
+        assert!(!body.contains("build_evidence_pack"));
+        assert!(!body.contains("export_answer_artifacts"));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_source_registry_blocks_when_topic_is_blank() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_scientific_source_registry(
+            temp.path(),
+            scientific_source_registry_request("   ", Some("course"), Some("Module handbook"), Some(vec!["psychology"])),
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatScientificSourceRegistryStatus::Blocked);
+        assert_eq!(result.discipline_status, ScholarChatScientificDisciplineRegistryStatus::Blocked);
+        assert!(result.recognized_concept.is_none());
+        assert!(result.source_families.is_empty());
+        assert!(result.preferred_source_ids.is_empty());
+        assert!(result.conditional_source_ids.is_empty());
+        assert!(result.planned_metadata_queries.is_empty());
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("topic_missing")));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("Provide a scientific topic")));
+        assert_scientific_source_registry_boundary_fields(&result);
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert_eq!(count_entries_recursively(temp.path()), 0);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_source_registry_maps_signalentdeckung() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_scientific_source_registry(
+            temp.path(),
+            scientific_source_registry_request("Signalentdeckung", None, None, None),
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatScientificSourceRegistryStatus::SourcePlanReady);
+        assert_eq!(result.discipline_status, ScholarChatScientificDisciplineRegistryStatus::ConceptMapped);
+        assert_eq!(result.normalized_mode, "scholar_chat");
+        assert_eq!(result.recognized_concept.as_deref(), Some("signal_detection_theory"));
+        assert_eq!(
+            result.preferred_source_ids,
+            vec![
+                "pubpsych".to_string(),
+                "psycharchives".to_string(),
+                "openalex".to_string(),
+                "crossref".to_string(),
+            ]
+        );
+        assert_eq!(result.conditional_source_ids, vec!["pubmed_if_biomedical_context".to_string()]);
+        assert_eq!(result.excluded_source_ids, vec!["pubmed_if_biomedical_context".to_string()]);
+        assert_eq!(result.planned_metadata_queries[0], "Signalentdeckungstheorie");
+        assert!(result
+            .source_families
+            .iter()
+            .any(|family| family.id == "pubpsych" && family.active_for_current_context));
+        assert!(result
+            .source_families
+            .iter()
+            .any(|family| family.id == "psycharchives" && family.active_for_current_context));
+        assert!(result
+            .source_families
+            .iter()
+            .any(|family| family.id == "openalex" && family.active_for_current_context));
+        assert!(result
+            .source_families
+            .iter()
+            .any(|family| family.id == "crossref" && family.active_for_current_context));
+        assert!(result
+            .source_families
+            .iter()
+            .any(|family| family.id == "pubmed_if_biomedical_context" && !family.active_for_current_context));
+        assert_eq!(result.access_classes, vec![ScholarChatScientificSourceAccessClass::OpenMetadata]);
+        assert_eq!(result.source_plan.source_family_count, 5);
+        assert_eq!(result.source_plan.active_source_family_count, 4);
+        assert_eq!(result.source_plan.conditional_source_family_count, 1);
+        assert!(result
+            .ranking_hints
+            .iter()
+            .any(|hint| hint.contains("psychology and psychophysics")));
+        assert!(result
+            .deduplication_hints
+            .iter()
+            .any(|hint| hint.contains("DOI, title, and source identifiers")));
+        assert_scientific_source_registry_boundary_fields(&result);
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert_eq!(count_entries_recursively(temp.path()), 0);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_source_registry_activates_pubmed_for_biomedical_context() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_scientific_source_registry(
+            temp.path(),
+            scientific_source_registry_request(
+                "Signalentdeckung",
+                None,
+                None,
+                Some(vec!["BiomEdical", " neuroscience ", "medical"]),
+            ),
+        )
+        .unwrap();
+        let pubmed = result
+            .source_families
+            .iter()
+            .find(|family| family.id == "pubmed_if_biomedical_context")
+            .unwrap();
+        assert!(pubmed.active_for_current_context);
+        assert_eq!(result.excluded_source_ids, Vec::<String>::new());
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("biomedical")));
+        assert_scientific_source_registry_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_source_registry_maps_anova_and_activates_theory_sources() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_scientific_source_registry(
+            temp.path(),
+            scientific_source_registry_request(
+                "ANOVA",
+                Some("scientific_paper"),
+                Some("Psychology statistics seminar"),
+                None,
+            ),
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatScientificSourceRegistryStatus::SourcePlanReady);
+        assert_eq!(result.discipline_status, ScholarChatScientificDisciplineRegistryStatus::ConceptMapped);
+        assert_eq!(
+            result.preferred_source_ids,
+            vec!["openalex".to_string(), "crossref".to_string()]
+        );
+        assert!(result
+            .source_families
+            .iter()
+            .any(|family| family.id == "pubpsych_if_psychology_context" && family.active_for_current_context));
+        assert!(result
+            .source_families
+            .iter()
+            .any(|family| family.id == "psycharchives_if_psychology_context" && family.active_for_current_context));
+        assert!(result
+            .source_families
+            .iter()
+            .any(|family| family.id == "zbmath_if_theory_context" && family.active_for_current_context));
+        assert!(result
+            .source_families
+            .iter()
+            .any(|family| family.id == "arxiv_if_theory_context" && family.active_for_current_context));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("literature search planning")));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Science Paper Mode"))
+            || result
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("Scientific Paper Mode")));
+        assert_eq!(result.source_plan.conditional_source_family_count, 4);
+        assert_eq!(result.source_plan.active_source_family_count, 6);
+        assert_scientific_source_registry_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_source_registry_activates_zbmath_and_arxiv_for_theory_context() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_scientific_source_registry(
+            temp.path(),
+            scientific_source_registry_request(
+                "ANOVA",
+                Some("course"),
+                Some("Linear models"),
+                Some(vec![" theory ", "statistics", "statistics", "math"]),
+            ),
+        )
+        .unwrap();
+        let zbmath = result
+            .source_families
+            .iter()
+            .find(|family| family.id == "zbmath_if_theory_context")
+            .unwrap();
+        let arxiv = result
+            .source_families
+            .iter()
+            .find(|family| family.id == "arxiv_if_theory_context")
+            .unwrap();
+        assert!(zbmath.active_for_current_context);
+        assert!(arxiv.active_for_current_context);
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Course Mode")));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("local course materials")));
+        assert_scientific_source_registry_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_source_registry_maps_hypothesentests() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_scientific_source_registry(
+            temp.path(),
+            scientific_source_registry_request("Hypothesentests", None, None, None),
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatScientificSourceRegistryStatus::SourcePlanReady);
+        assert_eq!(result.discipline_status, ScholarChatScientificDisciplineRegistryStatus::ConceptMapped);
+        assert_eq!(
+            result.preferred_source_ids,
+            vec![
+                "openalex".to_string(),
+                "crossref".to_string(),
+                "zbmath".to_string(),
+                "arxiv".to_string(),
+            ]
+        );
+        assert_eq!(
+            result.conditional_source_ids,
+            vec![
+                "pubpsych_if_psychology_context".to_string(),
+                "psycharchives_if_psychology_context".to_string(),
+            ]
+        );
+        assert_eq!(
+            result.excluded_source_ids,
+            vec![
+                "pubpsych_if_psychology_context".to_string(),
+                "psycharchives_if_psychology_context".to_string(),
+            ]
+        );
+        assert_eq!(result.planned_metadata_queries[0], "Hypothesentests");
+        assert_eq!(result.access_classes, vec![ScholarChatScientificSourceAccessClass::OpenMetadata]);
+        assert_scientific_source_registry_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_source_registry_returns_unknown_concept_for_unmapped_topic() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_scientific_source_registry(
+            temp.path(),
+            scientific_source_registry_request("Signal graph theory", Some("scholar_chat"), None, Some(vec!["unknown"])),
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatScientificSourceRegistryStatus::UnknownConcept);
+        assert_eq!(result.discipline_status, ScholarChatScientificDisciplineRegistryStatus::UnknownConcept);
+        assert!(result.recognized_concept.is_none());
+        assert!(result.source_families.is_empty());
+        assert_eq!(result.planned_metadata_queries, vec!["Signal graph theory".to_string()]);
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("not yet mapped through the discipline registry")));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("adding discipline mapping")));
+        assert_scientific_source_registry_boundary_fields(&result);
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_source_registry_normalizes_context_tags() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_scientific_source_registry(
+            temp.path(),
+            scientific_source_registry_request(
+                "ANOVA",
+                None,
+                None,
+                Some(vec!["  Psychology  ", "theory", "psychology", "statistics", "theory-methods", ""]),
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            result.normalized_context_tags,
+            vec![
+                "psychology".to_string(),
+                "statistics".to_string(),
+                "theory".to_string(),
+                "theory_methods".to_string(),
+            ]
+        );
+        assert_scientific_source_registry_boundary_fields(&result);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_source_registry_is_deterministic_and_path_free() {
+        let temp = tempfile::tempdir().unwrap();
+        let before_entries = count_entries_recursively(temp.path());
+        let first = preview_scholar_chat_scientific_source_registry(
+            temp.path(),
+            scientific_source_registry_request(
+                "  ANOVA  ",
+                Some("scientific paper"),
+                Some("Psychology statistics seminar"),
+                Some(vec!["statistics", "psychology", "theory"]),
+            ),
+        )
+        .unwrap();
+        let second = preview_scholar_chat_scientific_source_registry(
+            temp.path(),
+            scientific_source_registry_request(
+                "  ANOVA  ",
+                Some("scientific paper"),
+                Some("Psychology statistics seminar"),
+                Some(vec!["statistics", "psychology", "theory"]),
+            ),
+        )
+        .unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        assert!(!temp.path().join(".aegis").exists());
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_scientific_source_registry_boundary_fields(preview);
+        }
+    }
+
+    #[test]
+    fn scholar_chat_scientific_source_registry_body_does_not_call_execution_functions() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        let start = source
+            .find("pub fn preview_scholar_chat_scientific_source_registry")
+            .unwrap();
+        let end = source[start..]
+            .find("pub fn preview_scholar_chat_answer_readiness")
+            .unwrap();
+        let body = &source[start..start + end];
+        assert!(!body.contains("Command::new"));
+        assert!(!body.contains("reqwest::"));
+        assert!(!body.contains("ureq::"));
+        assert!(!body.contains("std::fs"));
+        assert!(!body.contains("fs::"));
+        assert!(!body.contains("RetrievalService::new"));
+        assert!(!body.contains("SourceRegistry::"));
+        assert!(!body.contains("preview_scholar_chat_retrieval"));
+        assert!(!body.contains("preview_scholar_chat_evidence_plan"));
+        assert!(!body.contains("preview_scholar_chat_prompt_pack"));
+        assert!(!body.contains("smoke_test_local_runtime_inference"));
+        assert!(!body.contains("run_llama_runtime_smoke_diagnostic"));
         assert!(!body.contains("run_smoke_inference_probe"));
         assert!(!body.contains("build_answer_draft"));
         assert!(!body.contains("build_grounded_answer"));

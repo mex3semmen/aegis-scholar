@@ -40,6 +40,12 @@ Phase 98.1 adds the first backend preview of the scientific discipline registry.
 It maps early example concepts such as Signalentdeckung, ANOVA, and Hypothesentests.
 It remains preview-only and does not add web requests, scraping, connectors, local indexing, model loading, runtime inference, answer generation, Evidence Pack creation, or artifact writes.
 
+## Phase 98.2
+
+Phase 98.2 adds the first backend preview of the scientific source registry.
+It maps source-family plans for Signalentdeckung, ANOVA, and Hypothesentests.
+It remains preview-only and does not add web requests, scraping, connectors, source import, local indexing, BM25/vector index, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
+
 ## Target Architecture
 
 Target pipeline:
