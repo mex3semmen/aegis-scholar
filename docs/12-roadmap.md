@@ -1554,6 +1554,9 @@ Do not implement:
 Phase 100.0 adds a backend-only Local Literature Index Preview that composes the scientific search plan preview and only plans later local corpus, metadata, chunking, lexical index, vector index, and retrieval-readiness work.
 It is preview-only and does not add file reading, PDF extraction, OCR, chunking, embedding generation, index creation, retrieval execution, web requests, scraping, connectors, source import, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
 
+Phase 100.1 adds a backend-only Course Literature Registry Preview that composes the Local Literature Index Preview with mode forced to course and only plans course identity, course-material kinds, local course-source alignment, curriculum metadata requirements, and learning-path alignment.
+It is preview-only and does not add file reading, PDF extraction, OCR, chunking, embedding generation, index creation, retrieval execution, web requests, scraping, connector implementation, source import, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.

@@ -632,6 +632,159 @@ pub struct ScholarChatLocalLiteratureIndexPreview {
     pub no_audit_write: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatCourseLiteratureRegistryStatus {
+    Blocked,
+    CourseRegistryPlanReady,
+    NeedsCourseContext,
+    NeedsLocalSources,
+    NeedsDisambiguation,
+    UnknownConcept,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatCourseLiteratureRegistryStrategy {
+    CourseMaterialAlignmentFirst,
+    ModuleContextFirst,
+    LocalSourceAlignmentFirst,
+    Blocked,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatCourseLiteratureRegistryStepKind {
+    CourseIdentityReview,
+    ModuleContextReview,
+    CourseMaterialKindPlan,
+    LocalSourceAlignmentPlan,
+    CurriculumMetadataRequirementCheck,
+    LocalLiteratureIndexAlignment,
+    RetrievalReadinessCheck,
+    LearningPathAlignmentPlan,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatCourseIdentityPreview {
+    pub course_context: Option<String>,
+    pub module_code: Option<String>,
+    pub course_title: Option<String>,
+    pub instructor: Option<String>,
+    pub semester: Option<String>,
+    pub identity_key: Option<String>,
+    pub has_course_context: bool,
+    pub has_module_code: bool,
+    pub has_course_title: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatCourseMaterialPlan {
+    pub selected_source_count: usize,
+    pub selected_local_source_ids: Vec<String>,
+    pub expected_course_material_kinds: Vec<String>,
+    pub known_material_kinds: Vec<String>,
+    pub unknown_material_kinds: Vec<String>,
+    pub will_read_files: bool,
+    pub will_import_sources: bool,
+    pub will_create_registry: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatCurriculumAlignmentPlan {
+    pub requires_course_context: bool,
+    pub requires_module_metadata: bool,
+    pub requires_learning_objectives_later: bool,
+    pub requires_prerequisites_later: bool,
+    pub requires_session_or_week_mapping_later: bool,
+    pub will_scrape_curriculum_sources: bool,
+    pub will_call_connectors: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatCourseLiteratureRegistryStep {
+    pub kind: ScholarChatCourseLiteratureRegistryStepKind,
+    pub id: String,
+    pub label: String,
+    pub description: String,
+    pub planned_inputs: Vec<String>,
+    pub planned_outputs: Vec<String>,
+    pub active: bool,
+    pub preview_only: bool,
+    pub boundary_notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatCourseLiteratureRegistryPreviewRequest {
+    pub query: String,
+    pub course_context: Option<String>,
+    pub module_code: Option<String>,
+    pub course_title: Option<String>,
+    pub instructor: Option<String>,
+    pub semester: Option<String>,
+    pub context_tags: Option<Vec<String>>,
+    pub selected_local_source_ids: Option<Vec<String>>,
+    pub expected_course_material_kinds: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatCourseLiteratureRegistryPreview {
+    pub status: ScholarChatCourseLiteratureRegistryStatus,
+    pub normalized_query: String,
+    pub normalized_course_context: Option<String>,
+    pub normalized_module_code: Option<String>,
+    pub normalized_course_title: Option<String>,
+    pub normalized_instructor: Option<String>,
+    pub normalized_semester: Option<String>,
+    pub normalized_context_tags: Vec<String>,
+    pub selected_local_source_ids: Vec<String>,
+    pub expected_course_material_kinds: Vec<String>,
+    pub local_literature_index_status: ScholarChatLocalLiteratureIndexStatus,
+    pub search_plan_status: ScholarChatScientificSearchPlanStatus,
+    pub query_understanding_status: ScholarChatScientificQueryUnderstandingStatus,
+    pub inferred_topic: Option<String>,
+    pub query_intent: ScholarChatScientificQueryIntent,
+    pub recognized_concept: Option<String>,
+    pub label: Option<String>,
+    pub course_registry_strategy: ScholarChatCourseLiteratureRegistryStrategy,
+    pub course_identity: ScholarChatCourseIdentityPreview,
+    pub course_material_plan: ScholarChatCourseMaterialPlan,
+    pub curriculum_alignment_plan: ScholarChatCurriculumAlignmentPlan,
+    pub planned_course_metadata_requirements: Vec<String>,
+    pub planned_course_material_queries: Vec<String>,
+    pub planned_registry_steps: Vec<ScholarChatCourseLiteratureRegistryStep>,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub course_literature_registry_preview_only: bool,
+    pub no_file_read: bool,
+    pub no_pdf_extraction: bool,
+    pub no_ocr: bool,
+    pub no_chunking_run: bool,
+    pub no_embedding_generation: bool,
+    pub no_index_created: bool,
+    pub no_retrieval_execution: bool,
+    pub no_web_request: bool,
+    pub no_scraping: bool,
+    pub no_connector_call: bool,
+    pub no_source_import: bool,
+    pub no_local_file_indexing: bool,
+    pub no_model_loading: bool,
+    pub no_runtime_inference: bool,
+    pub no_llm_call: bool,
+    pub no_answer_generated: bool,
+    pub no_evidence_pack_created: bool,
+    pub no_artifact_write: bool,
+    pub no_persistence: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScholarChatRetrievalCandidate {
     pub source_id: String,
@@ -3258,6 +3411,358 @@ pub fn preview_scholar_chat_local_literature_index(
         no_index_created: true,
         no_bm25_index: true,
         no_vector_index: true,
+        no_retrieval_execution: true,
+        no_web_request: true,
+        no_scraping: true,
+        no_connector_call: true,
+        no_source_import: true,
+        no_local_file_indexing: true,
+        no_model_loading: true,
+        no_runtime_inference: true,
+        no_llm_call: true,
+        no_answer_generated: true,
+        no_evidence_pack_created: true,
+        no_artifact_write: true,
+        no_persistence: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+    })
+}
+
+pub fn preview_scholar_chat_course_literature_registry(
+    root: impl Into<PathBuf>,
+    request: ScholarChatCourseLiteratureRegistryPreviewRequest,
+) -> AegisResult<ScholarChatCourseLiteratureRegistryPreview> {
+    let root = root.into();
+    let normalized_query = normalize_scientific_query_text(&request.query);
+    let normalized_course_context = normalize_course_optional_text(request.course_context);
+    let normalized_module_code = normalize_course_optional_text(request.module_code);
+    let normalized_course_title = normalize_course_optional_text(request.course_title);
+    let normalized_instructor = normalize_course_optional_text(request.instructor);
+    let normalized_semester = normalize_course_optional_text(request.semester);
+    let normalized_context_tags = normalize_scientific_context_tags(request.context_tags.clone());
+    let selected_local_source_ids = normalize_scientific_selected_local_source_ids(
+        request.selected_local_source_ids.clone(),
+    );
+    let expected_course_material_kinds = normalize_course_material_kinds(
+        request.expected_course_material_kinds.clone(),
+    );
+    let local_literature_index_preview = preview_scholar_chat_local_literature_index(
+        &root,
+        ScholarChatLocalLiteratureIndexRequest {
+            query: normalized_query.clone(),
+            mode: Some("course".to_string()),
+            course_context: normalized_course_context.clone(),
+            context_tags: Some(normalized_context_tags.clone()),
+            selected_local_source_ids: Some(selected_local_source_ids.clone()),
+            expected_source_kinds: Some(expected_course_material_kinds.clone()),
+        },
+    )?;
+
+    let local_literature_index_status = local_literature_index_preview.status.clone();
+    let search_plan_status = local_literature_index_preview.search_plan_status.clone();
+    let query_understanding_status = local_literature_index_preview.query_understanding_status.clone();
+    let inferred_topic = local_literature_index_preview.inferred_topic.clone();
+    let query_intent = local_literature_index_preview.query_intent.clone();
+    let recognized_concept = local_literature_index_preview.recognized_concept.clone();
+    let label = local_literature_index_preview.label.clone();
+    let course_identity = course_literature_registry_course_identity(
+        normalized_course_context.clone(),
+        normalized_module_code.clone(),
+        normalized_course_title.clone(),
+        normalized_instructor.clone(),
+        normalized_semester.clone(),
+    );
+    let course_material_plan = course_literature_registry_course_material_plan(
+        selected_local_source_ids.clone(),
+        expected_course_material_kinds.clone(),
+    );
+    let curriculum_alignment_plan = course_literature_registry_curriculum_alignment_plan(
+        &normalized_course_context,
+        &normalized_module_code,
+    );
+    let planned_course_metadata_requirements =
+        course_literature_registry_planned_course_metadata_requirements(
+            &course_identity,
+            &course_material_plan,
+        );
+    let planned_course_material_queries = course_literature_registry_planned_course_material_queries(
+        &normalized_query,
+        &normalized_module_code,
+        &normalized_course_title,
+        &local_literature_index_preview.planned_local_queries,
+    );
+    let status = course_literature_registry_status(
+        &local_literature_index_status,
+        &normalized_course_context,
+        &normalized_module_code,
+        &normalized_course_title,
+        &selected_local_source_ids,
+    );
+    let course_registry_strategy = course_literature_registry_strategy(
+        &status,
+        &normalized_module_code,
+        &selected_local_source_ids,
+    );
+    let step_active = !matches!(status, ScholarChatCourseLiteratureRegistryStatus::Blocked);
+    let planned_registry_steps = vec![
+        course_literature_registry_step(
+            ScholarChatCourseLiteratureRegistryStepKind::CourseIdentityReview,
+            "course_identity_review",
+            "Course identity review",
+            "Review course context, module code, title, instructor, and semester only; no course files are read.",
+            vec![
+                normalized_course_context.clone().unwrap_or_default(),
+                normalized_module_code.clone().unwrap_or_default(),
+                normalized_course_title.clone().unwrap_or_default(),
+                normalized_instructor.clone().unwrap_or_default(),
+                normalized_semester.clone().unwrap_or_default(),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec!["course_identity_preview".to_string()],
+            step_active,
+        ),
+        course_literature_registry_step(
+            ScholarChatCourseLiteratureRegistryStepKind::ModuleContextReview,
+            "module_context_review",
+            "Module context review",
+            "Review module context only; no curriculum scraping or local file inspection occurs.",
+            vec![
+                normalized_module_code.clone().unwrap_or_default(),
+                normalized_course_title.clone().unwrap_or_default(),
+                normalized_semester.clone().unwrap_or_default(),
+                normalized_instructor.clone().unwrap_or_default(),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec!["module_context_preview".to_string()],
+            step_active,
+        ),
+        course_literature_registry_step(
+            ScholarChatCourseLiteratureRegistryStepKind::CourseMaterialKindPlan,
+            "course_material_kind_plan",
+            "Course material kind plan",
+            "Plan course material kinds only; no files are read, imported, or registered.",
+            vec![
+                course_material_plan.expected_course_material_kinds.join(", "),
+                course_material_plan.known_material_kinds.join(", "),
+                course_material_plan.unknown_material_kinds.join(", "),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec!["course_material_kind_plan_preview".to_string()],
+            step_active,
+        ),
+        course_literature_registry_step(
+            ScholarChatCourseLiteratureRegistryStepKind::LocalSourceAlignmentPlan,
+            "local_source_alignment_plan",
+            "Local source alignment plan",
+            "Plan local course-source alignment only; no source validation or registry creation occurs.",
+            vec![
+                course_material_plan.selected_local_source_ids.join(", "),
+                format!("selected_source_count={}", course_material_plan.selected_source_count),
+            ],
+            vec!["local_source_alignment_preview".to_string()],
+            step_active,
+        ),
+        course_literature_registry_step(
+            ScholarChatCourseLiteratureRegistryStepKind::CurriculumMetadataRequirementCheck,
+            "curriculum_metadata_requirement_check",
+            "Curriculum metadata requirement check",
+            "Review curriculum metadata requirements only; no scraping or connector calls occur.",
+            planned_course_metadata_requirements.clone(),
+            vec!["curriculum_alignment_preview".to_string()],
+            step_active,
+        ),
+        course_literature_registry_step(
+            ScholarChatCourseLiteratureRegistryStepKind::LocalLiteratureIndexAlignment,
+            "local_literature_index_alignment",
+            "Local literature index alignment",
+            "Align course planning with the local literature index preview only; no index creation or retrieval execution occurs.",
+            vec![
+                format!("local_literature_index_status={:?}", local_literature_index_status),
+                format!("search_plan_status={:?}", search_plan_status),
+            ],
+            planned_course_material_queries.clone(),
+            step_active,
+        ),
+        course_literature_registry_step(
+            ScholarChatCourseLiteratureRegistryStepKind::RetrievalReadinessCheck,
+            "retrieval_readiness_check",
+            "Retrieval readiness check",
+            "Check later retrieval readiness only; no retrieval is executed.",
+            vec![
+                format!("search_plan_status={:?}", search_plan_status),
+                format!("selected_source_count={}", selected_local_source_ids.len()),
+            ],
+            vec!["retrieval_readiness_preview".to_string()],
+            step_active,
+        ),
+        course_literature_registry_step(
+            ScholarChatCourseLiteratureRegistryStepKind::LearningPathAlignmentPlan,
+            "learning_path_alignment_plan",
+            "Learning path alignment plan",
+            "Plan learning-path alignment only; no answer generation or curriculum execution occurs.",
+            vec![
+                normalized_course_context.clone().unwrap_or_default(),
+                normalized_course_title.clone().unwrap_or_default(),
+                normalized_module_code.clone().unwrap_or_default(),
+                normalized_instructor.clone().unwrap_or_default(),
+                normalized_semester.clone().unwrap_or_default(),
+                format!("{:?}", query_intent),
+                recognized_concept.clone().unwrap_or_default(),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec!["learning_path_alignment_preview".to_string()],
+            step_active,
+        ),
+    ];
+
+    let mut blockers = local_literature_index_preview.blockers.clone();
+    let mut warnings = local_literature_index_preview.warnings.clone();
+    let mut next_required_actions = local_literature_index_preview.next_required_actions.clone();
+
+    if normalized_query.is_empty() {
+        push_unique_string(
+            &mut blockers,
+            "query_missing: Provide a course or scientific query to preview the course literature registry."
+                .to_string(),
+        );
+        push_unique_string(
+            &mut next_required_actions,
+            "Provide a course or scientific query to preview the course literature registry."
+                .to_string(),
+        );
+    }
+
+    if matches!(status, ScholarChatCourseLiteratureRegistryStatus::NeedsCourseContext) {
+        push_unique_string(
+            &mut warnings,
+            "No course context, module code, or course title was provided.".to_string(),
+        );
+        push_unique_string(
+            &mut next_required_actions,
+            "Provide course context, module code, or course title.".to_string(),
+        );
+    }
+
+    if matches!(status, ScholarChatCourseLiteratureRegistryStatus::NeedsLocalSources) {
+        push_unique_string(
+            &mut warnings,
+            "No local course sources selected.".to_string(),
+        );
+        push_unique_string(
+            &mut next_required_actions,
+            "Select or import local course material sources later before registry creation."
+                .to_string(),
+        );
+    }
+
+    if matches!(status, ScholarChatCourseLiteratureRegistryStatus::NeedsDisambiguation) {
+        push_unique_string(
+            &mut warnings,
+            "The local literature index preview still needs disambiguation before course registry planning can continue."
+                .to_string(),
+        );
+        push_unique_string(
+            &mut next_required_actions,
+            "Narrow the scientific concept before course registry planning can continue."
+                .to_string(),
+        );
+    }
+
+    if matches!(status, ScholarChatCourseLiteratureRegistryStatus::UnknownConcept) {
+        push_unique_string(
+            &mut warnings,
+            "The query still does not map to a known scientific concept for course registry planning."
+                .to_string(),
+        );
+        push_unique_string(
+            &mut next_required_actions,
+            "Add discipline and source registry mappings before course registry planning can continue."
+                .to_string(),
+        );
+    }
+
+    let unknown_expected_material_kinds = course_material_plan
+        .unknown_material_kinds
+        .iter()
+        .cloned()
+        .collect::<Vec<_>>();
+    if !unknown_expected_material_kinds.is_empty() {
+        push_unique_string(
+            &mut warnings,
+            format!(
+                "Unknown course material kinds are preserved as preview-only hints: {}.",
+                unknown_expected_material_kinds.join(", ")
+            ),
+        );
+    }
+
+    let summary = match status {
+        ScholarChatCourseLiteratureRegistryStatus::Blocked => {
+            "Course literature registry preview blocked because the query is blank or the local literature index preview is blocked.".to_string()
+        }
+        ScholarChatCourseLiteratureRegistryStatus::NeedsCourseContext => {
+            "Course literature registry preview needs course context, module code, or course title before later registry planning can continue.".to_string()
+        }
+        ScholarChatCourseLiteratureRegistryStatus::NeedsLocalSources => {
+            "Course literature registry preview is ready later but still needs local course sources before registry alignment can proceed.".to_string()
+        }
+        ScholarChatCourseLiteratureRegistryStatus::NeedsDisambiguation => {
+            "Course literature registry preview needs disambiguation before later course registry planning can continue.".to_string()
+        }
+        ScholarChatCourseLiteratureRegistryStatus::UnknownConcept => {
+            "Course literature registry preview found an unknown concept and can only outline later course registry planning steps.".to_string()
+        }
+        ScholarChatCourseLiteratureRegistryStatus::CourseRegistryPlanReady => {
+            "Course literature registry preview is ready later and only describes future course identity, course-material alignment, curriculum metadata, and learning-path planning.".to_string()
+        }
+    };
+
+    Ok(ScholarChatCourseLiteratureRegistryPreview {
+        status,
+        normalized_query,
+        normalized_course_context,
+        normalized_module_code,
+        normalized_course_title,
+        normalized_instructor,
+        normalized_semester,
+        normalized_context_tags,
+        selected_local_source_ids: selected_local_source_ids.clone(),
+        expected_course_material_kinds: expected_course_material_kinds.clone(),
+        local_literature_index_status,
+        search_plan_status,
+        query_understanding_status,
+        inferred_topic,
+        query_intent,
+        recognized_concept,
+        label,
+        course_registry_strategy,
+        course_identity,
+        course_material_plan,
+        curriculum_alignment_plan,
+        planned_course_metadata_requirements,
+        planned_course_material_queries,
+        planned_registry_steps,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        course_literature_registry_preview_only: true,
+        no_file_read: true,
+        no_pdf_extraction: true,
+        no_ocr: true,
+        no_chunking_run: true,
+        no_embedding_generation: true,
+        no_index_created: true,
         no_retrieval_execution: true,
         no_web_request: true,
         no_scraping: true,
@@ -8460,6 +8965,325 @@ fn scientific_local_literature_index_local_queries(
     }
 }
 
+fn normalize_course_optional_text(value: Option<String>) -> Option<String> {
+    value.map(|value| value.split_whitespace().collect::<Vec<_>>().join(" "))
+        .and_then(|value| if value.is_empty() { None } else { Some(value) })
+}
+
+fn normalize_course_identity_segment(value: &str) -> String {
+    normalize_scientific_tag_text(value)
+}
+
+fn normalize_course_material_kind_text(value: &str) -> String {
+    normalize_scientific_tag_text(value)
+}
+
+fn normalize_course_material_kinds(kinds: Option<Vec<String>>) -> Vec<String> {
+    let mut normalized = kinds
+        .unwrap_or_default()
+        .into_iter()
+        .map(|value| normalize_course_material_kind_text(&value))
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+    normalized
+}
+
+fn course_literature_registry_boundary_notes() -> Vec<String> {
+    vec![
+        "preview-only".to_string(),
+        "no file read".to_string(),
+        "no pdf extraction".to_string(),
+        "no ocr".to_string(),
+        "no chunking run".to_string(),
+        "no embeddings generated".to_string(),
+        "no index created".to_string(),
+        "no web request".to_string(),
+        "no scraping".to_string(),
+        "no connector call".to_string(),
+        "no artifact write".to_string(),
+        "no persistence".to_string(),
+        "no source import".to_string(),
+        "no model loading".to_string(),
+        "no runtime inference".to_string(),
+        "no llm call".to_string(),
+        "no answer generation".to_string(),
+        "no evidence pack creation".to_string(),
+    ]
+}
+
+fn course_literature_registry_step(
+    kind: ScholarChatCourseLiteratureRegistryStepKind,
+    id: &str,
+    label: &str,
+    description: &str,
+    planned_inputs: Vec<String>,
+    planned_outputs: Vec<String>,
+    active: bool,
+) -> ScholarChatCourseLiteratureRegistryStep {
+    ScholarChatCourseLiteratureRegistryStep {
+        kind,
+        id: id.to_string(),
+        label: label.to_string(),
+        description: description.to_string(),
+        planned_inputs,
+        planned_outputs,
+        active,
+        preview_only: true,
+        boundary_notes: course_literature_registry_boundary_notes(),
+    }
+}
+
+fn course_literature_registry_status(
+    local_status: &ScholarChatLocalLiteratureIndexStatus,
+    normalized_course_context: &Option<String>,
+    normalized_module_code: &Option<String>,
+    normalized_course_title: &Option<String>,
+    selected_local_source_ids: &[String],
+) -> ScholarChatCourseLiteratureRegistryStatus {
+    match local_status {
+        ScholarChatLocalLiteratureIndexStatus::Blocked => ScholarChatCourseLiteratureRegistryStatus::Blocked,
+        ScholarChatLocalLiteratureIndexStatus::NeedsDisambiguation => {
+            ScholarChatCourseLiteratureRegistryStatus::NeedsDisambiguation
+        }
+        ScholarChatLocalLiteratureIndexStatus::UnknownConcept => {
+            ScholarChatCourseLiteratureRegistryStatus::UnknownConcept
+        }
+        ScholarChatLocalLiteratureIndexStatus::NeedsLocalSources => {
+            if normalized_course_context.is_none()
+                && normalized_module_code.is_none()
+                && normalized_course_title.is_none()
+            {
+                ScholarChatCourseLiteratureRegistryStatus::NeedsCourseContext
+            } else {
+                ScholarChatCourseLiteratureRegistryStatus::NeedsLocalSources
+            }
+        }
+        ScholarChatLocalLiteratureIndexStatus::IndexPlanReady => {
+            if normalized_course_context.is_none()
+                && normalized_module_code.is_none()
+                && normalized_course_title.is_none()
+            {
+                ScholarChatCourseLiteratureRegistryStatus::NeedsCourseContext
+            } else if selected_local_source_ids.is_empty() {
+                ScholarChatCourseLiteratureRegistryStatus::NeedsLocalSources
+            } else {
+                ScholarChatCourseLiteratureRegistryStatus::CourseRegistryPlanReady
+            }
+        }
+    }
+}
+
+fn course_literature_registry_strategy(
+    status: &ScholarChatCourseLiteratureRegistryStatus,
+    normalized_module_code: &Option<String>,
+    selected_local_source_ids: &[String],
+) -> ScholarChatCourseLiteratureRegistryStrategy {
+    if matches!(status, ScholarChatCourseLiteratureRegistryStatus::Blocked) {
+        ScholarChatCourseLiteratureRegistryStrategy::Blocked
+    } else if normalized_module_code.is_some() {
+        ScholarChatCourseLiteratureRegistryStrategy::ModuleContextFirst
+    } else if !selected_local_source_ids.is_empty() {
+        ScholarChatCourseLiteratureRegistryStrategy::LocalSourceAlignmentFirst
+    } else {
+        ScholarChatCourseLiteratureRegistryStrategy::CourseMaterialAlignmentFirst
+    }
+}
+
+fn course_literature_registry_course_identity(
+    normalized_course_context: Option<String>,
+    normalized_module_code: Option<String>,
+    normalized_course_title: Option<String>,
+    normalized_instructor: Option<String>,
+    normalized_semester: Option<String>,
+) -> ScholarChatCourseIdentityPreview {
+    let identity_key_parts = [
+        normalized_module_code
+            .as_deref()
+            .map(normalize_course_identity_segment),
+        normalized_course_title
+            .as_deref()
+            .map(normalize_course_identity_segment),
+        normalized_semester
+            .as_deref()
+            .map(normalize_course_identity_segment),
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|value| !value.is_empty())
+    .collect::<Vec<_>>();
+    let identity_key = if identity_key_parts.is_empty() {
+        None
+    } else {
+        Some(identity_key_parts.join("::"))
+    };
+    let has_course_context = normalized_course_context.is_some();
+    let has_module_code = normalized_module_code.is_some();
+    let has_course_title = normalized_course_title.is_some();
+    let summary = if identity_key.is_some() {
+        "Course identity preview combines the module code, course title, and semester when available; course context and instructor remain descriptive hints only.".to_string()
+    } else {
+        "Course identity preview has no module code, course title, or semester yet; course context and instructor remain descriptive hints only.".to_string()
+    };
+
+    ScholarChatCourseIdentityPreview {
+        course_context: normalized_course_context,
+        module_code: normalized_module_code,
+        course_title: normalized_course_title,
+        instructor: normalized_instructor,
+        semester: normalized_semester,
+        identity_key,
+        has_course_context,
+        has_module_code,
+        has_course_title,
+        summary,
+    }
+}
+
+fn course_literature_registry_known_material_kinds() -> BTreeSet<&'static str> {
+    [
+        "syllabus",
+        "module_handbook",
+        "lecture_slide",
+        "seminar_reading",
+        "exercise_sheet",
+        "assignment",
+        "textbook_chapter",
+        "article",
+        "notes",
+        "exam_prep",
+        "unknown",
+    ]
+    .into_iter()
+    .collect()
+}
+
+fn course_literature_registry_course_material_plan(
+    selected_local_source_ids: Vec<String>,
+    expected_course_material_kinds: Vec<String>,
+) -> ScholarChatCourseMaterialPlan {
+    let known_material_kind_catalog = course_literature_registry_known_material_kinds();
+    let known_material_kinds = expected_course_material_kinds
+        .iter()
+        .filter(|kind| known_material_kind_catalog.contains(kind.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    let unknown_material_kinds = expected_course_material_kinds
+        .iter()
+        .filter(|kind| !known_material_kind_catalog.contains(kind.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    ScholarChatCourseMaterialPlan {
+        selected_source_count: selected_local_source_ids.len(),
+        selected_local_source_ids,
+        expected_course_material_kinds,
+        known_material_kinds,
+        unknown_material_kinds,
+        will_read_files: false,
+        will_import_sources: false,
+        will_create_registry: false,
+        summary: "Course material planning is preview-only; no files are read, no sources are imported, and no registry is created.".to_string(),
+    }
+}
+
+fn course_literature_registry_curriculum_alignment_plan(
+    normalized_course_context: &Option<String>,
+    normalized_module_code: &Option<String>,
+) -> ScholarChatCurriculumAlignmentPlan {
+    ScholarChatCurriculumAlignmentPlan {
+        requires_course_context: normalized_course_context.is_none()
+            && normalized_module_code.is_none(),
+        requires_module_metadata: normalized_module_code.is_none(),
+        requires_learning_objectives_later: true,
+        requires_prerequisites_later: true,
+        requires_session_or_week_mapping_later: true,
+        will_scrape_curriculum_sources: false,
+        will_call_connectors: false,
+        summary: "Curriculum alignment planning is preview-only; no TU/ULB scraping or connector call occurs, and later phases would still need learning objectives, prerequisites, and session or week mapping.".to_string(),
+    }
+}
+
+fn course_literature_registry_planned_course_metadata_requirements(
+    course_identity: &ScholarChatCourseIdentityPreview,
+    course_material_plan: &ScholarChatCourseMaterialPlan,
+) -> Vec<String> {
+    let mut requirements = vec![
+        "course_context_or_module_identity_required".to_string(),
+        "module_code_recommended".to_string(),
+        "course_title_recommended".to_string(),
+        "semester_recommended".to_string(),
+        "instructor_optional".to_string(),
+        "local_source_ids_required_for_course_material_alignment".to_string(),
+        "material_kind_required_when_available".to_string(),
+        "learning_objectives_required_later".to_string(),
+        "prerequisites_required_later".to_string(),
+        "session_or_week_mapping_required_later".to_string(),
+        "citation_metadata_required_for_scientific_course_materials".to_string(),
+        "no_curriculum_scraping_in_preview".to_string(),
+    ];
+    if !course_identity.has_course_context {
+        requirements.push("course_context_missing".to_string());
+    }
+    if !course_identity.has_module_code {
+        requirements.push("module_code_missing".to_string());
+    }
+    if !course_identity.has_course_title {
+        requirements.push("course_title_missing".to_string());
+    }
+    if course_material_plan.selected_local_source_ids.is_empty() {
+        requirements.push("local_sources_missing".to_string());
+    }
+    requirements
+}
+
+fn push_unique_string(items: &mut Vec<String>, value: String) {
+    if !items.contains(&value) {
+        items.push(value);
+    }
+}
+
+fn course_literature_registry_planned_course_material_queries(
+    normalized_query: &str,
+    normalized_module_code: &Option<String>,
+    normalized_course_title: &Option<String>,
+    base_queries: &[String],
+) -> Vec<String> {
+    let mut planned_queries = base_queries.to_vec();
+    if !normalized_query.is_empty() {
+        push_unique_string(
+            &mut planned_queries,
+            format!("{normalized_query} course materials"),
+        );
+        push_unique_string(
+            &mut planned_queries,
+            format!("{normalized_query} lecture notes"),
+        );
+        push_unique_string(
+            &mut planned_queries,
+            format!("{normalized_query} module context"),
+        );
+        push_unique_string(
+            &mut planned_queries,
+            format!("{normalized_query} exam preparation"),
+        );
+        if let Some(module_code) = normalized_module_code {
+            push_unique_string(
+                &mut planned_queries,
+                format!("{module_code} {normalized_query}"),
+            );
+        }
+        if let Some(course_title) = normalized_course_title {
+            push_unique_string(
+                &mut planned_queries,
+                format!("{course_title} {normalized_query}"),
+            );
+        }
+    }
+    planned_queries
+}
+
 #[derive(Clone)]
 struct ScientificDisciplineRegistryEntry {
     recognized_concept: &'static str,
@@ -9657,6 +10481,33 @@ fn main() {
             selected_local_source_ids: selected_local_source_ids
                 .map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
             expected_source_kinds: expected_source_kinds
+                .map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
+        }
+    }
+
+    fn course_literature_registry_request(
+        query: &str,
+        course_context: Option<&str>,
+        module_code: Option<&str>,
+        course_title: Option<&str>,
+        instructor: Option<&str>,
+        semester: Option<&str>,
+        context_tags: Option<Vec<&str>>,
+        selected_local_source_ids: Option<Vec<&str>>,
+        expected_course_material_kinds: Option<Vec<&str>>,
+    ) -> ScholarChatCourseLiteratureRegistryPreviewRequest {
+        ScholarChatCourseLiteratureRegistryPreviewRequest {
+            query: query.to_string(),
+            course_context: course_context.map(|value| value.to_string()),
+            module_code: module_code.map(|value| value.to_string()),
+            course_title: course_title.map(|value| value.to_string()),
+            instructor: instructor.map(|value| value.to_string()),
+            semester: semester.map(|value| value.to_string()),
+            context_tags: context_tags
+                .map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
+            selected_local_source_ids: selected_local_source_ids
+                .map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
+            expected_course_material_kinds: expected_course_material_kinds
                 .map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
         }
     }
@@ -14504,6 +15355,386 @@ fn main() {
     }
 
     #[test]
+    fn scholar_chat_course_literature_registry_blocks_blank_query_and_keeps_boundary_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_course_literature_registry_deterministic_and_path_free(
+            &temp,
+            course_literature_registry_request(
+                "   ",
+                Some("Psychology course"),
+                Some("PSY-201"),
+                Some("Signalentdeckung"),
+                Some("Prof. Example"),
+                Some("WS 2025"),
+                None,
+                None,
+                None,
+            ),
+        );
+        assert_eq!(
+            result.status,
+            ScholarChatCourseLiteratureRegistryStatus::Blocked
+        );
+        assert_eq!(
+            result.course_registry_strategy,
+            ScholarChatCourseLiteratureRegistryStrategy::Blocked
+        );
+        assert!(result.normalized_query.is_empty());
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("query_missing")));
+    }
+
+    #[test]
+    fn scholar_chat_course_literature_registry_maps_signalentdeckung_to_course_registry_plan_ready() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_course_literature_registry_deterministic_and_path_free(
+            &temp,
+            course_literature_registry_request(
+                "Signalentdeckung",
+                Some("  Psychology   course  "),
+                Some(" PSY-201 "),
+                Some(" Signalentdeckung "),
+                Some("  Prof. Example  "),
+                Some(" WS 2025 "),
+                Some(vec![" lecture-material ", "psychology", "lecture-material"]),
+                Some(vec!["  source-b  ", "source-a", "source-b"]),
+                Some(vec![" lecture-slide ", "seminar-reading", "unknown-kind", "module handbook", "lecture_slide"]),
+            ),
+        );
+        assert_eq!(
+            result.status,
+            ScholarChatCourseLiteratureRegistryStatus::CourseRegistryPlanReady
+        );
+        assert_eq!(
+            result.course_registry_strategy,
+            ScholarChatCourseLiteratureRegistryStrategy::ModuleContextFirst
+        );
+        assert_eq!(
+            result.local_literature_index_status,
+            ScholarChatLocalLiteratureIndexStatus::IndexPlanReady
+        );
+        assert_eq!(
+            result.search_plan_status,
+            ScholarChatScientificSearchPlanStatus::SearchPlanReady
+        );
+        assert_eq!(
+            result.query_understanding_status,
+            ScholarChatScientificQueryUnderstandingStatus::Understood
+        );
+        assert_eq!(result.normalized_query, "Signalentdeckung");
+        assert_eq!(result.normalized_course_context.as_deref(), Some("Psychology course"));
+        assert_eq!(result.normalized_module_code.as_deref(), Some("PSY-201"));
+        assert_eq!(result.normalized_course_title.as_deref(), Some("Signalentdeckung"));
+        assert_eq!(result.normalized_instructor.as_deref(), Some("Prof. Example"));
+        assert_eq!(result.normalized_semester.as_deref(), Some("WS 2025"));
+        assert_eq!(
+            result.selected_local_source_ids,
+            vec!["source-a".to_string(), "source-b".to_string()]
+        );
+        assert_eq!(
+            result.expected_course_material_kinds,
+            vec![
+                "lecture_slide".to_string(),
+                "module_handbook".to_string(),
+                "seminar_reading".to_string(),
+                "unknown_kind".to_string(),
+            ]
+        );
+        assert_eq!(
+            result.course_identity.identity_key.as_deref(),
+            Some("psy_201::signalentdeckung::ws_2025")
+        );
+        assert!(result.course_identity.has_course_context);
+        assert!(result.course_identity.has_module_code);
+        assert!(result.course_identity.has_course_title);
+        assert_eq!(
+            result.course_material_plan.known_material_kinds,
+            vec![
+                "lecture_slide".to_string(),
+                "module_handbook".to_string(),
+                "seminar_reading".to_string(),
+            ]
+        );
+        assert_eq!(
+            result.course_material_plan.unknown_material_kinds,
+            vec!["unknown_kind".to_string()]
+        );
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Unknown course material kinds")));
+        assert!(!result.course_material_plan.will_read_files);
+        assert!(!result.course_material_plan.will_import_sources);
+        assert!(!result.course_material_plan.will_create_registry);
+        assert!(!result.curriculum_alignment_plan.requires_course_context);
+        assert!(!result.curriculum_alignment_plan.requires_module_metadata);
+        assert!(result
+            .planned_course_metadata_requirements
+            .iter()
+            .any(|requirement| requirement == "module_code_recommended"));
+        assert!(result
+            .planned_course_metadata_requirements
+            .iter()
+            .any(|requirement| requirement == "local_source_ids_required_for_course_material_alignment"));
+        assert!(result
+            .planned_course_metadata_requirements
+            .iter()
+            .any(|requirement| requirement == "no_curriculum_scraping_in_preview"));
+        assert!(result
+            .planned_course_material_queries
+            .iter()
+            .any(|query| query == "Signalentdeckung course materials"));
+        assert!(result
+            .planned_course_material_queries
+            .iter()
+            .any(|query| query == "Signalentdeckung lecture notes"));
+        assert!(result
+            .planned_course_material_queries
+            .iter()
+            .any(|query| query == "PSY-201 Signalentdeckung"));
+        assert!(result
+            .planned_course_material_queries
+            .iter()
+            .any(|query| query == "Signalentdeckung exam preparation"));
+        assert_eq!(
+            result
+                .planned_registry_steps
+                .iter()
+                .map(|step| step.kind.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                ScholarChatCourseLiteratureRegistryStepKind::CourseIdentityReview,
+                ScholarChatCourseLiteratureRegistryStepKind::ModuleContextReview,
+                ScholarChatCourseLiteratureRegistryStepKind::CourseMaterialKindPlan,
+                ScholarChatCourseLiteratureRegistryStepKind::LocalSourceAlignmentPlan,
+                ScholarChatCourseLiteratureRegistryStepKind::CurriculumMetadataRequirementCheck,
+                ScholarChatCourseLiteratureRegistryStepKind::LocalLiteratureIndexAlignment,
+                ScholarChatCourseLiteratureRegistryStepKind::RetrievalReadinessCheck,
+                ScholarChatCourseLiteratureRegistryStepKind::LearningPathAlignmentPlan,
+            ]
+        );
+        assert!(result.summary.contains("ready later"));
+    }
+
+    #[test]
+    fn scholar_chat_course_literature_registry_reports_needs_course_context_when_identity_is_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_course_literature_registry_deterministic_and_path_free(
+            &temp,
+            course_literature_registry_request(
+                "Signalentdeckung",
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(vec!["psychology"]),
+                Some(vec!["source-a"]),
+                Some(vec!["lecture-slide"]),
+            ),
+        );
+        assert_eq!(
+            result.status,
+            ScholarChatCourseLiteratureRegistryStatus::NeedsCourseContext
+        );
+        assert_eq!(
+            result.course_registry_strategy,
+            ScholarChatCourseLiteratureRegistryStrategy::LocalSourceAlignmentFirst
+        );
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("No course context, module code, or course title")));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("Provide course context, module code, or course title")));
+    }
+
+    #[test]
+    fn scholar_chat_course_literature_registry_reports_needs_local_sources_when_identity_exists() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_course_literature_registry_deterministic_and_path_free(
+            &temp,
+            course_literature_registry_request(
+                "Hypothesentests",
+                Some("Statistics course"),
+                Some("STAT-101"),
+                Some("Hypothesentests"),
+                Some("Prof. Example"),
+                Some("WS 2025"),
+                Some(vec!["statistics"]),
+                None,
+                Some(vec!["exam-prep"]),
+            ),
+        );
+        assert_eq!(
+            result.status,
+            ScholarChatCourseLiteratureRegistryStatus::NeedsLocalSources
+        );
+        assert_eq!(
+            result.course_registry_strategy,
+            ScholarChatCourseLiteratureRegistryStrategy::ModuleContextFirst
+        );
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("No local course sources selected")));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("Select or import local course material sources later")));
+        assert_eq!(result.course_material_plan.selected_source_count, 0);
+        assert_eq!(result.course_material_plan.selected_local_source_ids, Vec::<String>::new());
+    }
+
+    #[test]
+    fn scholar_chat_course_literature_registry_marks_ambiguous_and_unknown_concepts() {
+        let temp = tempfile::tempdir().unwrap();
+        let ambiguous = assert_course_literature_registry_deterministic_and_path_free(
+            &temp,
+            course_literature_registry_request(
+                "ANOVA und Hypothesentests Vergleich",
+                Some("Statistics course"),
+                Some("STAT-101"),
+                Some("ANOVA"),
+                Some("Prof. Example"),
+                Some("WS 2025"),
+                Some(vec!["statistics"]),
+                Some(vec!["source-a"]),
+                Some(vec!["module-handbook"]),
+            ),
+        );
+        assert_eq!(
+            ambiguous.status,
+            ScholarChatCourseLiteratureRegistryStatus::NeedsDisambiguation
+        );
+
+        let unknown = assert_course_literature_registry_deterministic_and_path_free(
+            &temp,
+            course_literature_registry_request(
+                "Signal graph theory",
+                Some("Theory course"),
+                Some("THE-201"),
+                Some("Graph theory"),
+                Some("Prof. Example"),
+                Some("WS 2025"),
+                Some(vec!["theory"]),
+                Some(vec!["source-a"]),
+                Some(vec!["notes"]),
+            ),
+        );
+        assert_eq!(
+            unknown.status,
+            ScholarChatCourseLiteratureRegistryStatus::UnknownConcept
+        );
+    }
+
+    #[test]
+    fn scholar_chat_course_literature_registry_includes_course_metadata_requirements_and_planned_queries() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_course_literature_registry_deterministic_and_path_free(
+            &temp,
+            course_literature_registry_request(
+                "ANOVA",
+                Some("Statistics course"),
+                Some("STAT-201"),
+                Some("ANOVA seminar"),
+                Some("Prof. Example"),
+                Some("SS 2025"),
+                Some(vec!["statistics"]),
+                Some(vec!["source-a"]),
+                Some(vec!["module-handbook", "article", "exam_prep"]),
+            ),
+        );
+        assert_eq!(
+            result.status,
+            ScholarChatCourseLiteratureRegistryStatus::CourseRegistryPlanReady
+        );
+        assert!(result
+            .planned_course_metadata_requirements
+            .iter()
+            .any(|requirement| requirement == "course_context_or_module_identity_required"));
+        assert!(result
+            .planned_course_metadata_requirements
+            .iter()
+            .any(|requirement| requirement == "module_code_recommended"));
+        assert!(result
+            .planned_course_metadata_requirements
+            .iter()
+            .any(|requirement| requirement == "course_title_recommended"));
+        assert!(result
+            .planned_course_metadata_requirements
+            .iter()
+            .any(|requirement| requirement == "semester_recommended"));
+        assert!(result
+            .planned_course_metadata_requirements
+            .iter()
+            .any(|requirement| requirement == "instructor_optional"));
+        assert!(result
+            .planned_course_metadata_requirements
+            .iter()
+            .any(|requirement| requirement == "learning_objectives_required_later"));
+        assert!(result
+            .planned_course_material_queries
+            .iter()
+            .any(|query| query == "ANOVA course materials"));
+        assert!(result
+            .planned_course_material_queries
+            .iter()
+            .any(|query| query == "ANOVA lecture notes"));
+        assert!(result
+            .planned_course_material_queries
+            .iter()
+            .any(|query| query == "STAT-201 ANOVA"));
+        assert!(result
+            .planned_course_material_queries
+            .iter()
+            .any(|query| query == "ANOVA seminar ANOVA"));
+    }
+
+    #[test]
+    fn scholar_chat_course_literature_registry_body_does_not_call_execution_functions() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        let start = source
+            .find("pub fn preview_scholar_chat_course_literature_registry")
+            .unwrap();
+        let end = source[start..]
+            .find("pub fn preview_scholar_chat_answer_readiness")
+            .unwrap();
+        let body = &source[start..start + end];
+        assert_eq!(body.matches("preview_scholar_chat_local_literature_index").count(), 1);
+        assert!(body.contains("mode: Some(\"course\".to_string())"));
+        assert!(!body.contains("Command::new"));
+        assert!(!body.contains("reqwest::"));
+        assert!(!body.contains("ureq::"));
+        assert!(!body.contains("std::fs"));
+        assert!(!body.contains("fs::"));
+        assert!(!body.contains("CorpusAuthority::"));
+        assert!(!body.contains("SourceRegistry::"));
+        assert!(!body.contains("RetrievalService::new"));
+        assert!(!body.contains("extract_source"));
+        assert!(!body.contains("chunk_source"));
+        assert!(!body.contains("build_retrieval_index"));
+        assert!(!body.contains("preview_scholar_chat_retrieval"));
+        assert!(!body.contains("preview_scholar_chat_evidence_plan"));
+        assert!(!body.contains("preview_scholar_chat_prompt_pack"));
+        assert!(!body.contains("preview_scholar_chat_answer_readiness"));
+        assert!(!body.contains("preview_scholar_chat_draft_inference"));
+        assert!(!body.contains("preview_scholar_chat_grounded_answer"));
+        assert!(!body.contains("smoke_test_local_runtime_inference"));
+        assert!(!body.contains("run_llama_runtime_smoke_diagnostic"));
+        assert!(!body.contains("run_smoke_inference_probe"));
+        assert!(!body.contains("build_answer_draft"));
+        assert!(!body.contains("build_grounded_answer"));
+        assert!(!body.contains("build_final_answer"));
+        assert!(!body.contains("build_evidence_pack"));
+        assert!(!body.contains("export_answer_artifacts"));
+    }
+
+    #[test]
     fn scholar_chat_scientific_search_plan_body_does_not_call_execution_functions() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
         let start = source
@@ -14590,6 +15821,57 @@ fn main() {
             assert!(!debug.contains(temp_path.as_ref()));
             assert!(!json.contains(temp_path.as_ref()));
             assert_local_literature_index_boundary_fields(preview);
+        }
+        first
+    }
+
+    fn assert_course_literature_registry_boundary_fields(
+        preview: &ScholarChatCourseLiteratureRegistryPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.course_literature_registry_preview_only);
+        assert!(preview.no_file_read);
+        assert!(preview.no_pdf_extraction);
+        assert!(preview.no_ocr);
+        assert!(preview.no_chunking_run);
+        assert!(preview.no_embedding_generation);
+        assert!(preview.no_index_created);
+        assert!(preview.no_retrieval_execution);
+        assert!(preview.no_web_request);
+        assert!(preview.no_scraping);
+        assert!(preview.no_connector_call);
+        assert!(preview.no_source_import);
+        assert!(preview.no_local_file_indexing);
+        assert!(preview.no_model_loading);
+        assert!(preview.no_runtime_inference);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_persistence);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
+    fn assert_course_literature_registry_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatCourseLiteratureRegistryPreviewRequest,
+    ) -> ScholarChatCourseLiteratureRegistryPreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let first = preview_scholar_chat_course_literature_registry(temp.path(), request.clone())
+            .unwrap();
+        let second = preview_scholar_chat_course_literature_registry(temp.path(), request).unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        assert!(!temp.path().join(".aegis").exists());
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_course_literature_registry_boundary_fields(preview);
         }
         first
     }
