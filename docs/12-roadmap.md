@@ -1531,6 +1531,9 @@ It composes the discipline and source registry previews, stays preview-only, and
 Phase 99.1 adds a backend-only Scholar Chat Scientific Search Plan Preview.
 It composes scientific query understanding and plans local-first search, metadata search, query expansion, source-family routing, ranking, deduplication, and evidence requirements. It stays preview-only and does not add retrieval execution, web requests, scraping, connector implementation, source import, local file indexing, BM25/vector index, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
 
+Phase 99.2 adds a backend-only Scientific Preview DTO Review / Refactor Guard.
+It hardens DTO naming, serde/status consistency, deterministic output, boundary flags, path-free tests, and forbidden-call guards across the scientific preview stack. It adds no new features and does not expand behavior beyond preview-only guards.
+
 Do not implement:
 
 - web requests
