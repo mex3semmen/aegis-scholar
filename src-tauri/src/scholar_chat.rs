@@ -15937,6 +15937,241 @@ fn main() {
     }
 
     #[test]
+    fn scholar_chat_scientific_preview_command_surface_is_wired_once_in_lib_rs() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
+        let handler_start = source
+            .find(".invoke_handler(tauri::generate_handler![")
+            .unwrap();
+        let handler_end = source[handler_start..]
+            .find("        ])")
+            .unwrap();
+        let handler = &source[handler_start..handler_start + handler_end];
+
+        let expected: [(&str, &str, &str, &str); 6] = [
+            (
+                "preview_scholar_chat_scientific_discipline_registry",
+                "ScholarChatScientificDisciplineRegistryPreviewRequest",
+                "ScholarChatScientificDisciplineRegistryPreview",
+                "preview_scholar_chat_scientific_discipline_registry_impl(root, request)",
+            ),
+            (
+                "preview_scholar_chat_scientific_source_registry",
+                "ScholarChatScientificSourceRegistryPreviewRequest",
+                "ScholarChatScientificSourceRegistryPreview",
+                "preview_scholar_chat_scientific_source_registry_impl(root, request)",
+            ),
+            (
+                "preview_scholar_chat_scientific_query_understanding",
+                "ScholarChatScientificQueryUnderstandingPreviewRequest",
+                "ScholarChatScientificQueryUnderstandingPreview",
+                "preview_scholar_chat_scientific_query_understanding_impl(root, request)",
+            ),
+            (
+                "preview_scholar_chat_scientific_search_plan",
+                "ScholarChatScientificSearchPlanRequest",
+                "ScholarChatScientificSearchPlanPreview",
+                "preview_scholar_chat_scientific_search_plan_impl(root, request)",
+            ),
+            (
+                "preview_scholar_chat_local_literature_index",
+                "ScholarChatLocalLiteratureIndexRequest",
+                "ScholarChatLocalLiteratureIndexPreview",
+                "preview_scholar_chat_local_literature_index_impl(root, request)",
+            ),
+            (
+                "preview_scholar_chat_course_literature_registry",
+                "ScholarChatCourseLiteratureRegistryPreviewRequest",
+                "ScholarChatCourseLiteratureRegistryPreview",
+                "preview_scholar_chat_course_literature_registry_impl(root, request)",
+            ),
+        ];
+
+        let mut previous_position = None;
+        for (name, request_ty, response_ty, impl_call) in expected {
+            let wrapper_marker = format!("#[tauri::command]\nfn {name}(");
+            assert_eq!(source.matches(&wrapper_marker).count(), 1, "{name} wrapper should appear exactly once");
+            assert_eq!(source.matches(&format!("request: {request_ty}")).count(), 1, "{name} request type should appear exactly once");
+            assert_eq!(source.matches(&format!("Result<{response_ty}, String>")).count(), 1, "{name} response type should appear exactly once");
+            assert_eq!(source.matches(impl_call).count(), 1, "{name} should call its impl exactly once");
+            let wrapper_start = source.find(&wrapper_marker).unwrap();
+            let wrapper_end = source[wrapper_start + wrapper_marker.len()..]
+                .find("#[tauri::command]\nfn ")
+                .or_else(|| source[wrapper_start..].find("pub fn run()"))
+                .unwrap();
+            let wrapper_body = &source[wrapper_start..wrapper_start + wrapper_marker.len() + wrapper_end];
+            assert_eq!(wrapper_body.matches(impl_call).count(), 1, "{name} wrapper should delegate exactly once");
+            assert_eq!(wrapper_body.matches(".map_err(to_user_error)").count(), 1, "{name} wrapper should map errors exactly once");
+            let position = handler.find(name).unwrap();
+            if let Some(previous) = previous_position {
+                assert!(previous < position, "{name} should appear after the previous command in the handler");
+            }
+            previous_position = Some(position);
+            assert_eq!(handler.matches(name).count(), 1, "{name} should appear exactly once in the handler");
+        }
+
+        assert!(handler.contains("preview_scholar_chat_scientific_discipline_registry"));
+        assert!(handler.contains("preview_scholar_chat_scientific_source_registry"));
+        assert!(handler.contains("preview_scholar_chat_scientific_query_understanding"));
+        assert!(handler.contains("preview_scholar_chat_scientific_search_plan"));
+        assert!(handler.contains("preview_scholar_chat_local_literature_index"));
+        assert!(handler.contains("preview_scholar_chat_course_literature_registry"));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_preview_implementations_compose_the_expected_chain_without_execution() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        let bodies: [(&str, &str, &[&str], &[&str]); 6] = [
+            (
+                "pub fn preview_scholar_chat_scientific_discipline_registry",
+                "pub fn preview_scholar_chat_scientific_source_registry",
+                &[][..],
+                &[
+                    "Command::new",
+                    "reqwest::",
+                    "ureq::",
+                    "std::fs",
+                    "fs::",
+                    "build_answer_draft",
+                    "build_grounded_answer",
+                    "build_final_answer",
+                    "build_evidence_pack",
+                    "export_answer_artifacts",
+                ][..],
+            ),
+            (
+                "pub fn preview_scholar_chat_scientific_source_registry",
+                "pub fn preview_scholar_chat_scientific_query_understanding",
+                &["preview_scholar_chat_scientific_discipline_registry"][..],
+                &[
+                    "Command::new",
+                    "reqwest::",
+                    "ureq::",
+                    "std::fs",
+                    "fs::",
+                    "build_answer_draft",
+                    "build_grounded_answer",
+                    "build_final_answer",
+                    "build_evidence_pack",
+                    "export_answer_artifacts",
+                ][..],
+            ),
+            (
+                "pub fn preview_scholar_chat_scientific_query_understanding",
+                "pub fn preview_scholar_chat_scientific_search_plan",
+                &[
+                    "preview_scholar_chat_scientific_discipline_registry",
+                    "preview_scholar_chat_scientific_source_registry",
+                ][..],
+                &[
+                    "Command::new",
+                    "reqwest::",
+                    "ureq::",
+                    "std::fs",
+                    "fs::",
+                    "build_answer_draft",
+                    "build_grounded_answer",
+                    "build_final_answer",
+                    "build_evidence_pack",
+                    "export_answer_artifacts",
+                ][..],
+            ),
+            (
+                "pub fn preview_scholar_chat_scientific_search_plan",
+                "pub fn preview_scholar_chat_local_literature_index",
+                &["preview_scholar_chat_scientific_query_understanding"][..],
+                &[
+                    "Command::new",
+                    "reqwest::",
+                    "ureq::",
+                    "std::fs",
+                    "fs::",
+                    "build_answer_draft",
+                    "build_grounded_answer",
+                    "build_final_answer",
+                    "build_evidence_pack",
+                    "export_answer_artifacts",
+                ][..],
+            ),
+            (
+                "pub fn preview_scholar_chat_local_literature_index",
+                "pub fn preview_scholar_chat_course_literature_registry",
+                &["preview_scholar_chat_scientific_search_plan"][..],
+                &[
+                    "Command::new",
+                    "reqwest::",
+                    "ureq::",
+                    "std::fs",
+                    "fs::",
+                    "CorpusAuthority::",
+                    "SourceRegistry::",
+                    "RetrievalService::new",
+                    "extract_source",
+                    "chunk_source",
+                    "build_retrieval_index",
+                    "preview_scholar_chat_retrieval",
+                    "preview_scholar_chat_evidence_plan",
+                    "preview_scholar_chat_prompt_pack",
+                    "preview_scholar_chat_answer_readiness",
+                    "preview_scholar_chat_draft_inference",
+                    "preview_scholar_chat_grounded_answer",
+                    "smoke_test_local_runtime_inference",
+                    "run_llama_runtime_smoke_diagnostic",
+                    "run_smoke_inference_probe",
+                    "build_answer_draft",
+                    "build_grounded_answer",
+                    "build_final_answer",
+                    "build_evidence_pack",
+                    "export_answer_artifacts",
+                ][..],
+            ),
+            (
+                "pub fn preview_scholar_chat_course_literature_registry",
+                "pub fn preview_scholar_chat_answer_readiness",
+                &["preview_scholar_chat_local_literature_index", "mode: Some(\"course\".to_string())"][..],
+                &[
+                    "Command::new",
+                    "reqwest::",
+                    "ureq::",
+                    "std::fs",
+                    "fs::",
+                    "CorpusAuthority::",
+                    "SourceRegistry::",
+                    "RetrievalService::new",
+                    "extract_source",
+                    "chunk_source",
+                    "build_retrieval_index",
+                    "preview_scholar_chat_retrieval",
+                    "preview_scholar_chat_evidence_plan",
+                    "preview_scholar_chat_prompt_pack",
+                    "preview_scholar_chat_answer_readiness",
+                    "preview_scholar_chat_draft_inference",
+                    "preview_scholar_chat_grounded_answer",
+                    "smoke_test_local_runtime_inference",
+                    "run_llama_runtime_smoke_diagnostic",
+                    "run_smoke_inference_probe",
+                    "build_answer_draft",
+                    "build_grounded_answer",
+                    "build_final_answer",
+                    "build_evidence_pack",
+                    "export_answer_artifacts",
+                ][..],
+            ),
+        ];
+
+        for (start_marker, end_marker, required_once, forbidden) in bodies {
+            let start = source.find(start_marker).unwrap();
+            let end = source[start..].find(end_marker).unwrap();
+            let body = &source[start..start + end];
+            for required in required_once {
+                assert_eq!(body.matches(required).count(), 1, "{start_marker} should mention {required} exactly once");
+            }
+            for forbidden_call in forbidden {
+                assert!(!body.contains(forbidden_call), "{start_marker} should not call {forbidden_call}");
+            }
+        }
+    }
+
+    #[test]
     fn scholar_chat_grounded_answer_write_eligibility_rejects_empty_prompt() {
         let temp = tempfile::tempdir().unwrap();
         let result = preview_scholar_chat_grounded_answer_write_eligibility(

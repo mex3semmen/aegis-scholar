@@ -1557,6 +1557,8 @@ It is preview-only and does not add file reading, PDF extraction, OCR, chunking,
 Phase 100.1 adds a backend-only Course Literature Registry Preview that composes the Local Literature Index Preview with mode forced to course and only plans course identity, course-material kinds, local course-source alignment, curriculum metadata requirements, and learning-path alignment.
 It is preview-only and does not add file reading, PDF extraction, OCR, chunking, embedding generation, index creation, retrieval execution, web requests, scraping, connector implementation, source import, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
 
+Phase 100.2 is a backend-only scientific preview command-surface review. It hardens the existing Tauri wiring and source-string tests for the scientific preview DTO stack without changing behavior, and it keeps the preview-only boundary intact without adding file reading, PDF extraction, OCR, chunking, embedding generation, index creation, retrieval execution, web requests, scraping, connectors, source import, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
