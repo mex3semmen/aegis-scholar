@@ -21132,12 +21132,16 @@ fn main() {
             1
         );
         for forbidden_call in [
+            "preview_scholar_chat_local_literature_index",
+            "preview_scholar_chat_course_literature_registry",
             "preview_scholar_chat_retrieval",
             "preview_scholar_chat_evidence_plan",
             "preview_scholar_chat_prompt_pack",
             "preview_scholar_chat_answer_readiness",
             "preview_scholar_chat_draft_inference",
             "preview_scholar_chat_grounded_answer",
+            "preview_scholar_chat_grounded_answer_write_eligibility",
+            "preview_scholar_chat_grounded_answer_execution_plan",
             "Command::new",
             "reqwest::",
             "ureq::",
@@ -21307,9 +21311,9 @@ fn main() {
             assert_eq!(source.matches(&wrapper_marker).count(), 1, "{name} wrapper should appear exactly once");
             assert_eq!(source.matches(&format!("request: {request_ty}")).count(), 1, "{name} request type should appear exactly once");
             assert_eq!(source.matches(&format!("Result<{response_ty}, String>")).count(), 1, "{name} response type should appear exactly once");
-            assert_eq!(source.matches(impl_call).count(), 1, "{name} should call its impl exactly once");
-            assert!(imports.contains(request_ty), "{name} request type should be imported");
-            assert!(imports.contains(response_ty), "{name} response type should be imported");
+        assert_eq!(source.matches(impl_call).count(), 1, "{name} should call its impl exactly once");
+        assert!(imports.contains(request_ty), "{name} request type should be imported");
+        assert!(imports.contains(response_ty), "{name} response type should be imported");
             let wrapper_start = source.find(&wrapper_marker).unwrap();
             let wrapper_end = source[wrapper_start + wrapper_marker.len()..]
                 .find("#[tauri::command]\nfn ")
@@ -21324,6 +21328,30 @@ fn main() {
             }
             previous_position = Some(position);
             assert_eq!(handler.matches(name).count(), 1, "{name} should appear exactly once in the handler");
+        }
+
+        let scientific_evidence_pack_position =
+            handler.find("preview_scholar_chat_scientific_evidence_pack_plan").unwrap();
+        let psychology_source_connector_position =
+            handler.find("preview_scholar_chat_psychology_source_connector_plan").unwrap();
+        assert!(
+            psychology_source_connector_position < scientific_evidence_pack_position,
+            "scientific evidence pack preview should follow psychology source connector preview"
+        );
+        for runtime_command in [
+            "preview_scholar_chat_runtime_answer_pipeline_gate",
+            "preview_scholar_chat_runtime_diagnostic_bridge",
+            "preview_scholar_chat_runtime_diagnostic_result",
+            "run_llama_runtime_version_probe",
+            "run_llama_runtime_smoke_diagnostic",
+            "smoke_test_local_runtime_inference",
+        ] {
+            if let Some(runtime_position) = handler.find(runtime_command) {
+                assert!(
+                    scientific_evidence_pack_position < runtime_position,
+                    "{runtime_command} should appear after scientific evidence pack preview"
+                );
+            }
         }
 
         assert!(handler.contains("preview_scholar_chat_scientific_discipline_registry"));
@@ -22845,10 +22873,22 @@ fn main() {
             preview.status,
             ScholarChatScientificEvidencePackPlanStatus::Blocked
         );
+        assert_eq!(
+            preview.evidence_pack_strategy,
+            ScholarChatScientificEvidencePackStrategy::Blocked
+        );
         assert!(preview
             .blockers
             .iter()
             .any(|blocker| blocker.contains("query_missing")));
+        assert!(preview
+            .planned_evidence_items
+            .iter()
+            .all(|item| !item.enabled && item.preview_only));
+        assert!(preview
+            .planned_evidence_pack_steps
+            .iter()
+            .all(|step| !step.active && step.preview_only));
         assert!(preview
             .next_required_actions
             .iter()
@@ -22879,11 +22919,25 @@ fn main() {
             preview.status,
             ScholarChatScientificEvidencePackPlanStatus::EvidencePackPlanReady
         );
+        assert!(!matches!(
+            preview.status,
+            ScholarChatScientificEvidencePackPlanStatus::NeedsEvidenceSources
+        ));
         assert_eq!(
             preview.evidence_pack_strategy,
             ScholarChatScientificEvidencePackStrategy::MetadataCitationFirst
         );
         assert_eq!(preview.selected_source_count, 1);
+        assert!(
+            !preview
+                .source_family_evidence_plan
+                .selected_families
+                .is_empty()
+                || !preview
+                    .metadata_evidence_plan
+                    .preferred_metadata_sources
+                    .is_empty()
+        );
         assert!(preview
             .summary
             .contains("ready later and only describes"));
@@ -22923,6 +22977,9 @@ fn main() {
         assert!(preview
             .local_evidence_context_plan
             .requires_local_sources);
+        assert!(!preview.local_evidence_context_plan.will_read_files);
+        assert!(!preview.local_evidence_context_plan.will_index_files);
+        assert!(!preview.local_evidence_context_plan.will_run_retrieval);
         assert!(preview
             .local_evidence_context_plan
             .planned_local_source_roles
@@ -22989,6 +23046,11 @@ fn main() {
             ScholarChatScientificEvidencePackStrategy::PsychologySourceFamilyFirst
         );
         assert!(preview.selected_local_source_ids.is_empty());
+        assert!(!preview
+            .source_family_evidence_plan
+            .will_call_source_connectors);
+        assert!(!preview.source_family_evidence_plan.will_authenticate);
+        assert!(!preview.source_family_evidence_plan.will_bypass_paywall);
         assert!(preview
             .source_family_evidence_plan
             .selected_families
@@ -23185,6 +23247,10 @@ fn main() {
             preview.status,
             ScholarChatScientificEvidencePackPlanStatus::NeedsEvidenceSources
         ));
+        assert_eq!(
+            preview.status,
+            ScholarChatScientificEvidencePackPlanStatus::EvidencePackPlanReady
+        );
         assert!(
             !preview
                 .source_family_evidence_plan
@@ -23208,6 +23274,204 @@ fn main() {
                 .preferred_metadata_sources
                 .iter()
                 .all(|source| !source.is_empty())
+        );
+    }
+
+    #[test]
+    fn scholar_chat_scientific_evidence_pack_plan_preserves_dto_and_plan_invariants_for_valid_signalentdeckung_requests() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_scientific_evidence_pack_plan_deterministic_and_path_free(
+            &temp,
+            scientific_evidence_pack_plan_request(
+                "Signalentdeckung und Wahrnehmung",
+                Some("scientific_paper"),
+                Some("Psychology source connector preview"),
+                vec!["source-a", "source-b"],
+                vec!["openalex", "crossref"],
+                Some(vec!["openalex_psychology", "crossref_psychology"]),
+                Some(vec!["definition", "method", "limitation", "unknown_claim_scope"]),
+                Some("doi_first"),
+                true,
+                true,
+            ),
+        );
+
+        assert_eq!(
+            preview
+                .planned_evidence_items
+                .iter()
+                .map(|item| item.item_id.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                "local_source_context".to_string(),
+                "metadata_record".to_string(),
+                "source_family_record".to_string(),
+                "citation_attribution_record".to_string(),
+                "quality_review_record".to_string(),
+                "claim_coverage_record".to_string(),
+            ]
+        );
+        assert!(preview.planned_evidence_items.iter().all(|item| {
+            assert_scientific_evidence_pack_item_boundary_fields(item);
+            !item.source_channel.is_empty()
+                && !item.planned_inputs.is_empty()
+                && !item.planned_outputs.is_empty()
+                && !item.summary.contains(temp.path().to_string_lossy().as_ref())
+                && !item.summary.contains("http://")
+                && !item.summary.contains("https://")
+        }));
+        assert_eq!(
+            preview
+                .planned_evidence_pack_steps
+                .iter()
+                .map(|step| step.kind.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                ScholarChatScientificEvidencePackStepKind::PsychologyConnectorAlignment,
+                ScholarChatScientificEvidencePackStepKind::EvidenceScopeReview,
+                ScholarChatScientificEvidencePackStepKind::LocalEvidenceContextPlan,
+                ScholarChatScientificEvidencePackStepKind::MetadataEvidencePlan,
+                ScholarChatScientificEvidencePackStepKind::SourceFamilyEvidencePlan,
+                ScholarChatScientificEvidencePackStepKind::ClaimCoveragePlan,
+                ScholarChatScientificEvidencePackStepKind::CitationAttributionPlan,
+                ScholarChatScientificEvidencePackStepKind::EvidenceQualityPlan,
+                ScholarChatScientificEvidencePackStepKind::ComplianceBoundaryCheck,
+                ScholarChatScientificEvidencePackStepKind::DownstreamAnswerReadinessAlignment,
+            ]
+        );
+        assert!(preview
+            .planned_evidence_pack_steps
+            .iter()
+            .all(|step| step.preview_only && step.active));
+        for note in [
+            "preview-only",
+            "no web request",
+            "no HTTP client",
+            "no API key read",
+            "no environment read",
+            "no scraping",
+            "no authenticated library access",
+            "no paywall bypass",
+            "no connector call",
+            "no source import",
+            "no metadata record write",
+            "no file read",
+            "no retrieval execution",
+            "no Evidence Pack created",
+            "no artifact write",
+            "no persistence",
+        ] {
+            assert!(preview
+                .planned_evidence_pack_steps
+                .iter()
+                .all(|step| step.boundary_notes.iter().any(|value| value == note)));
+        }
+        assert_eq!(
+            preview.claim_coverage_plan.minimum_evidence_requirements,
+            vec![
+                "at_least_one_verified_metadata_record_later".to_string(),
+                "at_least_one_local_or_external_evidence_candidate_later".to_string(),
+                "citation_safe_identifier_required_later".to_string(),
+                "no_answer_without_evidence_pack_later".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.claim_coverage_plan.unsupported_claim_handling,
+            vec![
+                "mark_unsupported_claims_for_review_later".to_string(),
+                "do_not_fabricate_supporting_sources".to_string(),
+                "block_answer_generation_until_grounded_later".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.citation_attribution_plan.required_citation_fields,
+            vec![
+                "title".to_string(),
+                "authors".to_string(),
+                "publication_year".to_string(),
+                "provider_record_id".to_string(),
+                "source_family".to_string(),
+                "doi_or_stable_identifier".to_string(),
+                "access_or_metadata_provider_note_later".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.citation_attribution_plan.required_provider_attribution_notes,
+            vec![
+                "cite_metadata_provider_later".to_string(),
+                "preserve_provider_record_ids_later".to_string(),
+                "preserve_doi_and_source_url_later".to_string(),
+                "include_access_date_later".to_string(),
+                "no_fabricated_citations".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.citation_attribution_plan.citation_safety_notes,
+            vec![
+                "metadata_preview_not_citation_evidence".to_string(),
+                "full_citation_requires_verified_metadata_later".to_string(),
+                "no_generated_sources".to_string(),
+                "no_answer_without_evidence_pack_later".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.evidence_quality_plan.quality_signals,
+            vec![
+                "stable_identifier_present_later".to_string(),
+                "peer_review_or_scholarly_status_later".to_string(),
+                "methodology_match_later".to_string(),
+                "topic_area_match_later".to_string(),
+                "population_match_later_when_available".to_string(),
+                "source_family_relevance_later".to_string(),
+                "local_course_relevance_later_when_course_mode".to_string(),
+            ]
+        );
+        assert!(preview.evidence_compliance_plan.external_metadata_only);
+        assert!(preview.evidence_compliance_plan.no_fulltext_download);
+        assert!(preview.evidence_compliance_plan.no_scraping);
+        assert!(preview
+            .evidence_compliance_plan
+            .no_authenticated_library_access);
+        assert!(preview.evidence_compliance_plan.no_paywall_bypass);
+        assert!(preview.evidence_compliance_plan.respects_rate_limits_later);
+        assert!(preview.evidence_compliance_plan.requires_terms_review_later);
+        assert!(!preview
+            .evidence_compliance_plan
+            .will_call_external_services);
+        assert!(!preview.evidence_compliance_plan.will_write_metadata);
+        assert!(!preview.evidence_compliance_plan.will_create_evidence_pack);
+        assert_eq!(
+            preview
+                .source_family_evidence_plan
+                .supported_families,
+            vec![
+                "openalex_psychology".to_string(),
+                "crossref_psychology".to_string(),
+                "pubmed_psychology".to_string(),
+                "eric_psychology".to_string(),
+                "apa_psycnet_discovery".to_string(),
+                "local_course_literature".to_string(),
+            ]
+        );
+        assert!(!preview
+            .source_family_evidence_plan
+            .will_call_source_connectors);
+        assert!(!preview.source_family_evidence_plan.will_authenticate);
+        assert!(!preview.source_family_evidence_plan.will_bypass_paywall);
+        assert!(!preview.citation_attribution_plan.will_emit_citations_now);
+        assert!(
+            preview
+                .metadata_evidence_plan
+                .required_identifier_fields
+                .iter()
+                .any(|field| field == "doi")
+        );
+        assert!(
+            preview
+                .metadata_evidence_plan
+                .preferred_metadata_sources
+                .iter()
+                .any(|source| source == "openalex" || source == "crossref")
         );
     }
 
