@@ -19319,6 +19319,60 @@ fn main() {
     }
 
     #[test]
+    fn scholar_chat_psychology_source_connector_plan_body_composes_metadata_connector_preview_and_forbids_execution_calls() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        let start = source
+            .find("pub fn preview_scholar_chat_psychology_source_connector_plan")
+            .unwrap();
+        let end = source[start..]
+            .find("pub fn preview_scholar_chat_answer_readiness")
+            .unwrap();
+        let body = &source[start..start + end];
+        assert_eq!(
+            body.matches("preview_scholar_chat_metadata_connector_plan").count(),
+            1
+        );
+        for forbidden_call in [
+            "preview_scholar_chat_local_literature_index",
+            "preview_scholar_chat_course_literature_registry",
+            "preview_scholar_chat_retrieval",
+            "preview_scholar_chat_evidence_plan",
+            "preview_scholar_chat_prompt_pack",
+            "preview_scholar_chat_answer_readiness",
+            "preview_scholar_chat_draft_inference",
+            "preview_scholar_chat_grounded_answer",
+            "Command::new",
+            "reqwest::",
+            "ureq::",
+            "std::fs",
+            "fs::",
+            "std::env",
+            "env::",
+            "http://",
+            "https://",
+            "CorpusAuthority::",
+            "SourceRegistry::",
+            "RetrievalService::new",
+            "extract_source",
+            "chunk_source",
+            "build_retrieval_index",
+            "smoke_test_local_runtime_inference",
+            "run_llama_runtime_smoke_diagnostic",
+            "run_smoke_inference_probe",
+            "build_answer_draft",
+            "build_grounded_answer",
+            "build_final_answer",
+            "build_evidence_pack",
+            "export_answer_artifacts",
+        ] {
+            assert!(
+                !body.contains(forbidden_call),
+                "psychology source connector preview body should not contain {forbidden_call}"
+            );
+        }
+    }
+
+    #[test]
     fn scholar_chat_scientific_query_understanding_body_does_not_call_execution_functions() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
         let start = source
@@ -20532,6 +20586,436 @@ fn main() {
                         .iter()
                         .any(|note| note.contains("http://"))
             }));
+    }
+
+    #[test]
+    fn scholar_chat_psychology_source_connector_plan_uses_expected_family_strategies_for_supported_modes() {
+        let temp = tempfile::tempdir().unwrap();
+        let full_supported_families = vec![
+            "openalex_psychology".to_string(),
+            "crossref_psychology".to_string(),
+            "pubmed_psychology".to_string(),
+            "eric_psychology".to_string(),
+            "apa_psycnet_discovery".to_string(),
+            "local_course_literature".to_string(),
+        ];
+        let cases = [
+            (
+                "default scholar_chat",
+                ScholarChatPsychologySourceConnectorPlanRequest {
+                    query: "Signalentdeckung und Wahrnehmung".to_string(),
+                    mode: None,
+                    course_context: Some("Psychology source connector preview".to_string()),
+                    context_tags: Some(vec!["psychology".to_string(), "signal_detection".to_string()]),
+                    selected_local_source_ids: Some(vec!["source-a".to_string()]),
+                    expected_source_kinds: Some(vec!["pdf".to_string()]),
+                    preferred_metadata_sources: Some(vec!["openalex".to_string(), "crossref".to_string()]),
+                    preferred_psychology_source_families: None,
+                    methodology_hints: None,
+                    population_hints: None,
+                    topic_area_hints: None,
+                    max_results_per_source: Some(25),
+                    require_open_access: Some(true),
+                    require_doi: Some(true),
+                    year_from: Some(2020),
+                    year_to: Some(2024),
+                },
+                ScholarChatPsychologySourceConnectorPlanStatus::SourceConnectorPlanReady,
+                ScholarChatPsychologySourceFamilyStrategy::PsychologyMetadataBalanced,
+                vec![
+                    "crossref_psychology".to_string(),
+                    "openalex_psychology".to_string(),
+                    "pubmed_psychology".to_string(),
+                ],
+            ),
+            (
+                "scientific_paper",
+                ScholarChatPsychologySourceConnectorPlanRequest {
+                    query: "Signalentdeckung und Wahrnehmung".to_string(),
+                    mode: Some("scientific_paper".to_string()),
+                    course_context: Some("Psychology source connector preview".to_string()),
+                    context_tags: Some(vec!["psychology".to_string(), "signal_detection".to_string()]),
+                    selected_local_source_ids: Some(vec!["source-a".to_string()]),
+                    expected_source_kinds: Some(vec!["pdf".to_string()]),
+                    preferred_metadata_sources: Some(vec!["openalex".to_string(), "crossref".to_string()]),
+                    preferred_psychology_source_families: None,
+                    methodology_hints: None,
+                    population_hints: None,
+                    topic_area_hints: None,
+                    max_results_per_source: Some(25),
+                    require_open_access: Some(true),
+                    require_doi: Some(true),
+                    year_from: Some(2020),
+                    year_to: Some(2024),
+                },
+                ScholarChatPsychologySourceConnectorPlanStatus::SourceConnectorPlanReady,
+                ScholarChatPsychologySourceFamilyStrategy::ScholarlyIndexFirst,
+                vec![
+                    "apa_psycnet_discovery".to_string(),
+                    "crossref_psychology".to_string(),
+                    "openalex_psychology".to_string(),
+                    "pubmed_psychology".to_string(),
+                ],
+            ),
+            (
+                "course",
+                ScholarChatPsychologySourceConnectorPlanRequest {
+                    query: "Signalentdeckung und Wahrnehmung".to_string(),
+                    mode: Some("course".to_string()),
+                    course_context: Some("Psychology source connector preview".to_string()),
+                    context_tags: Some(vec!["psychology".to_string(), "signal_detection".to_string()]),
+                    selected_local_source_ids: Some(vec!["source-a".to_string()]),
+                    expected_source_kinds: Some(vec!["pdf".to_string()]),
+                    preferred_metadata_sources: Some(vec!["openalex".to_string(), "crossref".to_string()]),
+                    preferred_psychology_source_families: None,
+                    methodology_hints: None,
+                    population_hints: None,
+                    topic_area_hints: None,
+                    max_results_per_source: Some(25),
+                    require_open_access: Some(true),
+                    require_doi: Some(true),
+                    year_from: Some(2020),
+                    year_to: Some(2024),
+                },
+                ScholarChatPsychologySourceConnectorPlanStatus::SourceConnectorPlanReady,
+                ScholarChatPsychologySourceFamilyStrategy::CourseLiteratureFirst,
+                vec![
+                    "crossref_psychology".to_string(),
+                    "eric_psychology".to_string(),
+                    "local_course_literature".to_string(),
+                    "openalex_psychology".to_string(),
+                ],
+            ),
+            (
+                "openalex/crossref only",
+                ScholarChatPsychologySourceConnectorPlanRequest {
+                    query: "Signalentdeckung und Wahrnehmung".to_string(),
+                    mode: Some("scientific_paper".to_string()),
+                    course_context: Some("Psychology source connector preview".to_string()),
+                    context_tags: Some(vec!["psychology".to_string(), "signal_detection".to_string()]),
+                    selected_local_source_ids: Some(vec!["source-a".to_string()]),
+                    expected_source_kinds: Some(vec!["pdf".to_string()]),
+                    preferred_metadata_sources: Some(vec!["openalex".to_string(), "crossref".to_string()]),
+                    preferred_psychology_source_families: Some(vec![
+                        "openalex_psychology".to_string(),
+                        "crossref_psychology".to_string(),
+                    ]),
+                    methodology_hints: None,
+                    population_hints: None,
+                    topic_area_hints: None,
+                    max_results_per_source: Some(25),
+                    require_open_access: Some(true),
+                    require_doi: Some(true),
+                    year_from: Some(2020),
+                    year_to: Some(2024),
+                },
+                ScholarChatPsychologySourceConnectorPlanStatus::SourceConnectorPlanReady,
+                ScholarChatPsychologySourceFamilyStrategy::OpenMetadataFirst,
+                vec![
+                    "crossref_psychology".to_string(),
+                    "openalex_psychology".to_string(),
+                ],
+            ),
+        ];
+
+        for (label, request, expected_status, expected_strategy, expected_selected_families) in cases {
+            let preview = assert_psychology_source_connector_plan_deterministic_and_path_free(
+                &temp,
+                request,
+            );
+            assert_eq!(preview.status, expected_status, "{label}");
+            assert_eq!(preview.source_family_strategy, expected_strategy, "{label}");
+            assert!(!preview
+                .source_family_selection_plan
+                .needs_source_family_selection, "{label}");
+            assert_eq!(
+                preview.source_family_selection_plan.supported_families,
+                full_supported_families,
+                "{label}"
+            );
+            assert_eq!(
+                preview.source_family_selection_plan.selected_families,
+                expected_selected_families,
+                "{label}"
+            );
+        }
+    }
+
+    #[test]
+    fn scholar_chat_psychology_source_connector_plan_emits_supported_family_plans_and_routing_invariants() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_psychology_source_connector_plan_deterministic_and_path_free(
+            &temp,
+            ScholarChatPsychologySourceConnectorPlanRequest {
+                query: "Signalentdeckung und Wahrnehmung".to_string(),
+                mode: Some("scientific_paper".to_string()),
+                course_context: Some("Psychology source connector preview".to_string()),
+                context_tags: Some(vec!["psychology".to_string(), "signal_detection".to_string()]),
+                selected_local_source_ids: Some(vec!["source-a".to_string()]),
+                expected_source_kinds: Some(vec!["pdf".to_string()]),
+                preferred_metadata_sources: Some(vec!["openalex".to_string(), "crossref".to_string()]),
+                preferred_psychology_source_families: None,
+                methodology_hints: Some(vec!["psychophysics".to_string()]),
+                population_hints: Some(vec!["clinical_population".to_string()]),
+                topic_area_hints: Some(vec!["perception".to_string()]),
+                max_results_per_source: Some(25),
+                require_open_access: Some(true),
+                require_doi: Some(true),
+                year_from: Some(2020),
+                year_to: Some(2024),
+            },
+        );
+
+        assert_eq!(
+            preview.status,
+            ScholarChatPsychologySourceConnectorPlanStatus::SourceConnectorPlanReady
+        );
+        assert_eq!(
+            preview.source_family_strategy,
+            ScholarChatPsychologySourceFamilyStrategy::ScholarlyIndexFirst
+        );
+        assert_eq!(
+            preview.source_family_selection_plan.supported_families,
+            vec![
+                "openalex_psychology".to_string(),
+                "crossref_psychology".to_string(),
+                "pubmed_psychology".to_string(),
+                "eric_psychology".to_string(),
+                "apa_psycnet_discovery".to_string(),
+                "local_course_literature".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.source_family_selection_plan.selected_families,
+            vec![
+                "apa_psycnet_discovery".to_string(),
+                "crossref_psychology".to_string(),
+                "openalex_psychology".to_string(),
+                "pubmed_psychology".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.psychology_source_family_plans.iter().map(|plan| plan.family_id.clone()).collect::<Vec<_>>(),
+            vec![
+                "openalex_psychology".to_string(),
+                "crossref_psychology".to_string(),
+                "pubmed_psychology".to_string(),
+                "eric_psychology".to_string(),
+                "apa_psycnet_discovery".to_string(),
+                "local_course_literature".to_string(),
+            ]
+        );
+        assert!(preview
+            .psychology_source_family_plans
+            .iter()
+            .all(|plan| !plan.will_call_connector
+                && !plan.will_fetch_url
+                && !plan.will_scrape
+                && !plan.will_authenticate
+                && !plan.will_bypass_paywall
+                && !plan.will_write_metadata));
+
+        let openalex = preview
+            .psychology_source_family_plans
+            .iter()
+            .find(|plan| plan.family_id == "openalex_psychology")
+            .unwrap();
+        assert_eq!(openalex.connector_kind, "open_metadata");
+        assert!(openalex
+            .planned_metadata_dependencies
+            .iter()
+            .any(|value| value == "openalex"));
+        let crossref = preview
+            .psychology_source_family_plans
+            .iter()
+            .find(|plan| plan.family_id == "crossref_psychology")
+            .unwrap();
+        assert_eq!(crossref.connector_kind, "doi_metadata");
+        assert!(crossref
+            .planned_metadata_dependencies
+            .iter()
+            .any(|value| value == "crossref"));
+        let pubmed = preview
+            .psychology_source_family_plans
+            .iter()
+            .find(|plan| plan.family_id == "pubmed_psychology")
+            .unwrap();
+        assert_eq!(pubmed.connector_kind, "biomedical_metadata");
+        assert!(pubmed
+            .expected_result_types
+            .iter()
+            .any(|value| value == "biomedical_citation_metadata"));
+        assert!(pubmed
+            .access_boundary_notes
+            .iter()
+            .any(|value| value.contains("no web request")));
+        let eric = preview
+            .psychology_source_family_plans
+            .iter()
+            .find(|plan| plan.family_id == "eric_psychology")
+            .unwrap();
+        assert_eq!(eric.connector_kind, "education_psychology_metadata");
+        assert!(eric
+            .expected_result_types
+            .iter()
+            .any(|value| value == "education_research_metadata"));
+        let apa = preview
+            .psychology_source_family_plans
+            .iter()
+            .find(|plan| plan.family_id == "apa_psycnet_discovery")
+            .unwrap();
+        assert_eq!(apa.connector_kind, "subscription_discovery_boundary");
+        assert!(apa
+            .access_boundary_notes
+            .iter()
+            .any(|value| value.contains("no automated authenticated scraping")));
+        assert!(apa
+            .access_boundary_notes
+            .iter()
+            .any(|value| value.contains("no paywall bypass")));
+        assert!(apa.summary.contains("later manual or institutional access review"));
+        let local_course = preview
+            .psychology_source_family_plans
+            .iter()
+            .find(|plan| plan.family_id == "local_course_literature")
+            .unwrap();
+        assert_eq!(local_course.connector_kind, "local_course_context");
+        assert!(local_course
+            .access_boundary_notes
+            .iter()
+            .any(|value| value.contains("no file read")));
+        assert!(local_course
+            .access_boundary_notes
+            .iter()
+            .any(|value| value.contains("no local index access")));
+
+        assert!(preview
+            .methodology_routing_plan
+            .inferred_methodology_routes
+            .iter()
+            .any(|value| value == "psychophysics"));
+        assert!(preview
+            .methodology_routing_plan
+            .inferred_methodology_routes
+            .iter()
+            .any(|value| value == "signal_detection"));
+        assert!(preview
+            .topic_area_routing_plan
+            .inferred_topic_areas
+            .iter()
+            .any(|value| value == "cognitive_psychology"));
+        assert!(preview
+            .topic_area_routing_plan
+            .inferred_topic_areas
+            .iter()
+            .any(|value| value == "perception"));
+        assert!(preview
+            .topic_area_routing_plan
+            .inferred_topic_areas
+            .iter()
+            .any(|value| value == "psychophysics"));
+        assert!(preview
+            .population_routing_plan
+            .ethics_or_safety_notes
+            .iter()
+            .any(|value| value == "clinical_population_requires_later_ethics_or_safety_review"));
+        for requirement in [
+            "peer_review_or_scholarly_source_status_later",
+            "DOI_or_stable_metadata_identifier_later",
+            "publication_year_later",
+            "authorship_later",
+            "journal_or_container_later",
+            "methodology_metadata_later",
+            "population_metadata_later_when_available",
+            "no_fabricated_citations",
+            "evidence_pack_required_before_answering",
+        ] {
+            assert!(preview
+                .evidence_requirements_plan
+                .evidence_requirements
+                .iter()
+                .any(|value| value == requirement));
+        }
+        for field in [
+            "doi",
+            "title",
+            "authors",
+            "publication_year",
+            "source_family",
+            "journal_or_container",
+            "abstract_or_summary_when_legally_available",
+            "methodology_keywords",
+            "population_keywords",
+            "open_access_status",
+            "provider_record_id",
+        ] {
+            assert!(preview
+                .evidence_requirements_plan
+                .preferred_metadata_fields
+                .iter()
+                .any(|value| value == field));
+        }
+        assert!(preview.compliance_plan.external_metadata_only);
+        assert!(preview.compliance_plan.no_fulltext_download);
+        assert!(preview.compliance_plan.no_scraping);
+        assert!(preview.compliance_plan.no_authenticated_library_access);
+        assert!(preview.compliance_plan.no_paywall_bypass);
+        assert!(preview.compliance_plan.respects_rate_limits_later);
+        assert!(preview.compliance_plan.requires_terms_review_later);
+        assert!(preview
+            .compliance_plan
+            .requires_institutional_access_review_later);
+        assert!(!preview.compliance_plan.will_call_external_services);
+        assert!(!preview.compliance_plan.will_write_metadata);
+        let step_kinds = preview
+            .planned_source_connector_steps
+            .iter()
+            .map(|step| step.kind.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            step_kinds,
+            vec![
+                ScholarChatPsychologySourceConnectorStepKind::MetadataConnectorAlignment,
+                ScholarChatPsychologySourceConnectorStepKind::PsychologyScopeClassification,
+                ScholarChatPsychologySourceConnectorStepKind::SourceFamilySelection,
+                ScholarChatPsychologySourceConnectorStepKind::OpenalexPsychologyPlan,
+                ScholarChatPsychologySourceConnectorStepKind::CrossrefPsychologyPlan,
+                ScholarChatPsychologySourceConnectorStepKind::PubmedPsychologyPlan,
+                ScholarChatPsychologySourceConnectorStepKind::EricPsychologyPlan,
+                ScholarChatPsychologySourceConnectorStepKind::ApaPsycnetDiscoveryPlan,
+                ScholarChatPsychologySourceConnectorStepKind::LocalCourseLiteraturePlan,
+                ScholarChatPsychologySourceConnectorStepKind::MethodologyRouting,
+                ScholarChatPsychologySourceConnectorStepKind::PopulationRouting,
+                ScholarChatPsychologySourceConnectorStepKind::TopicAreaRouting,
+                ScholarChatPsychologySourceConnectorStepKind::EvidenceRequirementMapping,
+                ScholarChatPsychologySourceConnectorStepKind::ComplianceBoundaryCheck,
+                ScholarChatPsychologySourceConnectorStepKind::DownstreamEvidencePackAlignment,
+            ]
+        );
+        assert!(preview
+            .planned_source_connector_steps
+            .iter()
+            .all(|step| step.preview_only && step.active));
+        for note in [
+            "preview-only",
+            "no web request",
+            "no HTTP client",
+            "no API key read",
+            "no environment read",
+            "no scraping",
+            "no authenticated library access",
+            "no paywall bypass",
+            "no connector call",
+            "no source import",
+            "no metadata record write",
+            "no artifact write",
+            "no persistence",
+        ] {
+            assert!(preview
+                .planned_source_connector_steps
+                .iter()
+                .all(|step| step.boundary_notes.iter().any(|value| value == note)));
+        }
     }
 
     #[test]
