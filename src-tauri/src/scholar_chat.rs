@@ -490,6 +490,148 @@ pub struct ScholarChatScientificSearchPlanPreview {
     pub no_audit_write: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatLocalLiteratureIndexStatus {
+    Blocked,
+    IndexPlanReady,
+    NeedsLocalSources,
+    NeedsDisambiguation,
+    UnknownConcept,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatLocalLiteratureIndexStrategy {
+    ScholarChatLocalFirst,
+    ScientificPaperCitationLocalFirst,
+    CourseMaterialLocalFirst,
+    Blocked,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatLocalLiteratureIngestionReadiness {
+    Blocked,
+    PreviewReady,
+    NeedsSources,
+    NeedsDisambiguation,
+    UnknownConceptMappingNeeded,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatLocalLiteratureIndexStepKind {
+    SourceSelectionReview,
+    MetadataRequirementCheck,
+    CorpusManifestPlan,
+    ExtractionPlan,
+    ChunkingPolicyPlan,
+    LexicalIndexPlan,
+    VectorIndexPlan,
+    DeduplicationPlan,
+    RetrievalReadinessCheck,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatLocalLiteratureCorpusPlan {
+    pub selected_source_count: usize,
+    pub selected_local_source_ids: Vec<String>,
+    pub expected_source_kinds: Vec<String>,
+    pub corpus_manifest_would_be_required: bool,
+    pub will_create_corpus: bool,
+    pub will_read_files: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatLocalLiteratureIndexArtifactPlan {
+    pub planned_artifact_ids: Vec<String>,
+    pub planned_artifact_descriptions: Vec<String>,
+    pub will_create_artifacts: bool,
+    pub will_create_bm25_index: bool,
+    pub will_create_vector_index: bool,
+    pub will_generate_embeddings: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatLocalLiteratureIndexStep {
+    pub kind: ScholarChatLocalLiteratureIndexStepKind,
+    pub id: String,
+    pub label: String,
+    pub description: String,
+    pub planned_inputs: Vec<String>,
+    pub planned_outputs: Vec<String>,
+    pub active: bool,
+    pub preview_only: bool,
+    pub boundary_notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatLocalLiteratureIndexRequest {
+    pub query: String,
+    pub mode: Option<String>,
+    pub course_context: Option<String>,
+    pub context_tags: Option<Vec<String>>,
+    pub selected_local_source_ids: Option<Vec<String>>,
+    pub expected_source_kinds: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatLocalLiteratureIndexPreview {
+    pub status: ScholarChatLocalLiteratureIndexStatus,
+    pub normalized_query: String,
+    pub normalized_mode: String,
+    pub normalized_context_tags: Vec<String>,
+    pub selected_local_source_ids: Vec<String>,
+    pub expected_source_kinds: Vec<String>,
+    pub search_plan_status: ScholarChatScientificSearchPlanStatus,
+    pub query_understanding_status: ScholarChatScientificQueryUnderstandingStatus,
+    pub inferred_topic: Option<String>,
+    pub query_intent: ScholarChatScientificQueryIntent,
+    pub recognized_concept: Option<String>,
+    pub label: Option<String>,
+    pub local_index_strategy: ScholarChatLocalLiteratureIndexStrategy,
+    pub local_corpus_plan: ScholarChatLocalLiteratureCorpusPlan,
+    pub index_artifact_plan: ScholarChatLocalLiteratureIndexArtifactPlan,
+    pub ingestion_readiness: ScholarChatLocalLiteratureIngestionReadiness,
+    pub planned_index_fields: Vec<String>,
+    pub planned_chunking_policy: Vec<String>,
+    pub planned_metadata_requirements: Vec<String>,
+    pub planned_local_queries: Vec<String>,
+    pub planned_index_steps: Vec<ScholarChatLocalLiteratureIndexStep>,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub local_literature_index_preview_only: bool,
+    pub no_file_read: bool,
+    pub no_pdf_extraction: bool,
+    pub no_ocr: bool,
+    pub no_chunking_run: bool,
+    pub no_embedding_generation: bool,
+    pub no_index_created: bool,
+    pub no_bm25_index: bool,
+    pub no_vector_index: bool,
+    pub no_retrieval_execution: bool,
+    pub no_web_request: bool,
+    pub no_scraping: bool,
+    pub no_connector_call: bool,
+    pub no_source_import: bool,
+    pub no_local_file_indexing: bool,
+    pub no_model_loading: bool,
+    pub no_runtime_inference: bool,
+    pub no_llm_call: bool,
+    pub no_answer_generated: bool,
+    pub no_evidence_pack_created: bool,
+    pub no_artifact_write: bool,
+    pub no_persistence: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScholarChatRetrievalCandidate {
     pub source_id: String,
@@ -2787,6 +2929,341 @@ pub fn preview_scholar_chat_scientific_search_plan(
         no_local_file_indexing: true,
         no_bm25_index: true,
         no_vector_index: true,
+        no_model_loading: true,
+        no_runtime_inference: true,
+        no_llm_call: true,
+        no_answer_generated: true,
+        no_evidence_pack_created: true,
+        no_artifact_write: true,
+        no_persistence: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+    })
+}
+
+pub fn preview_scholar_chat_local_literature_index(
+    root: impl Into<PathBuf>,
+    request: ScholarChatLocalLiteratureIndexRequest,
+) -> AegisResult<ScholarChatLocalLiteratureIndexPreview> {
+    let root = root.into();
+    let normalized_query = normalize_scientific_query_text(&request.query);
+    let normalized_mode = normalize_scientific_mode(request.mode.clone());
+    let normalized_context_tags = normalize_scientific_context_tags(request.context_tags.clone());
+    let selected_local_source_ids = normalize_scientific_selected_local_source_ids(
+        request.selected_local_source_ids.clone(),
+    );
+    let expected_source_kinds = normalize_scientific_expected_source_kinds(
+        request.expected_source_kinds.clone(),
+    );
+    let search_plan_preview = preview_scholar_chat_scientific_search_plan(
+        &root,
+        ScholarChatScientificSearchPlanRequest {
+            query: normalized_query.clone(),
+            mode: Some(normalized_mode.clone()),
+            course_context: request.course_context.clone(),
+            context_tags: Some(normalized_context_tags.clone()),
+            selected_local_source_ids: Some(selected_local_source_ids.clone()),
+        },
+    )?;
+    let search_plan_status = search_plan_preview.status.clone();
+    let query_understanding_status = search_plan_preview.query_understanding_status.clone();
+    let inferred_topic = search_plan_preview.inferred_topic.clone();
+    let query_intent = search_plan_preview.query_intent.clone();
+    let recognized_concept = search_plan_preview.recognized_concept.clone();
+    let label = search_plan_preview.label.clone();
+    let planned_local_queries = scientific_local_literature_index_local_queries(
+        &search_plan_preview.planned_local_queries,
+        &normalized_query,
+    );
+    let planned_metadata_requirements = scientific_local_literature_index_metadata_requirements(
+        &normalized_mode,
+    );
+    let status = if normalized_query.is_empty() {
+        ScholarChatLocalLiteratureIndexStatus::Blocked
+    } else {
+        scientific_local_literature_index_status(&search_plan_status, &selected_local_source_ids)
+    };
+    let local_index_strategy =
+        scientific_local_literature_index_strategy(&status, &normalized_mode);
+    let local_corpus_plan = ScholarChatLocalLiteratureCorpusPlan {
+        selected_source_count: selected_local_source_ids.len(),
+        selected_local_source_ids: if matches!(status, ScholarChatLocalLiteratureIndexStatus::Blocked) {
+            Vec::new()
+        } else {
+            selected_local_source_ids.clone()
+        },
+        expected_source_kinds: expected_source_kinds.clone(),
+        corpus_manifest_would_be_required: !selected_local_source_ids.is_empty(),
+        will_create_corpus: false,
+        will_read_files: false,
+        summary: if selected_local_source_ids.is_empty() {
+            "Local corpus planning is preview-only; no local files are read and no corpus is created.".to_string()
+        } else {
+            "Local corpus planning is preview-only; selected local sources are noted without reading files or creating a corpus."
+                .to_string()
+        },
+    };
+    let index_artifact_plan = ScholarChatLocalLiteratureIndexArtifactPlan {
+        planned_artifact_ids: scientific_local_literature_index_planned_artifact_ids(),
+        planned_artifact_descriptions: scientific_local_literature_index_planned_artifact_descriptions(),
+        will_create_artifacts: false,
+        will_create_bm25_index: false,
+        will_create_vector_index: false,
+        will_generate_embeddings: false,
+        summary: "Index artifacts are preview-only; no artifacts, BM25 index, vector index, or embeddings are created."
+            .to_string(),
+    };
+    let ingestion_readiness = match status {
+        ScholarChatLocalLiteratureIndexStatus::Blocked => {
+            ScholarChatLocalLiteratureIngestionReadiness::Blocked
+        }
+        ScholarChatLocalLiteratureIndexStatus::NeedsDisambiguation => {
+            ScholarChatLocalLiteratureIngestionReadiness::NeedsDisambiguation
+        }
+        ScholarChatLocalLiteratureIndexStatus::UnknownConcept => {
+            ScholarChatLocalLiteratureIngestionReadiness::UnknownConceptMappingNeeded
+        }
+        ScholarChatLocalLiteratureIndexStatus::NeedsLocalSources => {
+            ScholarChatLocalLiteratureIngestionReadiness::NeedsSources
+        }
+        ScholarChatLocalLiteratureIndexStatus::IndexPlanReady => {
+            ScholarChatLocalLiteratureIngestionReadiness::PreviewReady
+        }
+    };
+    let _source_registry_status = search_plan_preview.source_registry_status.clone();
+    let mut blockers = Vec::new();
+    let mut warnings = search_plan_preview.warnings.clone();
+    let mut next_required_actions = search_plan_preview.next_required_actions.clone();
+
+    if normalized_query.is_empty() {
+        blockers.push("query_missing: Provide a scientific query to preview the local literature index.".to_string());
+        next_required_actions.push("Provide a scientific query to preview the local literature index.".to_string());
+    }
+
+    if matches!(status, ScholarChatLocalLiteratureIndexStatus::NeedsLocalSources) {
+        warnings.push("No local sources selected.".to_string());
+        next_required_actions.push(
+            "Select or import local sources in a later phase before indexing."
+                .to_string(),
+        );
+    }
+
+    if matches!(status, ScholarChatLocalLiteratureIndexStatus::NeedsDisambiguation) {
+        warnings.push(
+            "The local literature index preview still needs disambiguation before later corpus planning can narrow the route."
+                .to_string(),
+        );
+        next_required_actions.push(
+            "Narrow the scientific concept before local index planning can continue."
+                .to_string(),
+        );
+    }
+
+    if matches!(status, ScholarChatLocalLiteratureIndexStatus::UnknownConcept) {
+        warnings.push(
+            "The query still does not map to a known scientific concept for local literature indexing."
+                .to_string(),
+        );
+        next_required_actions.push(
+            "Add discipline and source registry mappings before local index planning can continue."
+                .to_string(),
+        );
+    }
+
+    let known_source_kinds = [
+        "pdf",
+        "markdown",
+        "text",
+        "course_material",
+        "lecture_slide",
+        "article",
+        "book_chapter",
+        "notes",
+        "unknown",
+    ]
+    .iter()
+    .copied()
+    .collect::<BTreeSet<_>>();
+    let unknown_expected_source_kinds = expected_source_kinds
+        .iter()
+        .filter(|kind| !known_source_kinds.contains(kind.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !unknown_expected_source_kinds.is_empty() {
+        warnings.push(format!(
+            "Unknown expected source kinds are preserved as preview-only hints: {}.",
+            unknown_expected_source_kinds.join(", ")
+        ));
+    }
+
+    let planned_index_fields = scientific_local_literature_index_planned_index_fields();
+    let planned_chunking_policy = scientific_local_literature_index_chunking_policy();
+    let local_corpus_plan_inputs = local_corpus_plan
+        .selected_local_source_ids
+        .iter()
+        .chain(local_corpus_plan.expected_source_kinds.iter())
+        .cloned()
+        .collect::<Vec<_>>();
+    let local_corpus_plan_outputs = vec![
+        "local_corpus_manifest_preview".to_string(),
+        "local_literature_metadata_map_preview".to_string(),
+    ];
+    let step_active = !matches!(status, ScholarChatLocalLiteratureIndexStatus::Blocked);
+    let planned_index_steps = vec![
+        scientific_local_literature_index_step(
+            ScholarChatLocalLiteratureIndexStepKind::SourceSelectionReview,
+            "source_selection_review",
+            "Source selection review",
+            "Review local source selections only; no filesystem validation is performed.",
+            vec![
+                normalized_query.clone(),
+                normalized_mode.clone(),
+            ],
+            local_corpus_plan.selected_local_source_ids.clone(),
+            step_active,
+        ),
+        scientific_local_literature_index_step(
+            ScholarChatLocalLiteratureIndexStepKind::MetadataRequirementCheck,
+            "metadata_requirement_check",
+            "Metadata requirement check",
+            "Review metadata requirements only; no files are read and no corpus metadata is written.",
+            vec![normalized_mode.clone()],
+            planned_metadata_requirements.clone(),
+            step_active,
+        ),
+        scientific_local_literature_index_step(
+            ScholarChatLocalLiteratureIndexStepKind::CorpusManifestPlan,
+            "corpus_manifest_plan",
+            "Corpus manifest plan",
+            "Plan a future corpus manifest only; no corpus is created and no files are read.",
+            local_corpus_plan_inputs.clone(),
+            local_corpus_plan_outputs.clone(),
+            step_active,
+        ),
+        scientific_local_literature_index_step(
+            ScholarChatLocalLiteratureIndexStepKind::ExtractionPlan,
+            "extraction_plan",
+            "Extraction plan",
+            "Plan future extraction only; no PDF extraction or file reading occurs.",
+            local_corpus_plan.selected_local_source_ids.clone(),
+            vec!["extracted_text_preview".to_string()],
+            step_active,
+        ),
+        scientific_local_literature_index_step(
+            ScholarChatLocalLiteratureIndexStepKind::ChunkingPolicyPlan,
+            "chunking_policy_plan",
+            "Chunking policy plan",
+            "Plan future chunking only; no chunking run, OCR, or extraction occurs.",
+            planned_chunking_policy.clone(),
+            vec!["chunk_policy_preview".to_string()],
+            step_active,
+        ),
+        scientific_local_literature_index_step(
+            ScholarChatLocalLiteratureIndexStepKind::LexicalIndexPlan,
+            "lexical_index_plan",
+            "Lexical index plan",
+            "Plan future lexical indexing only; no BM25 index is created.",
+            planned_local_queries.clone(),
+            vec!["bm25_index_plan_preview".to_string()],
+            step_active,
+        ),
+        scientific_local_literature_index_step(
+            ScholarChatLocalLiteratureIndexStepKind::VectorIndexPlan,
+            "vector_index_plan",
+            "Vector index plan",
+            "Plan future vector indexing only; no embeddings are generated.",
+            planned_local_queries.clone(),
+            vec!["vector_index_plan_preview".to_string()],
+            step_active,
+        ),
+        scientific_local_literature_index_step(
+            ScholarChatLocalLiteratureIndexStepKind::DeduplicationPlan,
+            "deduplication_plan",
+            "Deduplication plan",
+            "Plan future deduplication only; no retrieval or evidence artifacts are created.",
+            planned_metadata_requirements.clone(),
+            vec!["deduplicated_literature_preview".to_string()],
+            step_active,
+        ),
+        scientific_local_literature_index_step(
+            ScholarChatLocalLiteratureIndexStepKind::RetrievalReadinessCheck,
+            "retrieval_readiness_check",
+            "Retrieval readiness check",
+            "Plan later retrieval readiness only; no retrieval is executed.",
+            vec![
+                "search_plan_ready".to_string(),
+                format!("search_plan_status={:?}", search_plan_status),
+            ],
+            vec!["retrieval_readiness_preview".to_string()],
+            step_active,
+        ),
+    ];
+
+    let summary = match status {
+        ScholarChatLocalLiteratureIndexStatus::Blocked => {
+            "Local literature index preview blocked because the query is blank or a prerequisite is missing."
+                .to_string()
+        }
+        ScholarChatLocalLiteratureIndexStatus::NeedsDisambiguation => {
+            "Local literature index preview needs disambiguation before later corpus planning can continue."
+                .to_string()
+        }
+        ScholarChatLocalLiteratureIndexStatus::UnknownConcept => {
+            "Local literature index preview found an unknown concept and can only outline later indexing steps."
+                .to_string()
+        }
+        ScholarChatLocalLiteratureIndexStatus::NeedsLocalSources => {
+            "Local literature index preview is ready later but still needs local sources before indexing can proceed."
+                .to_string()
+        }
+        ScholarChatLocalLiteratureIndexStatus::IndexPlanReady => {
+            "Local literature index preview is ready later and only describes future corpus, chunking, and indexing planning."
+                .to_string()
+        }
+    };
+
+    Ok(ScholarChatLocalLiteratureIndexPreview {
+        status,
+        normalized_query,
+        normalized_mode,
+        normalized_context_tags,
+        selected_local_source_ids: local_corpus_plan.selected_local_source_ids.clone(),
+        expected_source_kinds,
+        search_plan_status,
+        query_understanding_status,
+        inferred_topic,
+        query_intent,
+        recognized_concept,
+        label,
+        local_index_strategy,
+        local_corpus_plan,
+        index_artifact_plan,
+        ingestion_readiness,
+        planned_index_fields,
+        planned_chunking_policy,
+        planned_metadata_requirements,
+        planned_local_queries,
+        planned_index_steps,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        local_literature_index_preview_only: true,
+        no_file_read: true,
+        no_pdf_extraction: true,
+        no_ocr: true,
+        no_chunking_run: true,
+        no_embedding_generation: true,
+        no_index_created: true,
+        no_bm25_index: true,
+        no_vector_index: true,
+        no_retrieval_execution: true,
+        no_web_request: true,
+        no_scraping: true,
+        no_connector_call: true,
+        no_source_import: true,
+        no_local_file_indexing: true,
         no_model_loading: true,
         no_runtime_inference: true,
         no_llm_call: true,
@@ -7809,6 +8286,180 @@ fn scientific_search_plan_steps(
     ]
 }
 
+fn normalize_scientific_expected_source_kinds(kinds: Option<Vec<String>>) -> Vec<String> {
+    let mut normalized = kinds
+        .unwrap_or_default()
+        .into_iter()
+        .map(|value| normalize_scientific_tag_text(&value))
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+    normalized
+}
+
+fn scientific_local_literature_index_status(
+    search_plan_status: &ScholarChatScientificSearchPlanStatus,
+    selected_local_source_ids: &[String],
+) -> ScholarChatLocalLiteratureIndexStatus {
+    match search_plan_status {
+        ScholarChatScientificSearchPlanStatus::Blocked => ScholarChatLocalLiteratureIndexStatus::Blocked,
+        ScholarChatScientificSearchPlanStatus::NeedsDisambiguation => {
+            ScholarChatLocalLiteratureIndexStatus::NeedsDisambiguation
+        }
+        ScholarChatScientificSearchPlanStatus::UnknownConcept => {
+            ScholarChatLocalLiteratureIndexStatus::UnknownConcept
+        }
+        ScholarChatScientificSearchPlanStatus::SearchPlanReady => {
+            if selected_local_source_ids.is_empty() {
+                ScholarChatLocalLiteratureIndexStatus::NeedsLocalSources
+            } else {
+                ScholarChatLocalLiteratureIndexStatus::IndexPlanReady
+            }
+        }
+    }
+}
+
+fn scientific_local_literature_index_strategy(
+    status: &ScholarChatLocalLiteratureIndexStatus,
+    normalized_mode: &str,
+) -> ScholarChatLocalLiteratureIndexStrategy {
+    if matches!(status, ScholarChatLocalLiteratureIndexStatus::Blocked) {
+        ScholarChatLocalLiteratureIndexStrategy::Blocked
+    } else if normalized_mode == "course" {
+        ScholarChatLocalLiteratureIndexStrategy::CourseMaterialLocalFirst
+    } else if normalized_mode == "scientific_paper" {
+        ScholarChatLocalLiteratureIndexStrategy::ScientificPaperCitationLocalFirst
+    } else {
+        ScholarChatLocalLiteratureIndexStrategy::ScholarChatLocalFirst
+    }
+}
+
+fn scientific_local_literature_index_boundary_notes() -> Vec<String> {
+    vec![
+        "preview-only".to_string(),
+        "no file read".to_string(),
+        "no pdf extraction".to_string(),
+        "no ocr".to_string(),
+        "no chunking run".to_string(),
+        "no embeddings generated".to_string(),
+        "no index created".to_string(),
+        "no artifact write".to_string(),
+    ]
+}
+
+fn scientific_local_literature_index_step(
+    kind: ScholarChatLocalLiteratureIndexStepKind,
+    id: &str,
+    label: &str,
+    description: &str,
+    planned_inputs: Vec<String>,
+    planned_outputs: Vec<String>,
+    active: bool,
+) -> ScholarChatLocalLiteratureIndexStep {
+    ScholarChatLocalLiteratureIndexStep {
+        kind,
+        id: id.to_string(),
+        label: label.to_string(),
+        description: description.to_string(),
+        planned_inputs,
+        planned_outputs,
+        active,
+        preview_only: true,
+        boundary_notes: scientific_local_literature_index_boundary_notes(),
+    }
+}
+
+fn scientific_local_literature_index_planned_artifact_ids() -> Vec<String> {
+    vec![
+        "local_corpus_manifest_preview".to_string(),
+        "local_literature_metadata_map_preview".to_string(),
+        "lexical_index_plan_preview".to_string(),
+        "vector_index_plan_preview".to_string(),
+        "retrieval_readiness_plan_preview".to_string(),
+    ]
+}
+
+fn scientific_local_literature_index_planned_artifact_descriptions() -> Vec<String> {
+    vec![
+        "Future local corpus manifest preview describing selected sources without reading files.".to_string(),
+        "Future local literature metadata map preview describing source metadata only.".to_string(),
+        "Future lexical index plan preview describing BM25-ready planning without index creation.".to_string(),
+        "Future vector index plan preview describing embedding-ready planning without generation.".to_string(),
+        "Future retrieval readiness plan preview describing later retrieval compatibility only.".to_string(),
+    ]
+}
+
+fn scientific_local_literature_index_planned_index_fields() -> Vec<String> {
+    vec![
+        "source_id".to_string(),
+        "source_kind".to_string(),
+        "title".to_string(),
+        "authors".to_string(),
+        "year".to_string(),
+        "doi".to_string(),
+        "url_or_locator".to_string(),
+        "course_context".to_string(),
+        "discipline_concept".to_string(),
+        "chunk_id_later".to_string(),
+        "page_or_section_later".to_string(),
+        "language_hint".to_string(),
+        "local_query_terms".to_string(),
+    ]
+}
+
+fn scientific_local_literature_index_chunking_policy() -> Vec<String> {
+    vec![
+        "chunking_not_run_in_preview".to_string(),
+        "later_pdf_text_extraction_required_before_chunking".to_string(),
+        "later_markdown_section_chunking_candidate".to_string(),
+        "later_course_slide_section_chunking_candidate".to_string(),
+        "preserve_page_or_section_locator_later".to_string(),
+        "keep_citation_metadata_attached_to_chunks_later".to_string(),
+    ]
+}
+
+fn scientific_local_literature_index_metadata_requirements(
+    normalized_mode: &str,
+) -> Vec<String> {
+    let mut requirements = vec![
+        "source_id_required".to_string(),
+        "source_kind_required".to_string(),
+        "title_required_when_available".to_string(),
+        "authors_required_when_available".to_string(),
+        "year_required_when_available".to_string(),
+        "doi_or_stable_locator_preferred".to_string(),
+        "local_file_locator_required_later_but_not_read_now".to_string(),
+    ];
+    if normalized_mode == "course" {
+        push_unique_text(&mut requirements, "course_context_required_for_course_mode");
+    }
+    if normalized_mode == "scientific_paper" {
+        push_unique_text(
+            &mut requirements,
+            "citation_metadata_required_for_scientific_paper",
+        );
+    }
+    if normalized_mode == "scholar_chat" {
+        push_unique_text(
+            &mut requirements,
+            "local_evidence_metadata_required_for_scholar_chat",
+        );
+    }
+    requirements
+}
+
+fn scientific_local_literature_index_local_queries(
+    planned_local_queries: &[String],
+    normalized_query: &str,
+) -> Vec<String> {
+    if planned_local_queries.is_empty() && !normalized_query.is_empty() {
+        vec![normalized_query.to_string()]
+    } else {
+        planned_local_queries.to_vec()
+    }
+}
+
 #[derive(Clone)]
 struct ScientificDisciplineRegistryEntry {
     recognized_concept: &'static str,
@@ -8989,6 +9640,27 @@ fn main() {
         }
     }
 
+    fn scientific_local_literature_index_request(
+        query: &str,
+        mode: Option<&str>,
+        course_context: Option<&str>,
+        context_tags: Option<Vec<&str>>,
+        selected_local_source_ids: Option<Vec<&str>>,
+        expected_source_kinds: Option<Vec<&str>>,
+    ) -> ScholarChatLocalLiteratureIndexRequest {
+        ScholarChatLocalLiteratureIndexRequest {
+            query: query.to_string(),
+            mode: mode.map(|value| value.to_string()),
+            course_context: course_context.map(|value| value.to_string()),
+            context_tags: context_tags
+                .map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
+            selected_local_source_ids: selected_local_source_ids
+                .map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
+            expected_source_kinds: expected_source_kinds
+                .map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
+        }
+    }
+
     fn runtime_diagnostic_result_request(
         bridge_preview_request: ScholarChatRuntimeDiagnosticBridgePreviewRequest,
         diagnostic_preview: LocalRuntimeSmokeDiagnosticPreview,
@@ -9552,6 +10224,39 @@ fn main() {
             assert_scientific_search_plan_boundary_fields(preview);
         }
         first
+    }
+
+    fn assert_scientific_search_plan_body_does_not_call_execution_functions() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        let start = source
+            .find("pub fn preview_scholar_chat_scientific_search_plan")
+            .unwrap();
+        let end = source[start..]
+            .find("pub fn preview_scholar_chat_answer_readiness")
+            .unwrap();
+        let body = &source[start..start + end];
+        assert_eq!(body.matches("preview_scholar_chat_scientific_query_understanding").count(), 1);
+        assert!(!body.contains("Command::new"));
+        assert!(!body.contains("reqwest::"));
+        assert!(!body.contains("ureq::"));
+        assert!(!body.contains("std::fs"));
+        assert!(!body.contains("fs::"));
+        assert!(!body.contains("RetrievalService::new"));
+        assert!(!body.contains("SourceRegistry::"));
+        assert!(!body.contains("preview_scholar_chat_retrieval"));
+        assert!(!body.contains("preview_scholar_chat_evidence_plan"));
+        assert!(!body.contains("preview_scholar_chat_prompt_pack"));
+        assert!(!body.contains("preview_scholar_chat_answer_readiness"));
+        assert!(!body.contains("preview_scholar_chat_draft_inference"));
+        assert!(!body.contains("preview_scholar_chat_grounded_answer"));
+        assert!(!body.contains("smoke_test_local_runtime_inference"));
+        assert!(!body.contains("run_llama_runtime_smoke_diagnostic"));
+        assert!(!body.contains("run_smoke_inference_probe"));
+        assert!(!body.contains("build_answer_draft"));
+        assert!(!body.contains("build_grounded_answer"));
+        assert!(!body.contains("build_final_answer"));
+        assert!(!body.contains("build_evidence_pack"));
+        assert!(!body.contains("export_answer_artifacts"));
     }
 
     fn assert_runtime_diagnostic_bridge_boundary_fields(
@@ -13515,6 +14220,290 @@ fn main() {
     }
 
     #[test]
+    fn scholar_chat_local_literature_index_blocks_blank_query_and_keeps_boundary_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_local_literature_index_deterministic_and_path_free(
+            &temp,
+            scientific_local_literature_index_request("   ", None, None, None, None, None),
+        );
+        assert_eq!(result.status, ScholarChatLocalLiteratureIndexStatus::Blocked);
+        assert_eq!(result.local_index_strategy, ScholarChatLocalLiteratureIndexStrategy::Blocked);
+        assert_eq!(result.search_plan_status, ScholarChatScientificSearchPlanStatus::Blocked);
+        assert_eq!(result.query_understanding_status, ScholarChatScientificQueryUnderstandingStatus::Blocked);
+        assert!(result.normalized_query.is_empty());
+        assert!(result.selected_local_source_ids.is_empty());
+        assert!(result.expected_source_kinds.is_empty());
+        assert!(result.blockers.iter().any(|blocker| blocker.contains("query_missing")));
+    }
+
+    #[test]
+    fn scholar_chat_local_literature_index_maps_signalentdeckung_to_scholar_chat_local_first() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_local_literature_index_deterministic_and_path_free(
+            &temp,
+            scientific_local_literature_index_request(
+                "Signalentdeckung",
+                None,
+                None,
+                None,
+                Some(vec!["  source-b  ", "source-a", "source-b"]),
+                Some(vec![" pdf ", "markdown"]),
+            ),
+        );
+        assert_eq!(result.status, ScholarChatLocalLiteratureIndexStatus::IndexPlanReady);
+        assert_eq!(result.local_index_strategy, ScholarChatLocalLiteratureIndexStrategy::ScholarChatLocalFirst);
+        assert_eq!(result.search_plan_status, ScholarChatScientificSearchPlanStatus::SearchPlanReady);
+        assert_eq!(
+            result.selected_local_source_ids,
+            vec!["source-a".to_string(), "source-b".to_string()]
+        );
+        assert!(result
+            .local_corpus_plan
+            .selected_local_source_ids
+            .iter()
+            .any(|value| value == "source-a"));
+        assert_eq!(
+            result.expected_source_kinds,
+            vec!["markdown".to_string(), "pdf".to_string()]
+        );
+        assert!(result
+            .planned_index_steps
+            .iter()
+            .all(|step| step.active));
+    }
+
+    #[test]
+    fn scholar_chat_local_literature_index_reports_needs_local_sources_without_reading_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_local_literature_index_deterministic_and_path_free(
+            &temp,
+            scientific_local_literature_index_request("Signalentdeckung", None, None, None, None, None),
+        );
+        assert_eq!(result.status, ScholarChatLocalLiteratureIndexStatus::NeedsLocalSources);
+        assert_eq!(result.ingestion_readiness, ScholarChatLocalLiteratureIngestionReadiness::NeedsSources);
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("No local sources selected")));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("Select or import local sources")));
+        assert!(!result.local_corpus_plan.corpus_manifest_would_be_required);
+        assert!(!result.local_corpus_plan.will_create_corpus);
+        assert!(!result.local_corpus_plan.will_read_files);
+    }
+
+    #[test]
+    fn scholar_chat_local_literature_index_normalizes_expected_source_kinds_and_warns_on_unknown_kind() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_local_literature_index_deterministic_and_path_free(
+            &temp,
+            scientific_local_literature_index_request(
+                "Signalentdeckung",
+                None,
+                None,
+                None,
+                Some(vec!["source-a"]),
+                Some(vec!["  book-chapter  ", "notes", "alien-kind", "book_chapter", ""]),
+            ),
+        );
+        assert_eq!(
+            result.expected_source_kinds,
+            vec![
+                "alien_kind".to_string(),
+                "book_chapter".to_string(),
+                "notes".to_string(),
+            ]
+        );
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Unknown expected source kinds")));
+    }
+
+    #[test]
+    fn scholar_chat_local_literature_index_uses_scientific_paper_mode_for_citation_metadata() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_local_literature_index_deterministic_and_path_free(
+            &temp,
+            scientific_local_literature_index_request(
+                "ANOVA",
+                Some("scientific_paper"),
+                None,
+                None,
+                Some(vec!["source-a"]),
+                Some(vec!["article"]),
+            ),
+        );
+        assert_eq!(
+            result.local_index_strategy,
+            ScholarChatLocalLiteratureIndexStrategy::ScientificPaperCitationLocalFirst
+        );
+        assert!(result
+            .planned_metadata_requirements
+            .iter()
+            .any(|value| value == "citation_metadata_required_for_scientific_paper"));
+        assert!(result
+            .planned_metadata_requirements
+            .iter()
+            .any(|value| value == "doi_or_stable_locator_preferred"));
+    }
+
+    #[test]
+    fn scholar_chat_local_literature_index_uses_course_mode_for_course_context_requirements() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_local_literature_index_deterministic_and_path_free(
+            &temp,
+            scientific_local_literature_index_request(
+                "Hypothesentests",
+                Some("course"),
+                Some("Module 123"),
+                Some(vec![" lecture notes ", "course-work"]),
+                Some(vec!["source-a"]),
+                Some(vec!["course_material", "lecture-slide"]),
+            ),
+        );
+        assert_eq!(
+            result.local_index_strategy,
+            ScholarChatLocalLiteratureIndexStrategy::CourseMaterialLocalFirst
+        );
+        assert!(result
+            .planned_metadata_requirements
+            .iter()
+            .any(|value| value == "course_context_required_for_course_mode"));
+        assert_eq!(
+            result.planned_chunking_policy,
+            vec![
+                "chunking_not_run_in_preview".to_string(),
+                "later_pdf_text_extraction_required_before_chunking".to_string(),
+                "later_markdown_section_chunking_candidate".to_string(),
+                "later_course_slide_section_chunking_candidate".to_string(),
+                "preserve_page_or_section_locator_later".to_string(),
+                "keep_citation_metadata_attached_to_chunks_later".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn scholar_chat_local_literature_index_marks_ambiguous_and_unknown_concept_statuses() {
+        let temp = tempfile::tempdir().unwrap();
+        let ambiguous = assert_local_literature_index_deterministic_and_path_free(
+            &temp,
+            scientific_local_literature_index_request(
+                "ANOVA und Hypothesentests Vergleich",
+                None,
+                None,
+                None,
+                Some(vec!["source-a"]),
+                None,
+            ),
+        );
+        assert_eq!(
+            ambiguous.status,
+            ScholarChatLocalLiteratureIndexStatus::NeedsDisambiguation
+        );
+        assert_eq!(
+            ambiguous.ingestion_readiness,
+            ScholarChatLocalLiteratureIngestionReadiness::NeedsDisambiguation
+        );
+
+        let unknown = assert_local_literature_index_deterministic_and_path_free(
+            &temp,
+            scientific_local_literature_index_request(
+                "Signal graph theory",
+                None,
+                None,
+                None,
+                Some(vec!["source-a"]),
+                None,
+            ),
+        );
+        assert_eq!(unknown.status, ScholarChatLocalLiteratureIndexStatus::UnknownConcept);
+        assert_eq!(
+            unknown.ingestion_readiness,
+            ScholarChatLocalLiteratureIngestionReadiness::UnknownConceptMappingNeeded
+        );
+    }
+
+    #[test]
+    fn scholar_chat_local_literature_index_emits_stable_step_order_and_preview_only_constraints() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_local_literature_index_deterministic_and_path_free(
+            &temp,
+            scientific_local_literature_index_request(
+                "Signalentdeckung",
+                None,
+                None,
+                None,
+                Some(vec!["source-b", "source-a"]),
+                Some(vec!["pdf"]),
+            ),
+        );
+        let kinds = result
+            .planned_index_steps
+            .iter()
+            .map(|step| step.kind.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            kinds,
+            vec![
+                ScholarChatLocalLiteratureIndexStepKind::SourceSelectionReview,
+                ScholarChatLocalLiteratureIndexStepKind::MetadataRequirementCheck,
+                ScholarChatLocalLiteratureIndexStepKind::CorpusManifestPlan,
+                ScholarChatLocalLiteratureIndexStepKind::ExtractionPlan,
+                ScholarChatLocalLiteratureIndexStepKind::ChunkingPolicyPlan,
+                ScholarChatLocalLiteratureIndexStepKind::LexicalIndexPlan,
+                ScholarChatLocalLiteratureIndexStepKind::VectorIndexPlan,
+                ScholarChatLocalLiteratureIndexStepKind::DeduplicationPlan,
+                ScholarChatLocalLiteratureIndexStepKind::RetrievalReadinessCheck,
+            ]
+        );
+        assert!(result
+            .planned_index_steps
+            .iter()
+            .all(|step| step.preview_only && step.boundary_notes.iter().any(|note| note == "preview-only")));
+    }
+
+    #[test]
+    fn scholar_chat_local_literature_index_body_does_not_call_execution_functions() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        let start = source
+            .find("pub fn preview_scholar_chat_local_literature_index")
+            .unwrap();
+        let end = source[start..]
+            .find("pub fn preview_scholar_chat_answer_readiness")
+            .unwrap();
+        let body = &source[start..start + end];
+        assert_eq!(body.matches("preview_scholar_chat_scientific_search_plan").count(), 1);
+        assert!(!body.contains("Command::new"));
+        assert!(!body.contains("reqwest::"));
+        assert!(!body.contains("ureq::"));
+        assert!(!body.contains("std::fs"));
+        assert!(!body.contains("fs::"));
+        assert!(!body.contains("CorpusAuthority::"));
+        assert!(!body.contains("SourceRegistry::"));
+        assert!(!body.contains("RetrievalService::new"));
+        assert!(!body.contains("extract_source"));
+        assert!(!body.contains("chunk_source"));
+        assert!(!body.contains("build_retrieval_index"));
+        assert!(!body.contains("preview_scholar_chat_retrieval"));
+        assert!(!body.contains("preview_scholar_chat_evidence_plan"));
+        assert!(!body.contains("preview_scholar_chat_prompt_pack"));
+        assert!(!body.contains("preview_scholar_chat_answer_readiness"));
+        assert!(!body.contains("preview_scholar_chat_draft_inference"));
+        assert!(!body.contains("preview_scholar_chat_grounded_answer"));
+        assert!(!body.contains("smoke_test_local_runtime_inference"));
+        assert!(!body.contains("run_llama_runtime_smoke_diagnostic"));
+        assert!(!body.contains("run_smoke_inference_probe"));
+        assert!(!body.contains("build_answer_draft"));
+        assert!(!body.contains("build_grounded_answer"));
+        assert!(!body.contains("build_final_answer"));
+        assert!(!body.contains("build_evidence_pack"));
+        assert!(!body.contains("export_answer_artifacts"));
+    }
+
+    #[test]
     fn scholar_chat_scientific_search_plan_body_does_not_call_execution_functions() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
         let start = source
@@ -13546,6 +14535,63 @@ fn main() {
         assert!(!body.contains("build_final_answer"));
         assert!(!body.contains("build_evidence_pack"));
         assert!(!body.contains("export_answer_artifacts"));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_search_plan_body_guard_helper_is_still_valid() {
+        assert_scientific_search_plan_body_does_not_call_execution_functions();
+    }
+
+    fn assert_local_literature_index_boundary_fields(
+        preview: &ScholarChatLocalLiteratureIndexPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.local_literature_index_preview_only);
+        assert!(preview.no_file_read);
+        assert!(preview.no_pdf_extraction);
+        assert!(preview.no_ocr);
+        assert!(preview.no_chunking_run);
+        assert!(preview.no_embedding_generation);
+        assert!(preview.no_index_created);
+        assert!(preview.no_bm25_index);
+        assert!(preview.no_vector_index);
+        assert!(preview.no_retrieval_execution);
+        assert!(preview.no_web_request);
+        assert!(preview.no_scraping);
+        assert!(preview.no_connector_call);
+        assert!(preview.no_source_import);
+        assert!(preview.no_local_file_indexing);
+        assert!(preview.no_model_loading);
+        assert!(preview.no_runtime_inference);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_persistence);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
+    fn assert_local_literature_index_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatLocalLiteratureIndexRequest,
+    ) -> ScholarChatLocalLiteratureIndexPreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let first = preview_scholar_chat_local_literature_index(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_local_literature_index(temp.path(), request).unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        assert!(!temp.path().join(".aegis").exists());
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_local_literature_index_boundary_fields(preview);
+        }
+        first
     }
 
     #[test]
