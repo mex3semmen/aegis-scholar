@@ -315,3 +315,4 @@ Proposed phases:
 
 Each phase remains preview-first until explicitly changed.
 Phase 99.0 composes the discipline and source registry previews only; it stays preview-only and does not add web requests, scraping, connector implementation, source import, local file indexing, BM25/vector index, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
+Phase 99.1 composes Scientific Query Understanding only and plans local-first search, metadata search, query expansion, source-family routing, ranking, deduplication, and evidence requirements. It stays preview-only and does not add retrieval execution, web requests, scraping, connectors, source import, local file indexing, BM25/vector index, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.

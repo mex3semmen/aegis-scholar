@@ -351,6 +351,145 @@ pub struct ScholarChatScientificQueryUnderstandingPreview {
     pub no_audit_write: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificSearchPlanStatus {
+    Blocked,
+    SearchPlanReady,
+    NeedsDisambiguation,
+    UnknownConcept,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificSearchStrategy {
+    LocalFirst,
+    MetadataFirst,
+    CourseLocalFirst,
+    Blocked,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificSearchPlanStepKind {
+    LocalSourceSearch,
+    LocalCourseMaterialSearch,
+    MetadataSourceSearch,
+    QueryExpansion,
+    SourceFamilyRouting,
+    RankingPlan,
+    DeduplicationPlan,
+    EvidenceRequirementCheck,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificSearchPlanStep {
+    pub kind: ScholarChatScientificSearchPlanStepKind,
+    pub id: String,
+    pub label: String,
+    pub description: String,
+    pub planned_queries: Vec<String>,
+    pub source_ids: Vec<String>,
+    pub depends_on: Vec<String>,
+    pub active: bool,
+    pub preview_only: bool,
+    pub boundary_notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificLocalSearchPlan {
+    pub local_source_count: usize,
+    pub selected_local_source_ids: Vec<String>,
+    pub planned_queries: Vec<String>,
+    pub local_first: bool,
+    pub requires_local_evidence_before_answer: bool,
+    pub will_read_files: bool,
+    pub will_build_index: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificMetadataSearchPlan {
+    pub source_family_count: usize,
+    pub preferred_source_ids: Vec<String>,
+    pub conditional_source_ids: Vec<String>,
+    pub excluded_source_ids: Vec<String>,
+    pub planned_queries: Vec<String>,
+    pub will_call_connectors: bool,
+    pub will_make_web_requests: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificSourceRoutingPlan {
+    pub route_count: usize,
+    pub active_routes: Vec<String>,
+    pub conditional_routes: Vec<String>,
+    pub excluded_routes: Vec<String>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificSearchPlanRequest {
+    pub query: String,
+    pub mode: Option<String>,
+    pub course_context: Option<String>,
+    pub context_tags: Option<Vec<String>>,
+    pub selected_local_source_ids: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificSearchPlanPreview {
+    pub status: ScholarChatScientificSearchPlanStatus,
+    pub normalized_query: String,
+    pub normalized_mode: String,
+    pub normalized_context_tags: Vec<String>,
+    pub selected_local_source_ids: Vec<String>,
+    pub query_understanding_status: ScholarChatScientificQueryUnderstandingStatus,
+    pub inferred_topic: Option<String>,
+    pub query_intent: ScholarChatScientificQueryIntent,
+    pub ambiguity_level: ScholarChatScientificAmbiguityLevel,
+    pub recognized_concept: Option<String>,
+    pub label: Option<String>,
+    pub source_registry_status: ScholarChatScientificSourceRegistryStatus,
+    pub search_strategy: ScholarChatScientificSearchStrategy,
+    pub local_search_plan: ScholarChatScientificLocalSearchPlan,
+    pub metadata_search_plan: ScholarChatScientificMetadataSearchPlan,
+    pub source_routing_plan: ScholarChatScientificSourceRoutingPlan,
+    pub planned_search_steps: Vec<ScholarChatScientificSearchPlanStep>,
+    pub planned_local_queries: Vec<String>,
+    pub planned_metadata_queries: Vec<String>,
+    pub planned_expanded_queries: Vec<String>,
+    pub preferred_source_ids: Vec<String>,
+    pub conditional_source_ids: Vec<String>,
+    pub excluded_source_ids: Vec<String>,
+    pub evidence_requirements: Vec<String>,
+    pub ranking_hints: Vec<String>,
+    pub deduplication_hints: Vec<String>,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub scientific_search_plan_preview_only: bool,
+    pub no_web_request: bool,
+    pub no_scraping: bool,
+    pub no_connector_call: bool,
+    pub no_source_import: bool,
+    pub no_local_file_indexing: bool,
+    pub no_bm25_index: bool,
+    pub no_vector_index: bool,
+    pub no_model_loading: bool,
+    pub no_runtime_inference: bool,
+    pub no_llm_call: bool,
+    pub no_answer_generated: bool,
+    pub no_evidence_pack_created: bool,
+    pub no_artifact_write: bool,
+    pub no_persistence: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScholarChatRetrievalCandidate {
     pub source_id: String,
@@ -2417,6 +2556,230 @@ pub fn preview_scholar_chat_scientific_query_understanding(
         summary,
         preview_only: true,
         query_understanding_preview_only: true,
+        no_web_request: true,
+        no_scraping: true,
+        no_connector_call: true,
+        no_source_import: true,
+        no_local_file_indexing: true,
+        no_bm25_index: true,
+        no_vector_index: true,
+        no_model_loading: true,
+        no_runtime_inference: true,
+        no_llm_call: true,
+        no_answer_generated: true,
+        no_evidence_pack_created: true,
+        no_artifact_write: true,
+        no_persistence: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+    })
+}
+
+pub fn preview_scholar_chat_scientific_search_plan(
+    root: impl Into<PathBuf>,
+    request: ScholarChatScientificSearchPlanRequest,
+) -> AegisResult<ScholarChatScientificSearchPlanPreview> {
+    let root = root.into();
+    let normalized_query = normalize_scientific_query_text(&request.query);
+    let normalized_mode = normalize_scientific_mode(request.mode.clone());
+    let normalized_context_tags = normalize_scientific_context_tags(request.context_tags.clone());
+    let selected_local_source_ids = normalize_scientific_selected_local_source_ids(
+        request.selected_local_source_ids.clone(),
+    );
+    let query_understanding_request = ScholarChatScientificQueryUnderstandingPreviewRequest {
+        query: normalized_query.clone(),
+        mode: Some(normalized_mode.clone()),
+        course_context: request.course_context.clone(),
+        context_tags: Some(normalized_context_tags.clone()),
+    };
+
+    let query_understanding_preview = preview_scholar_chat_scientific_query_understanding(
+        &root,
+        query_understanding_request,
+    )?;
+    let source_registry_status = query_understanding_preview.source_registry_status.clone();
+    let query_understanding_status = query_understanding_preview.status.clone();
+    let inferred_topic = query_understanding_preview.inferred_topic.clone();
+    let recognized_concept = query_understanding_preview.recognized_concept.clone();
+    let label = query_understanding_preview.label.clone();
+    let query_intent = query_understanding_preview.query_intent.clone();
+    let ambiguity_level = query_understanding_preview.ambiguity_level.clone();
+
+    let status = if normalized_query.is_empty() {
+        ScholarChatScientificSearchPlanStatus::Blocked
+    } else {
+        match query_understanding_status {
+            ScholarChatScientificQueryUnderstandingStatus::Blocked => {
+                ScholarChatScientificSearchPlanStatus::Blocked
+            }
+            ScholarChatScientificQueryUnderstandingStatus::Ambiguous => {
+                ScholarChatScientificSearchPlanStatus::NeedsDisambiguation
+            }
+            ScholarChatScientificQueryUnderstandingStatus::UnknownConcept => {
+                ScholarChatScientificSearchPlanStatus::UnknownConcept
+            }
+            ScholarChatScientificQueryUnderstandingStatus::Understood => {
+                ScholarChatScientificSearchPlanStatus::SearchPlanReady
+            }
+        }
+    };
+
+    let search_strategy = scientific_search_plan_strategy(&status, &normalized_mode, &query_intent);
+    let preferred_source_ids = query_understanding_preview.preferred_source_ids.clone();
+    let conditional_source_ids = query_understanding_preview.conditional_source_ids.clone();
+    let excluded_source_ids = query_understanding_preview.excluded_source_ids.clone();
+    let planned_local_queries = query_understanding_preview.planned_local_search_queries.clone();
+    let planned_metadata_queries = query_understanding_preview.planned_metadata_queries.clone();
+    let planned_expanded_queries = query_understanding_preview.planned_expanded_queries.clone();
+    let evidence_requirements = scientific_search_plan_evidence_requirements(
+        &normalized_mode,
+        &query_intent,
+        &source_registry_status,
+    );
+    let source_routing_plan = scientific_search_plan_source_routing(
+        &preferred_source_ids,
+        &conditional_source_ids,
+        &excluded_source_ids,
+    );
+    let local_search_plan = scientific_search_plan_local_search(
+        &normalized_mode,
+        if matches!(status, ScholarChatScientificSearchPlanStatus::Blocked) {
+            Vec::new()
+        } else {
+            selected_local_source_ids.clone()
+        },
+        planned_local_queries.clone(),
+    );
+    let metadata_search_plan = scientific_search_plan_metadata(
+        &source_registry_status,
+        preferred_source_ids.clone(),
+        conditional_source_ids.clone(),
+        excluded_source_ids.clone(),
+        planned_metadata_queries.clone(),
+    );
+    let planned_search_steps = scientific_search_plan_steps(
+        &normalized_mode,
+        &status,
+        &local_search_plan.selected_local_source_ids,
+        &preferred_source_ids,
+        &conditional_source_ids,
+        &excluded_source_ids,
+        &planned_local_queries,
+        &planned_metadata_queries,
+        &planned_expanded_queries,
+        &evidence_requirements,
+    );
+    let mut blockers = Vec::new();
+    let mut warnings = query_understanding_preview.warnings.clone();
+    let mut next_required_actions = query_understanding_preview.next_required_actions.clone();
+
+    if normalized_query.is_empty() {
+        blockers.push("query_missing: Provide a scientific query to preview the search plan.".to_string());
+        next_required_actions.push("Provide a scientific query to preview the scientific search plan.".to_string());
+    }
+
+    if matches!(status, ScholarChatScientificSearchPlanStatus::NeedsDisambiguation) {
+        warnings.push(
+            "The search plan is still preview-only and prefers the first inferred concept until the query is narrowed."
+                .to_string(),
+        );
+        next_required_actions.push(
+            "Narrow the scientific concept before execution phases can plan retrieval in more detail."
+                .to_string(),
+        );
+    }
+
+    if matches!(status, ScholarChatScientificSearchPlanStatus::UnknownConcept) {
+        warnings.push(
+            "The query still does not map to a known scientific concept for full search planning."
+                .to_string(),
+        );
+        next_required_actions.push(
+            "Add discipline and source registry mappings before metadata routing can be refined."
+                .to_string(),
+        );
+    }
+
+    if !normalized_query.is_empty() && matches!(normalized_mode.as_str(), "scholar_chat" | "course") {
+        if local_search_plan.selected_local_source_ids.is_empty() {
+            warnings.push("No local sources selected.".to_string());
+            next_required_actions.push(
+                "Select or import local sources in a later phase before answering."
+                    .to_string(),
+            );
+        } else {
+            warnings.push(
+                "Local source selection is preview-only; no files are read and no indexes are built."
+                    .to_string(),
+            );
+        }
+    }
+
+    if !normalized_query.is_empty()
+        && matches!(source_registry_status, ScholarChatScientificSourceRegistryStatus::Blocked)
+    {
+        blockers.push(
+            "source_family_plan_required: The source registry preview must be ready before metadata routing can be executed later."
+                .to_string(),
+        );
+    } else if matches!(source_registry_status, ScholarChatScientificSourceRegistryStatus::UnknownConcept) {
+        warnings.push(
+            "The source registry preview is not yet ready later for this inferred concept.".to_string(),
+        );
+        next_required_actions.push(
+            "Add discipline and source registry mappings before metadata routing is planned in later phases."
+                .to_string(),
+        );
+    }
+
+    let summary = match status {
+        ScholarChatScientificSearchPlanStatus::Blocked => {
+            "Scientific search plan preview blocked because the query is blank or a required prerequisite is missing.".to_string()
+        }
+        ScholarChatScientificSearchPlanStatus::NeedsDisambiguation => {
+            "Scientific search plan preview needs disambiguation before later retrieval planning can narrow the route.".to_string()
+        }
+        ScholarChatScientificSearchPlanStatus::UnknownConcept => {
+            "Scientific search plan preview found an unknown concept and can only outline later planning steps.".to_string()
+        }
+        ScholarChatScientificSearchPlanStatus::SearchPlanReady => {
+            "Scientific search plan preview is ready later and only describes future local and metadata search planning.".to_string()
+        }
+    };
+
+    Ok(ScholarChatScientificSearchPlanPreview {
+        status,
+        normalized_query,
+        normalized_mode,
+        normalized_context_tags,
+        selected_local_source_ids: local_search_plan.selected_local_source_ids.clone(),
+        query_understanding_status,
+        inferred_topic,
+        query_intent,
+        ambiguity_level,
+        recognized_concept,
+        label,
+        source_registry_status,
+        search_strategy,
+        local_search_plan,
+        metadata_search_plan,
+        source_routing_plan,
+        planned_search_steps,
+        planned_local_queries,
+        planned_metadata_queries,
+        planned_expanded_queries,
+        preferred_source_ids,
+        conditional_source_ids,
+        excluded_source_ids,
+        evidence_requirements,
+        ranking_hints: query_understanding_preview.ranking_hints.clone(),
+        deduplication_hints: query_understanding_preview.deduplication_hints.clone(),
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        scientific_search_plan_preview_only: true,
         no_web_request: true,
         no_scraping: true,
         no_connector_call: true,
@@ -7126,6 +7489,326 @@ fn scientific_query_evidence_requirements(
     requirements
 }
 
+fn normalize_scientific_selected_local_source_ids(ids: Option<Vec<String>>) -> Vec<String> {
+    let mut normalized = ids
+        .unwrap_or_default()
+        .into_iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+    normalized
+}
+
+fn scientific_search_plan_strategy(
+    status: &ScholarChatScientificSearchPlanStatus,
+    normalized_mode: &str,
+    query_intent: &ScholarChatScientificQueryIntent,
+) -> ScholarChatScientificSearchStrategy {
+    if matches!(status, ScholarChatScientificSearchPlanStatus::Blocked) {
+        ScholarChatScientificSearchStrategy::Blocked
+    } else if normalized_mode == "course" {
+        ScholarChatScientificSearchStrategy::CourseLocalFirst
+    } else if normalized_mode == "scientific_paper"
+        || matches!(query_intent, ScholarChatScientificQueryIntent::LiteratureSearch)
+    {
+        ScholarChatScientificSearchStrategy::MetadataFirst
+    } else {
+        ScholarChatScientificSearchStrategy::LocalFirst
+    }
+}
+
+fn scientific_search_plan_step_notes() -> Vec<String> {
+    vec![
+        "preview-only".to_string(),
+        "no retrieval executed".to_string(),
+        "no files read".to_string(),
+        "no web request".to_string(),
+        "no connector call".to_string(),
+        "no index built".to_string(),
+    ]
+}
+
+fn scientific_search_plan_step(
+    kind: ScholarChatScientificSearchPlanStepKind,
+    id: &str,
+    label: &str,
+    description: &str,
+    planned_queries: Vec<String>,
+    source_ids: Vec<String>,
+    depends_on: Vec<String>,
+    active: bool,
+) -> ScholarChatScientificSearchPlanStep {
+    ScholarChatScientificSearchPlanStep {
+        kind,
+        id: id.to_string(),
+        label: label.to_string(),
+        description: description.to_string(),
+        planned_queries,
+        source_ids,
+        depends_on,
+        active,
+        preview_only: true,
+        boundary_notes: scientific_search_plan_step_notes(),
+    }
+}
+
+fn scientific_search_plan_source_routing(
+    preferred_source_ids: &[String],
+    conditional_source_ids: &[String],
+    excluded_source_ids: &[String],
+) -> ScholarChatScientificSourceRoutingPlan {
+    let mut active_routes = preferred_source_ids.to_vec();
+    active_routes.sort();
+    active_routes.dedup();
+
+    let mut conditional_routes = conditional_source_ids.to_vec();
+    conditional_routes.sort();
+    conditional_routes.dedup();
+
+    let mut excluded_routes = excluded_source_ids.to_vec();
+    excluded_routes.sort();
+    excluded_routes.dedup();
+
+    let route_count = active_routes.len() + conditional_routes.len() + excluded_routes.len();
+    ScholarChatScientificSourceRoutingPlan {
+        route_count,
+        active_routes,
+        conditional_routes,
+        excluded_routes,
+        summary: if route_count == 0 {
+            "No source routes are planned yet.".to_string()
+        } else {
+            "Source routing is planned only; no routing, connector calls, or registry writes were performed."
+                .to_string()
+        },
+    }
+}
+
+fn scientific_search_plan_local_search(
+    normalized_mode: &str,
+    selected_local_source_ids: Vec<String>,
+    planned_queries: Vec<String>,
+) -> ScholarChatScientificLocalSearchPlan {
+    let local_first = normalized_mode == "scholar_chat" || normalized_mode == "course";
+    ScholarChatScientificLocalSearchPlan {
+        local_source_count: selected_local_source_ids.len(),
+        selected_local_source_ids,
+        planned_queries,
+        local_first,
+        requires_local_evidence_before_answer: local_first,
+        will_read_files: false,
+        will_build_index: false,
+        summary: if local_first {
+            "Local search is planned only; no files are read and no indexes are built.".to_string()
+        } else {
+            "Local search is deferred; this preview does not read files or build indexes.".to_string()
+        },
+    }
+}
+
+fn scientific_search_plan_metadata(
+    source_registry_status: &ScholarChatScientificSourceRegistryStatus,
+    preferred_source_ids: Vec<String>,
+    conditional_source_ids: Vec<String>,
+    excluded_source_ids: Vec<String>,
+    planned_queries: Vec<String>,
+) -> ScholarChatScientificMetadataSearchPlan {
+    let mut source_family_count = preferred_source_ids.len();
+    source_family_count += conditional_source_ids.len();
+    source_family_count += excluded_source_ids.len();
+    ScholarChatScientificMetadataSearchPlan {
+        source_family_count,
+        preferred_source_ids,
+        conditional_source_ids,
+        excluded_source_ids,
+        planned_queries,
+        will_call_connectors: false,
+        will_make_web_requests: false,
+        summary: if matches!(source_registry_status, ScholarChatScientificSourceRegistryStatus::SourcePlanReady) {
+            "Metadata search is planned only; no connectors or web requests were performed.".to_string()
+        } else {
+            "Metadata search is planned only; routing still depends on the discipline and source registry previews.".to_string()
+        },
+    }
+}
+
+fn scientific_search_plan_evidence_requirements(
+    normalized_mode: &str,
+    query_intent: &ScholarChatScientificQueryIntent,
+    source_registry_status: &ScholarChatScientificSourceRegistryStatus,
+) -> Vec<String> {
+    let mut requirements = scientific_query_evidence_requirements(
+        normalized_mode,
+        query_intent,
+        source_registry_status,
+    );
+    push_unique_text(&mut requirements, "local_search_plan_required");
+    push_unique_text(&mut requirements, "metadata_search_plan_required");
+    push_unique_text(&mut requirements, "source_routing_required");
+    push_unique_text(&mut requirements, "ranking_required_before_answer");
+    if normalized_mode == "scientific_paper"
+        || matches!(query_intent, ScholarChatScientificQueryIntent::LiteratureSearch)
+    {
+        push_unique_text(
+            &mut requirements,
+            "deduplication_required_before_literature_review",
+        );
+    }
+    if normalized_mode == "course" {
+        push_unique_text(&mut requirements, "course_material_alignment_required");
+    }
+    if normalized_mode == "scholar_chat" || normalized_mode == "course" {
+        push_unique_text(&mut requirements, "local_evidence_required_before_answer");
+    }
+    requirements
+}
+
+fn scientific_search_plan_combined_queries(
+    planned_local_queries: &[String],
+    planned_metadata_queries: &[String],
+    planned_expanded_queries: &[String],
+) -> Vec<String> {
+    let mut queries = Vec::new();
+    for query in planned_expanded_queries
+        .iter()
+        .chain(planned_local_queries.iter())
+        .chain(planned_metadata_queries.iter())
+    {
+        push_unique_text(&mut queries, query);
+    }
+    queries
+}
+
+fn scientific_search_plan_steps(
+    normalized_mode: &str,
+    status: &ScholarChatScientificSearchPlanStatus,
+    selected_local_source_ids: &[String],
+    preferred_source_ids: &[String],
+    conditional_source_ids: &[String],
+    excluded_source_ids: &[String],
+    planned_local_queries: &[String],
+    planned_metadata_queries: &[String],
+    planned_expanded_queries: &[String],
+    evidence_requirements: &[String],
+) -> Vec<ScholarChatScientificSearchPlanStep> {
+    let active = !matches!(status, ScholarChatScientificSearchPlanStatus::Blocked);
+    let local_step_kind = if normalized_mode == "course" {
+        ScholarChatScientificSearchPlanStepKind::LocalCourseMaterialSearch
+    } else {
+        ScholarChatScientificSearchPlanStepKind::LocalSourceSearch
+    };
+    let local_step_id = if normalized_mode == "course" {
+        "local_course_material_search"
+    } else {
+        "local_source_search"
+    };
+    let local_step_label = if normalized_mode == "course" {
+        "Local course material search"
+    } else {
+        "Local source search"
+    };
+    let local_step_description = if normalized_mode == "course" {
+        "Plan future local course-material search only; no files are read and no indexes are built."
+    } else {
+        "Plan future local source search only; no files are read and no indexes are built."
+    };
+
+    let routing_source_ids = preferred_source_ids
+        .iter()
+        .chain(conditional_source_ids.iter())
+        .chain(excluded_source_ids.iter())
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let mut ranking_queries = scientific_search_plan_combined_queries(
+        planned_local_queries,
+        planned_metadata_queries,
+        planned_expanded_queries,
+    );
+    if ranking_queries.is_empty() {
+        ranking_queries = planned_metadata_queries.to_vec();
+    }
+
+    vec![
+        scientific_search_plan_step(
+            ScholarChatScientificSearchPlanStepKind::QueryExpansion,
+            "query_expansion",
+            "Query expansion",
+            "Preview query expansion only; no retrieval or indexing is executed.",
+            planned_expanded_queries.to_vec(),
+            Vec::new(),
+            Vec::new(),
+            active,
+        ),
+        scientific_search_plan_step(
+            local_step_kind,
+            local_step_id,
+            local_step_label,
+            local_step_description,
+            planned_local_queries.to_vec(),
+            selected_local_source_ids.to_vec(),
+            vec!["query_expansion".to_string()],
+            active,
+        ),
+        scientific_search_plan_step(
+            ScholarChatScientificSearchPlanStepKind::SourceFamilyRouting,
+            "source_family_routing",
+            "Source-family routing",
+            "Preview source-family routing only; no registry writes or connector calls are performed.",
+            planned_metadata_queries.to_vec(),
+            routing_source_ids.clone(),
+            vec![local_step_id.to_string()],
+            active,
+        ),
+        scientific_search_plan_step(
+            ScholarChatScientificSearchPlanStepKind::MetadataSourceSearch,
+            "metadata_source_search",
+            "Metadata source search",
+            "Preview metadata search only; no web requests or connectors are executed.",
+            planned_metadata_queries.to_vec(),
+            preferred_source_ids
+                .iter()
+                .chain(conditional_source_ids.iter())
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec!["source_family_routing".to_string()],
+            active,
+        ),
+        scientific_search_plan_step(
+            ScholarChatScientificSearchPlanStepKind::RankingPlan,
+            "ranking_plan",
+            "Ranking plan",
+            "Preview ranking only; no ranking is executed and no answers are generated.",
+            ranking_queries.clone(),
+            Vec::new(),
+            vec!["metadata_source_search".to_string()],
+            active,
+        ),
+        scientific_search_plan_step(
+            ScholarChatScientificSearchPlanStepKind::DeduplicationPlan,
+            "deduplication_plan",
+            "Deduplication plan",
+            "Preview deduplication only; no evidence or answer artifacts are created.",
+            ranking_queries,
+            Vec::new(),
+            vec!["ranking_plan".to_string()],
+            active,
+        ),
+        scientific_search_plan_step(
+            ScholarChatScientificSearchPlanStepKind::EvidenceRequirementCheck,
+            "evidence_requirement_check",
+            "Evidence requirement check",
+            "Preview evidence requirements only; no Evidence Packs or answers are created.",
+            evidence_requirements.to_vec(),
+            Vec::new(),
+            vec!["deduplication_plan".to_string()],
+            active,
+        ),
+    ]
+}
+
 #[derive(Clone)]
 struct ScientificDisciplineRegistryEntry {
     recognized_concept: &'static str,
@@ -8288,6 +8971,24 @@ fn main() {
         }
     }
 
+    fn scientific_search_plan_request(
+        query: &str,
+        mode: Option<&str>,
+        course_context: Option<&str>,
+        context_tags: Option<Vec<&str>>,
+        selected_local_source_ids: Option<Vec<&str>>,
+    ) -> ScholarChatScientificSearchPlanRequest {
+        ScholarChatScientificSearchPlanRequest {
+            query: query.to_string(),
+            mode: mode.map(|value| value.to_string()),
+            course_context: course_context.map(|value| value.to_string()),
+            context_tags: context_tags
+                .map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
+            selected_local_source_ids: selected_local_source_ids
+                .map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
+        }
+    }
+
     fn runtime_diagnostic_result_request(
         bridge_preview_request: ScholarChatRuntimeDiagnosticBridgePreviewRequest,
         diagnostic_preview: LocalRuntimeSmokeDiagnosticPreview,
@@ -8806,6 +9507,49 @@ fn main() {
             assert!(!debug.contains(temp_path.as_ref()));
             assert!(!json.contains(temp_path.as_ref()));
             assert_scientific_query_understanding_boundary_fields(preview);
+        }
+        first
+    }
+
+    fn assert_scientific_search_plan_boundary_fields(preview: &ScholarChatScientificSearchPlanPreview) {
+        assert!(preview.preview_only);
+        assert!(preview.scientific_search_plan_preview_only);
+        assert!(preview.no_web_request);
+        assert!(preview.no_scraping);
+        assert!(preview.no_connector_call);
+        assert!(preview.no_source_import);
+        assert!(preview.no_local_file_indexing);
+        assert!(preview.no_bm25_index);
+        assert!(preview.no_vector_index);
+        assert!(preview.no_model_loading);
+        assert!(preview.no_runtime_inference);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_persistence);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
+    fn assert_scientific_search_plan_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatScientificSearchPlanRequest,
+    ) -> ScholarChatScientificSearchPlanPreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let first = preview_scholar_chat_scientific_search_plan(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_scientific_search_plan(temp.path(), request).unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        assert!(!temp.path().join(".aegis").exists());
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_scientific_search_plan_boundary_fields(preview);
         }
         first
     }
@@ -12552,6 +13296,256 @@ fn main() {
             .evidence_requirements
             .iter()
             .any(|value| value == "course_material_alignment_required"));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_search_plan_blocks_blank_query_and_keeps_boundary_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_search_plan_deterministic_and_path_free(
+            &temp,
+            scientific_search_plan_request("   ", None, None, None, None),
+        );
+        assert_eq!(result.status, ScholarChatScientificSearchPlanStatus::Blocked);
+        assert_eq!(result.search_strategy, ScholarChatScientificSearchStrategy::Blocked);
+        assert_eq!(result.query_understanding_status, ScholarChatScientificQueryUnderstandingStatus::Blocked);
+        assert!(result.normalized_query.is_empty());
+        assert!(result.inferred_topic.is_none());
+        assert!(result.recognized_concept.is_none());
+        assert!(result.label.is_none());
+        assert!(result.selected_local_source_ids.is_empty());
+        assert!(result.planned_local_queries.is_empty());
+        assert!(result.planned_metadata_queries.is_empty());
+        assert!(result.planned_expanded_queries.is_empty());
+        assert!(result.blockers.iter().any(|blocker| blocker.contains("query_missing")));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_search_plan_maps_signalentdeckung_to_local_first_and_includes_source_routing() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_search_plan_deterministic_and_path_free(
+            &temp,
+            scientific_search_plan_request("Signalentdeckung", None, None, None, None),
+        );
+        assert_eq!(result.status, ScholarChatScientificSearchPlanStatus::SearchPlanReady);
+        assert_eq!(result.search_strategy, ScholarChatScientificSearchStrategy::LocalFirst);
+        assert_eq!(result.query_understanding_status, ScholarChatScientificQueryUnderstandingStatus::Understood);
+        assert_eq!(result.inferred_topic.as_deref(), Some("Signalentdeckung"));
+        assert_eq!(result.local_search_plan.local_source_count, 0);
+        assert!(result.local_search_plan.local_first);
+        assert!(result
+            .source_routing_plan
+            .active_routes
+            .iter()
+            .any(|value| value == "pubpsych"));
+        assert!(result
+            .source_routing_plan
+            .active_routes
+            .iter()
+            .any(|value| value == "psycharchives"));
+        assert!(result
+            .source_routing_plan
+            .active_routes
+            .iter()
+            .any(|value| value == "openalex"));
+        assert!(result
+            .source_routing_plan
+            .active_routes
+            .iter()
+            .any(|value| value == "crossref"));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("No local sources selected")));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("Select or import local sources")));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_search_plan_normalizes_selected_local_source_ids_without_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_search_plan_deterministic_and_path_free(
+            &temp,
+            scientific_search_plan_request(
+                "Signalentdeckung",
+                None,
+                None,
+                None,
+                Some(vec!["  local-b  ", "local-a", "local-b", ""]),
+            ),
+        );
+        assert_eq!(
+            result.selected_local_source_ids,
+            vec!["local-a".to_string(), "local-b".to_string()]
+        );
+        assert_eq!(result.local_search_plan.local_source_count, 2);
+        assert!(result
+            .local_search_plan
+            .selected_local_source_ids
+            .iter()
+            .all(|value| value == "local-a" || value == "local-b"));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_search_plan_uses_metadata_first_for_scientific_paper_mode() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_search_plan_deterministic_and_path_free(
+            &temp,
+            scientific_search_plan_request("ANOVA", Some("scientific_paper"), None, None, None),
+        );
+        assert_eq!(result.search_strategy, ScholarChatScientificSearchStrategy::MetadataFirst);
+        assert!(result
+            .evidence_requirements
+            .iter()
+            .any(|value| value == "citation_safe_metadata_required"));
+        assert!(result
+            .evidence_requirements
+            .iter()
+            .any(|value| value == "deduplication_required_before_literature_review"));
+        assert!(result
+            .evidence_requirements
+            .iter()
+            .any(|value| value == "ranking_required_before_answer"));
+        assert!(!result.metadata_search_plan.will_call_connectors);
+        assert!(!result.metadata_search_plan.will_make_web_requests);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_search_plan_uses_course_local_first_and_course_alignment() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_search_plan_deterministic_and_path_free(
+            &temp,
+            scientific_search_plan_request("Hypothesentests", Some("course"), Some("Module 123"), None, None),
+        );
+        assert_eq!(result.search_strategy, ScholarChatScientificSearchStrategy::CourseLocalFirst);
+        assert!(result.local_search_plan.local_first);
+        assert!(result
+            .evidence_requirements
+            .iter()
+            .any(|value| value == "course_material_alignment_required"));
+        assert!(result
+            .evidence_requirements
+            .iter()
+            .any(|value| value == "local_evidence_required_before_answer"));
+        assert!(!result.local_search_plan.will_read_files);
+        assert!(!result.local_search_plan.will_build_index);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_search_plan_marks_mixed_concepts_needs_disambiguation_and_keeps_first_concept() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_search_plan_deterministic_and_path_free(
+            &temp,
+            scientific_search_plan_request("ANOVA und Hypothesentests Vergleich", None, None, None, None),
+        );
+        assert_eq!(result.status, ScholarChatScientificSearchPlanStatus::NeedsDisambiguation);
+        assert_eq!(result.query_understanding_status, ScholarChatScientificQueryUnderstandingStatus::Ambiguous);
+        assert!(result.inferred_topic.is_some());
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("multiple scientific concepts")));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("Narrow the scientific concept")));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_search_plan_returns_unknown_concept_with_search_requirements() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_search_plan_deterministic_and_path_free(
+            &temp,
+            scientific_search_plan_request("Signal graph theory", None, None, None, None),
+        );
+        assert_eq!(result.status, ScholarChatScientificSearchPlanStatus::UnknownConcept);
+        assert_eq!(result.query_understanding_status, ScholarChatScientificQueryUnderstandingStatus::UnknownConcept);
+        assert_eq!(result.normalized_query, "Signal graph theory");
+        assert_eq!(result.planned_local_queries, vec!["Signal graph theory".to_string()]);
+        assert_eq!(result.planned_metadata_queries, vec!["Signal graph theory".to_string()]);
+        assert!(result
+            .evidence_requirements
+            .iter()
+            .any(|value| value == "source_family_plan_required"));
+        assert!(result
+            .next_required_actions
+            .iter()
+            .any(|action| action.contains("Add discipline and source registry mappings")));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_search_plan_emits_stable_step_order_and_preview_only_constraints() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_search_plan_deterministic_and_path_free(
+            &temp,
+            scientific_search_plan_request(
+                "Signalentdeckung",
+                None,
+                None,
+                None,
+                Some(vec!["local-b", "local-a"]),
+            ),
+        );
+        let kinds = result
+            .planned_search_steps
+            .iter()
+            .map(|step| step.kind.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            kinds,
+            vec![
+                ScholarChatScientificSearchPlanStepKind::QueryExpansion,
+                ScholarChatScientificSearchPlanStepKind::LocalSourceSearch,
+                ScholarChatScientificSearchPlanStepKind::SourceFamilyRouting,
+                ScholarChatScientificSearchPlanStepKind::MetadataSourceSearch,
+                ScholarChatScientificSearchPlanStepKind::RankingPlan,
+                ScholarChatScientificSearchPlanStepKind::DeduplicationPlan,
+                ScholarChatScientificSearchPlanStepKind::EvidenceRequirementCheck,
+            ]
+        );
+        assert!(result
+            .planned_search_steps
+            .iter()
+            .all(|step| step.preview_only && step.boundary_notes.iter().any(|note| note == "preview-only")));
+        assert!(!result.metadata_search_plan.will_call_connectors);
+        assert!(!result.metadata_search_plan.will_make_web_requests);
+        assert!(!result.local_search_plan.will_read_files);
+        assert!(!result.local_search_plan.will_build_index);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_search_plan_body_does_not_call_execution_functions() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        let start = source
+            .find("pub fn preview_scholar_chat_scientific_search_plan")
+            .unwrap();
+        let end = source[start..]
+            .find("pub fn preview_scholar_chat_answer_readiness")
+            .unwrap();
+        let body = &source[start..start + end];
+        assert_eq!(body.matches("preview_scholar_chat_scientific_query_understanding").count(), 1);
+        assert!(!body.contains("Command::new"));
+        assert!(!body.contains("reqwest::"));
+        assert!(!body.contains("ureq::"));
+        assert!(!body.contains("std::fs"));
+        assert!(!body.contains("fs::"));
+        assert!(!body.contains("RetrievalService::new"));
+        assert!(!body.contains("SourceRegistry::"));
+        assert!(!body.contains("preview_scholar_chat_retrieval"));
+        assert!(!body.contains("preview_scholar_chat_evidence_plan"));
+        assert!(!body.contains("preview_scholar_chat_prompt_pack"));
+        assert!(!body.contains("preview_scholar_chat_answer_readiness"));
+        assert!(!body.contains("preview_scholar_chat_draft_inference"));
+        assert!(!body.contains("preview_scholar_chat_grounded_answer"));
+        assert!(!body.contains("smoke_test_local_runtime_inference"));
+        assert!(!body.contains("run_llama_runtime_smoke_diagnostic"));
+        assert!(!body.contains("run_smoke_inference_probe"));
+        assert!(!body.contains("build_answer_draft"));
+        assert!(!body.contains("build_grounded_answer"));
+        assert!(!body.contains("build_final_answer"));
+        assert!(!body.contains("build_evidence_pack"));
+        assert!(!body.contains("export_answer_artifacts"));
     }
 
     #[test]

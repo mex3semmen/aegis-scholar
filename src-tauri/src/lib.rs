@@ -76,6 +76,7 @@ use scholar_chat::{
     preview_scholar_chat_scientific_discipline_registry as preview_scholar_chat_scientific_discipline_registry_impl,
     preview_scholar_chat_scientific_source_registry as preview_scholar_chat_scientific_source_registry_impl,
     preview_scholar_chat_scientific_query_understanding as preview_scholar_chat_scientific_query_understanding_impl,
+    preview_scholar_chat_scientific_search_plan as preview_scholar_chat_scientific_search_plan_impl,
     preview_scholar_chat_grounded_answer_write_eligibility as preview_scholar_chat_grounded_answer_write_eligibility_impl,
     preview_scholar_chat_request as preview_scholar_chat_request_impl,
     preview_scholar_chat_evidence_plan as preview_scholar_chat_evidence_plan_impl,
@@ -108,6 +109,8 @@ use scholar_chat::{
     ScholarChatScientificSourceRegistryPreviewRequest,
     ScholarChatScientificQueryUnderstandingPreview,
     ScholarChatScientificQueryUnderstandingPreviewRequest,
+    ScholarChatScientificSearchPlanPreview,
+    ScholarChatScientificSearchPlanRequest,
     ScholarChatRequest,
     ScholarChatEvidencePlanResponse,
     ScholarChatPromptPackPreviewResponse,
@@ -601,6 +604,15 @@ fn preview_scholar_chat_scientific_query_understanding(
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn preview_scholar_chat_scientific_search_plan(
+    root: String,
+    request: ScholarChatScientificSearchPlanRequest,
+) -> Result<ScholarChatScientificSearchPlanPreview, String> {
+    preview_scholar_chat_scientific_search_plan_impl(root, request)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -657,6 +669,7 @@ pub fn run() {
             preview_scholar_chat_scientific_discipline_registry,
             preview_scholar_chat_scientific_source_registry,
             preview_scholar_chat_scientific_query_understanding,
+            preview_scholar_chat_scientific_search_plan,
             preview_local_model_runtime_health,
             preview_local_runtime_invocation_plan,
             preview_llama_runtime_adapter_contract,
