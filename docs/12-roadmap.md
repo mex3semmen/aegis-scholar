@@ -1516,6 +1516,9 @@ Phase 98.0 documents the scientific retrieval architecture for the next product 
 It is docs-only and introduces the planned discipline graph, source registry, curriculum layer, mode behavior, and preview-first roadmap.
 It does not add production code, web requests, scraping, model loading, runtime inference, answer generation, or artifact writes.
 
+Phase 98.1 adds a backend-only Scientific Discipline Registry Preview.
+It maps early example concepts, stays preview-only, and does not add web requests, scraping, connector implementation, local file indexing, BM25/vector index, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
+
 Do not implement:
 
 - web requests

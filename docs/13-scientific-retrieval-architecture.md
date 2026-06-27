@@ -33,6 +33,12 @@ Not yet implemented:
 - evidence pack generation from scientific search
 - automatic literature search
 
+## Phase 98.1
+
+Phase 98.1 adds the first backend preview of the scientific discipline registry.
+It maps early example concepts such as Signalentdeckung, ANOVA, and Hypothesentests.
+It remains preview-only and does not add web requests, scraping, connectors, local indexing, model loading, runtime inference, answer generation, Evidence Pack creation, or artifact writes.
+
 ## Target Architecture
 
 Target pipeline:
