@@ -1465,6 +1465,258 @@ pub struct ScholarChatScientificEvidencePackPlanPreview {
     pub no_audit_write: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificPaperLiteratureReviewPlanStatus {
+    Blocked,
+    LiteratureReviewPlanReady,
+    NeedsEvidencePackPlan,
+    NeedsResearchQuestion,
+    NeedsEvidenceSources,
+    NeedsCitationMetadata,
+    NeedsDisambiguation,
+    UnknownConcept,
+    NeedsPsychologyScope,
+    NeedsSourceFamily,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificPaperLiteratureReviewStrategy {
+    EvidencePackFirst,
+    ResearchQuestionFirst,
+    CitationMetadataFirst,
+    PsychologyScopeFirst,
+    SourceFamilyFirst,
+    Blocked,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificPaperLiteratureReviewStepKind {
+    ScientificPaperModeAlignment,
+    EvidencePackPlanAlignment,
+    ResearchQuestionPlanning,
+    SearchStrategyPlanning,
+    EvidenceMapPlanning,
+    ReviewSectionPlanning,
+    ClaimSynthesisPlanning,
+    CitationPlanning,
+    QualityReviewPlanning,
+    ComplianceBoundaryCheck,
+    DownstreamPaperGenerationAlignment,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificPaperResearchQuestionPlan {
+    pub research_question_present: bool,
+    pub normalized_research_question: Option<String>,
+    pub will_derive_research_question_later: bool,
+    pub required_inputs: Vec<String>,
+    pub planned_outputs: Vec<String>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificPaperSearchStrategyPlan {
+    pub query_understanding_status: ScholarChatScientificQueryUnderstandingStatus,
+    pub scientific_search_plan_status: ScholarChatScientificSearchPlanStatus,
+    pub planned_search_inputs: Vec<String>,
+    pub planned_search_filters: Vec<String>,
+    pub planned_source_channels: Vec<String>,
+    pub will_run_search: bool,
+    pub will_call_connectors: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificPaperEvidencePackDependencyPlan {
+    pub evidence_pack_plan_status: ScholarChatScientificEvidencePackPlanStatus,
+    pub evidence_pack_strategy: ScholarChatScientificEvidencePackStrategy,
+    pub required_evidence_pack_fields: Vec<String>,
+    pub required_evidence_item_kinds: Vec<String>,
+    pub will_create_evidence_pack: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificPaperReviewSectionPlan {
+    pub requested_sections: Vec<String>,
+    pub planned_sections: Vec<String>,
+    pub unknown_sections: Vec<String>,
+    pub section_requirements: Vec<String>,
+    pub will_generate_section_text: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificPaperClaimSynthesisPlan {
+    pub claim_scope: Vec<String>,
+    pub unknown_claim_scope: Vec<String>,
+    pub synthesis_units: Vec<String>,
+    pub evidence_requirements: Vec<String>,
+    pub unsupported_claim_handling: Vec<String>,
+    pub will_generate_claims: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificPaperCitationPlan {
+    pub citation_style: String,
+    pub required_citation_fields: Vec<String>,
+    pub attribution_requirements: Vec<String>,
+    pub citation_safety_notes: Vec<String>,
+    pub will_emit_citations_now: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificPaperQualityReviewPlan {
+    pub quality_signals: Vec<String>,
+    pub review_checks: Vec<String>,
+    pub exclusion_rules: Vec<String>,
+    pub required_manual_checks_later: Vec<String>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificPaperComplianceReviewPlan {
+    pub no_fulltext_download: bool,
+    pub no_scraping: bool,
+    pub no_authenticated_library_access: bool,
+    pub no_paywall_bypass: bool,
+    pub external_metadata_only: bool,
+    pub will_call_external_services: bool,
+    pub will_write_metadata: bool,
+    pub will_create_literature_review: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificPaperLiteratureReviewStep {
+    pub kind: ScholarChatScientificPaperLiteratureReviewStepKind,
+    pub id: String,
+    pub label: String,
+    pub description: String,
+    pub planned_inputs: Vec<String>,
+    pub planned_outputs: Vec<String>,
+    pub active: bool,
+    pub preview_only: bool,
+    pub boundary_notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificPaperLiteratureReviewPlanRequest {
+    pub query: String,
+    pub mode: Option<String>,
+    pub course_context: Option<String>,
+    pub context_tags: Option<Vec<String>>,
+    pub selected_local_source_ids: Option<Vec<String>>,
+    pub expected_source_kinds: Option<Vec<String>>,
+    pub preferred_metadata_sources: Option<Vec<String>>,
+    pub preferred_psychology_source_families: Option<Vec<String>>,
+    pub methodology_hints: Option<Vec<String>>,
+    pub population_hints: Option<Vec<String>>,
+    pub topic_area_hints: Option<Vec<String>>,
+    pub evidence_goal: Option<String>,
+    pub claim_scope: Option<Vec<String>>,
+    pub citation_style: Option<String>,
+    pub review_goal: Option<String>,
+    pub research_question: Option<String>,
+    pub review_section_preferences: Option<Vec<String>>,
+    pub max_results_per_source: Option<u32>,
+    pub require_open_access: Option<bool>,
+    pub require_doi: Option<bool>,
+    pub year_from: Option<u16>,
+    pub year_to: Option<u16>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificPaperLiteratureReviewPlanPreview {
+    pub status: ScholarChatScientificPaperLiteratureReviewPlanStatus,
+    pub normalized_query: String,
+    pub requested_mode: Option<String>,
+    pub normalized_mode: String,
+    pub normalized_context_tags: Vec<String>,
+    pub selected_local_source_ids: Vec<String>,
+    pub selected_source_count: usize,
+    pub normalized_expected_source_kinds: Vec<String>,
+    pub normalized_preferred_metadata_sources: Vec<String>,
+    pub normalized_preferred_psychology_source_families: Vec<String>,
+    pub normalized_methodology_hints: Vec<String>,
+    pub normalized_population_hints: Vec<String>,
+    pub normalized_topic_area_hints: Vec<String>,
+    pub normalized_evidence_goal: Option<String>,
+    pub normalized_claim_scope: Vec<String>,
+    pub unknown_claim_scope: Vec<String>,
+    pub normalized_citation_style: String,
+    pub normalized_review_goal: Option<String>,
+    pub normalized_research_question: Option<String>,
+    pub normalized_review_section_preferences: Vec<String>,
+    pub unknown_review_section_preferences: Vec<String>,
+    pub normalized_max_results_per_source: u32,
+    pub require_open_access: bool,
+    pub require_doi: bool,
+    pub year_from: Option<u16>,
+    pub year_to: Option<u16>,
+    pub evidence_pack_plan_status: ScholarChatScientificEvidencePackPlanStatus,
+    pub psychology_source_connector_status: ScholarChatPsychologySourceConnectorPlanStatus,
+    pub metadata_connector_plan_status: ScholarChatMetadataConnectorPlanStatus,
+    pub scientific_search_plan_status: ScholarChatScientificSearchPlanStatus,
+    pub query_understanding_status: ScholarChatScientificQueryUnderstandingStatus,
+    pub psychology_scope_status: ScholarChatPsychologyScopeStatus,
+    pub source_family_strategy: ScholarChatPsychologySourceFamilyStrategy,
+    pub evidence_pack_strategy: ScholarChatScientificEvidencePackStrategy,
+    pub inferred_topic: Option<String>,
+    pub query_intent: ScholarChatScientificQueryIntent,
+    pub recognized_concept: Option<String>,
+    pub label: Option<String>,
+    pub literature_review_strategy: ScholarChatScientificPaperLiteratureReviewStrategy,
+    pub research_question_plan: ScholarChatScientificPaperResearchQuestionPlan,
+    pub search_strategy_plan: ScholarChatScientificPaperSearchStrategyPlan,
+    pub evidence_pack_dependency_plan: ScholarChatScientificPaperEvidencePackDependencyPlan,
+    pub review_section_plan: ScholarChatScientificPaperReviewSectionPlan,
+    pub claim_synthesis_plan: ScholarChatScientificPaperClaimSynthesisPlan,
+    pub citation_plan: ScholarChatScientificPaperCitationPlan,
+    pub quality_review_plan: ScholarChatScientificPaperQualityReviewPlan,
+    pub compliance_review_plan: ScholarChatScientificPaperComplianceReviewPlan,
+    pub planned_literature_review_steps: Vec<ScholarChatScientificPaperLiteratureReviewStep>,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub scientific_paper_literature_review_preview_only: bool,
+    pub no_web_request: bool,
+    pub no_http_client: bool,
+    pub no_api_key_read: bool,
+    pub no_environment_read: bool,
+    pub no_scraping: bool,
+    pub no_authenticated_library_access: bool,
+    pub no_paywall_bypass: bool,
+    pub no_connector_call: bool,
+    pub no_source_import: bool,
+    pub no_metadata_record_write: bool,
+    pub no_local_file_indexing: bool,
+    pub no_file_read: bool,
+    pub no_pdf_extraction: bool,
+    pub no_ocr: bool,
+    pub no_chunking_run: bool,
+    pub no_embedding_generation: bool,
+    pub no_index_created: bool,
+    pub no_retrieval_execution: bool,
+    pub no_model_loading: bool,
+    pub no_runtime_inference: bool,
+    pub no_llm_call: bool,
+    pub no_answer_generated: bool,
+    pub no_literature_review_created: bool,
+    pub no_evidence_pack_created: bool,
+    pub no_artifact_write: bool,
+    pub no_persistence: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScholarChatRetrievalCandidate {
     pub source_id: String,
@@ -7058,6 +7310,163 @@ pub fn preview_scholar_chat_psychology_source_connector_plan(
     })
 }
 
+fn normalize_scientific_paper_review_section_preferences(
+    values: Option<Vec<String>>,
+) -> (Vec<String>, Vec<String>) {
+    let mut normalized = values
+        .unwrap_or_default()
+        .into_iter()
+        .map(|value| normalize_scientific_tag_text(&value))
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+    let supported_sections = scientific_paper_literature_review_supported_sections();
+    let requested_sections = normalized.clone();
+    let unknown_sections = normalized
+        .into_iter()
+        .filter(|section| !supported_sections.contains(&section.as_str()))
+        .collect::<Vec<_>>();
+    (requested_sections, unknown_sections)
+}
+
+fn scientific_paper_literature_review_supported_sections() -> Vec<&'static str> {
+    vec![
+        "background",
+        "search_strategy",
+        "evidence_map",
+        "methods",
+        "findings",
+        "limitations",
+        "research_gap",
+        "implications",
+        "citation_plan",
+        "compliance_notes",
+    ]
+}
+
+fn scientific_paper_literature_review_step_notes() -> Vec<String> {
+    vec![
+        "preview-only".to_string(),
+        "scientific paper mode only".to_string(),
+        "no literature review created".to_string(),
+        "no answer generated".to_string(),
+        "no Evidence Pack created".to_string(),
+        "no web request".to_string(),
+        "no HTTP client".to_string(),
+        "no API key read".to_string(),
+        "no environment read".to_string(),
+        "no scraping".to_string(),
+        "no authenticated library access".to_string(),
+        "no paywall bypass".to_string(),
+        "no connector call".to_string(),
+        "no source import".to_string(),
+        "no metadata record write".to_string(),
+        "no file read".to_string(),
+        "no retrieval execution".to_string(),
+        "no artifact write".to_string(),
+        "no persistence".to_string(),
+    ]
+}
+
+fn scientific_paper_literature_review_step(
+    kind: ScholarChatScientificPaperLiteratureReviewStepKind,
+    id: &str,
+    label: &str,
+    description: &str,
+    planned_inputs: Vec<String>,
+    planned_outputs: Vec<String>,
+    active: bool,
+) -> ScholarChatScientificPaperLiteratureReviewStep {
+    ScholarChatScientificPaperLiteratureReviewStep {
+        kind,
+        id: id.to_string(),
+        label: label.to_string(),
+        description: description.to_string(),
+        planned_inputs,
+        planned_outputs,
+        active,
+        preview_only: true,
+        boundary_notes: scientific_paper_literature_review_step_notes(),
+    }
+}
+
+fn scientific_paper_literature_review_plan_status(
+    evidence_pack_plan_status: &ScholarChatScientificEvidencePackPlanStatus,
+    normalized_research_question: &Option<String>,
+) -> ScholarChatScientificPaperLiteratureReviewPlanStatus {
+    match evidence_pack_plan_status {
+        ScholarChatScientificEvidencePackPlanStatus::Blocked => {
+            ScholarChatScientificPaperLiteratureReviewPlanStatus::Blocked
+        }
+        ScholarChatScientificEvidencePackPlanStatus::NeedsDisambiguation => {
+            ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsDisambiguation
+        }
+        ScholarChatScientificEvidencePackPlanStatus::UnknownConcept => {
+            ScholarChatScientificPaperLiteratureReviewPlanStatus::UnknownConcept
+        }
+        ScholarChatScientificEvidencePackPlanStatus::NeedsPsychologyScope => {
+            ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsPsychologyScope
+        }
+        ScholarChatScientificEvidencePackPlanStatus::NeedsSourceFamily => {
+            ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsSourceFamily
+        }
+        ScholarChatScientificEvidencePackPlanStatus::NeedsEvidenceSources => {
+            ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsEvidenceSources
+        }
+        ScholarChatScientificEvidencePackPlanStatus::NeedsCitationMetadata => {
+            ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsCitationMetadata
+        }
+        ScholarChatScientificEvidencePackPlanStatus::NeedsPsychologySourceConnectorPlan => {
+            ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsEvidencePackPlan
+        }
+        ScholarChatScientificEvidencePackPlanStatus::EvidencePackPlanReady => {
+            if normalized_research_question.is_some() {
+                ScholarChatScientificPaperLiteratureReviewPlanStatus::LiteratureReviewPlanReady
+            } else {
+                ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsResearchQuestion
+            }
+        }
+    }
+}
+
+fn scientific_paper_literature_review_strategy(
+    status: &ScholarChatScientificPaperLiteratureReviewPlanStatus,
+    normalized_citation_style: &str,
+    require_doi: bool,
+) -> ScholarChatScientificPaperLiteratureReviewStrategy {
+    if matches!(
+        status,
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::Blocked
+    ) {
+        ScholarChatScientificPaperLiteratureReviewStrategy::Blocked
+    } else if matches!(
+        status,
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsPsychologyScope
+    ) {
+        ScholarChatScientificPaperLiteratureReviewStrategy::PsychologyScopeFirst
+    } else if matches!(
+        status,
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsSourceFamily
+    ) {
+        ScholarChatScientificPaperLiteratureReviewStrategy::SourceFamilyFirst
+    } else if matches!(
+        status,
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsCitationMetadata
+    ) || normalized_citation_style == "doi_first"
+        || require_doi
+    {
+        ScholarChatScientificPaperLiteratureReviewStrategy::CitationMetadataFirst
+    } else if matches!(
+        status,
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsResearchQuestion
+    ) {
+        ScholarChatScientificPaperLiteratureReviewStrategy::ResearchQuestionFirst
+    } else {
+        ScholarChatScientificPaperLiteratureReviewStrategy::EvidencePackFirst
+    }
+}
+
 fn scientific_evidence_pack_plan_boundary_notes() -> Vec<String> {
     vec![
         "preview-only".to_string(),
@@ -8239,6 +8648,863 @@ pub fn preview_scholar_chat_scientific_evidence_pack_plan(
         no_runtime_inference: true,
         no_llm_call: true,
         no_answer_generated: true,
+        no_evidence_pack_created: true,
+        no_artifact_write: true,
+        no_persistence: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+    })
+}
+
+pub fn preview_scholar_chat_scientific_paper_literature_review_plan(
+    root: impl Into<PathBuf>,
+    request: ScholarChatScientificPaperLiteratureReviewPlanRequest,
+) -> AegisResult<ScholarChatScientificPaperLiteratureReviewPlanPreview> {
+    let root = root.into();
+    let normalized_query = normalize_scientific_query_text(&request.query);
+    let requested_mode = request
+        .mode
+        .as_deref()
+        .map(|value| normalize_scientific_tag_text(value))
+        .filter(|value| !value.is_empty());
+    let normalized_mode = "scientific_paper".to_string();
+    let normalized_context_tags = normalize_scientific_context_tags(request.context_tags.clone());
+    let selected_local_source_ids = normalize_scientific_selected_local_source_ids(
+        request.selected_local_source_ids.clone(),
+    );
+    let normalized_expected_source_kinds =
+        normalize_scientific_expected_source_kinds(request.expected_source_kinds.clone());
+    let normalized_preferred_metadata_sources =
+        normalize_metadata_connector_sources(request.preferred_metadata_sources.clone());
+    let normalized_preferred_psychology_source_families = normalize_psychology_connector_values(
+        request.preferred_psychology_source_families.clone(),
+    );
+    let normalized_methodology_hints =
+        normalize_psychology_connector_values(request.methodology_hints.clone());
+    let normalized_population_hints =
+        normalize_psychology_connector_values(request.population_hints.clone());
+    let normalized_topic_area_hints =
+        normalize_psychology_connector_values(request.topic_area_hints.clone());
+    let normalized_evidence_goal = request
+        .evidence_goal
+        .as_deref()
+        .map(normalize_scientific_topic_text)
+        .filter(|value| !value.is_empty());
+    let normalized_claim_scope = normalize_scientific_claim_scope(request.claim_scope.clone());
+    let (normalized_citation_style, _style_warnings) =
+        normalize_scientific_citation_style(request.citation_style.clone());
+    let normalized_review_goal = request
+        .review_goal
+        .as_deref()
+        .map(normalize_scientific_topic_text)
+        .filter(|value| !value.is_empty());
+    let normalized_research_question = request
+        .research_question
+        .as_deref()
+        .map(normalize_scientific_topic_text)
+        .filter(|value| !value.is_empty());
+    let (normalized_review_section_preferences, unknown_review_section_preferences) =
+        normalize_scientific_paper_review_section_preferences(
+            request.review_section_preferences.clone(),
+        );
+    let normalized_course_context = request
+        .course_context
+        .as_deref()
+        .map(normalize_scientific_topic_text)
+        .filter(|value| !value.is_empty());
+
+    let evidence_pack_preview = preview_scholar_chat_scientific_evidence_pack_plan(
+        &root,
+        ScholarChatScientificEvidencePackPlanRequest {
+            query: normalized_query.clone(),
+            mode: Some(normalized_mode.clone()),
+            course_context: normalized_course_context.clone(),
+            context_tags: Some(normalized_context_tags.clone()),
+            selected_local_source_ids: Some(selected_local_source_ids.clone()),
+            expected_source_kinds: Some(normalized_expected_source_kinds.clone()),
+            preferred_metadata_sources: Some(normalized_preferred_metadata_sources.clone()),
+            preferred_psychology_source_families: Some(
+                normalized_preferred_psychology_source_families.clone(),
+            ),
+            methodology_hints: Some(normalized_methodology_hints.clone()),
+            population_hints: Some(normalized_population_hints.clone()),
+            topic_area_hints: Some(normalized_topic_area_hints.clone()),
+            evidence_goal: normalized_evidence_goal.clone(),
+            claim_scope: Some(normalized_claim_scope.clone()),
+            citation_style: Some(normalized_citation_style.clone()),
+            max_results_per_source: request.max_results_per_source,
+            require_open_access: request.require_open_access,
+            require_doi: request.require_doi,
+            year_from: request.year_from,
+            year_to: request.year_to,
+        },
+    )?;
+
+    let evidence_pack_plan_status = evidence_pack_preview.status.clone();
+    let psychology_source_connector_status =
+        evidence_pack_preview.psychology_source_connector_status.clone();
+    let metadata_connector_plan_status = evidence_pack_preview.metadata_connector_plan_status.clone();
+    let scientific_search_plan_status = evidence_pack_preview.scientific_search_plan_status.clone();
+    let query_understanding_status = evidence_pack_preview.query_understanding_status.clone();
+    let psychology_scope_status = evidence_pack_preview.psychology_scope_status.clone();
+    let source_family_strategy = evidence_pack_preview.source_family_strategy.clone();
+    let evidence_pack_strategy = evidence_pack_preview.evidence_pack_strategy.clone();
+    let inferred_topic = evidence_pack_preview.inferred_topic.clone();
+    let query_intent = evidence_pack_preview.query_intent.clone();
+    let recognized_concept = evidence_pack_preview.recognized_concept.clone();
+    let label = evidence_pack_preview.label.clone();
+    let selected_source_count = evidence_pack_preview.selected_source_count;
+    let normalized_max_results_per_source = evidence_pack_preview.normalized_max_results_per_source;
+    let require_open_access = evidence_pack_preview.require_open_access;
+    let require_doi = evidence_pack_preview.require_doi;
+    let year_from = evidence_pack_preview.year_from;
+    let year_to = evidence_pack_preview.year_to;
+    let status = scientific_paper_literature_review_plan_status(
+        &evidence_pack_plan_status,
+        &normalized_research_question,
+    );
+    let literature_review_strategy = scientific_paper_literature_review_strategy(
+        &status,
+        &normalized_citation_style,
+        require_doi,
+    );
+
+    let mut warnings = evidence_pack_preview.warnings.clone();
+    for unknown_section in &unknown_review_section_preferences {
+        push_unique_text(
+            &mut warnings,
+            &format!(
+                "Unknown review section preference '{unknown_section}' is retained only as a hint."
+            ),
+        );
+    }
+    if normalized_preferred_psychology_source_families
+        .iter()
+        .any(|family| family == "apa_psycnet_discovery")
+    {
+        push_unique_text(
+            &mut warnings,
+            "APA/PsycINFO planning boundary only; no automated authenticated scraping, no paywall bypass, and manual or institutional access review is required later.",
+        );
+    }
+
+    let mut blockers = evidence_pack_preview.blockers.clone();
+    let mut next_required_actions = evidence_pack_preview.next_required_actions.clone();
+    if normalized_query.is_empty() {
+        push_unique_text(&mut blockers, "query_missing");
+        push_unique_text(
+            &mut next_required_actions,
+            "provide scientific query before literature-review planning",
+        );
+    }
+
+    match status {
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::Blocked => {
+            push_unique_text(
+                &mut next_required_actions,
+                "provide scientific query before literature-review planning",
+            );
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsDisambiguation => {
+            push_unique_text(
+                &mut next_required_actions,
+                "narrow scientific concept before Literature Review planning",
+            );
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::UnknownConcept => {
+            push_unique_text(
+                &mut next_required_actions,
+                "add discipline/source mappings before Literature Review planning",
+            );
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsPsychologyScope => {
+            push_unique_text(
+                &mut next_required_actions,
+                "add psychology topic, method, population, or course context",
+            );
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsSourceFamily => {
+            push_unique_text(
+                &mut next_required_actions,
+                "choose a supported psychology source family",
+            );
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsEvidenceSources => {
+            push_unique_text(
+                &mut next_required_actions,
+                "select local sources or supported metadata/source families later",
+            );
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsCitationMetadata => {
+            push_unique_text(
+                &mut next_required_actions,
+                "provide DOI/stable identifier path or a supported metadata source later",
+            );
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsEvidencePackPlan => {
+            push_unique_text(
+                &mut next_required_actions,
+                "resolve Scientific Evidence Pack Preview blockers first",
+            );
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsResearchQuestion => {
+            push_unique_text(&mut blockers, "research_question_missing");
+            push_unique_text(
+                &mut next_required_actions,
+                "provide or approve a research question before literature-review generation can be planned as ready",
+            );
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::LiteratureReviewPlanReady => {
+            push_unique_text(
+                &mut next_required_actions,
+                "keep this preview-only and plan the literature review later",
+            );
+        }
+    }
+
+    let summary = match status {
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::Blocked => {
+            "Scientific paper literature review preview is blocked until the query and upstream scientific evidence planning become available."
+                .to_string()
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsDisambiguation => {
+            "Scientific paper literature review preview needs query disambiguation before later planning can continue."
+                .to_string()
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::UnknownConcept => {
+            "Scientific paper literature review preview found an unknown concept and can only outline later planning steps."
+                .to_string()
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsPsychologyScope => {
+            "Scientific paper literature review preview needs psychology scope before later planning can continue."
+                .to_string()
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsSourceFamily => {
+            "Scientific paper literature review preview needs a supported psychology source family before later planning can continue."
+                .to_string()
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsEvidenceSources => {
+            "Scientific paper literature review preview needs local sources, psychology source families, or metadata sources before later planning can continue."
+                .to_string()
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsCitationMetadata => {
+            "Scientific paper literature review preview needs citation metadata planning before it can become ready later."
+                .to_string()
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsEvidencePackPlan => {
+            "Scientific paper literature review preview is waiting for the scientific evidence pack preview before later planning can continue."
+                .to_string()
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsResearchQuestion => {
+            "Scientific paper literature review preview needs a research question before later planning can continue."
+                .to_string()
+        }
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::LiteratureReviewPlanReady => format!(
+            "Scientific paper literature review preview is ready later and only describes {:?} planning.",
+            literature_review_strategy
+        ),
+    };
+
+    let planned_sections = if normalized_review_section_preferences.is_empty() {
+        vec![
+            "background".to_string(),
+            "search_strategy".to_string(),
+            "evidence_map".to_string(),
+            "findings".to_string(),
+            "limitations".to_string(),
+            "research_gap".to_string(),
+            "citation_plan".to_string(),
+            "compliance_notes".to_string(),
+        ]
+    } else {
+        let requested_section_set = normalized_review_section_preferences
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        scientific_paper_literature_review_supported_sections()
+            .into_iter()
+            .filter(|section| {
+                requested_section_set.contains(*section)
+                    || matches!(*section, "citation_plan" | "compliance_notes")
+            })
+            .map(|section| section.to_string())
+            .collect::<Vec<_>>()
+    };
+
+    let mut section_requirements = vec!["evidence_pack_plan_ready_later".to_string()];
+    if planned_sections.iter().any(|section| section == "findings") {
+        push_unique_text(&mut section_requirements, "claim_coverage_plan_later");
+    }
+    if planned_sections.iter().any(|section| section == "citation_plan") {
+        push_unique_text(&mut section_requirements, "verified_citation_metadata_later");
+    }
+    if planned_sections
+        .iter()
+        .any(|section| section == "compliance_notes")
+    {
+        push_unique_text(&mut section_requirements, "compliance_boundary_review_later");
+    }
+
+    let research_question_plan = ScholarChatScientificPaperResearchQuestionPlan {
+        research_question_present: normalized_research_question.is_some(),
+        normalized_research_question: normalized_research_question.clone(),
+        will_derive_research_question_later: normalized_research_question.is_none(),
+        required_inputs: {
+            let mut inputs = vec![
+                "normalized_query".to_string(),
+                "evidence_pack_plan".to_string(),
+            ];
+            if normalized_review_goal.is_some() {
+                inputs.push("review_goal".to_string());
+            }
+            if !normalized_methodology_hints.is_empty() {
+                inputs.push("methodology_hints".to_string());
+            }
+            if !normalized_population_hints.is_empty() {
+                inputs.push("population_hints".to_string());
+            }
+            if !normalized_topic_area_hints.is_empty() {
+                inputs.push("topic_area_hints".to_string());
+            }
+            inputs
+        },
+        planned_outputs: vec![
+            "research_question_later".to_string(),
+            "inclusion_scope_later".to_string(),
+            "review_focus_later".to_string(),
+        ],
+        summary: "No research question is generated now; the preview only reserves later derivation from the scientific query and evidence planning."
+            .to_string(),
+    };
+
+    let search_strategy_plan = ScholarChatScientificPaperSearchStrategyPlan {
+        query_understanding_status: evidence_pack_preview.query_understanding_status.clone(),
+        scientific_search_plan_status: evidence_pack_preview.scientific_search_plan_status.clone(),
+        planned_search_inputs: {
+            let mut inputs = vec!["normalized_query".to_string()];
+            if let Some(concept) = recognized_concept.as_ref() {
+                inputs.push(format!("recognized_concept={concept}"));
+            }
+            if let Some(topic) = inferred_topic.as_ref() {
+                inputs.push(format!("inferred_topic={topic}"));
+            }
+            if !normalized_methodology_hints.is_empty() {
+                inputs.push(format!(
+                    "methodology_hints={}",
+                    normalized_methodology_hints.join(", ")
+                ));
+            }
+            if !normalized_population_hints.is_empty() {
+                inputs.push(format!(
+                    "population_hints={}",
+                    normalized_population_hints.join(", ")
+                ));
+            }
+            if !normalized_topic_area_hints.is_empty() {
+                inputs.push(format!(
+                    "topic_area_hints={}",
+                    normalized_topic_area_hints.join(", ")
+                ));
+            }
+            if let Some(year_from) = year_from {
+                inputs.push(format!("year_from={year_from}"));
+            }
+            if let Some(year_to) = year_to {
+                inputs.push(format!("year_to={year_to}"));
+            }
+            if require_open_access {
+                inputs.push("require_open_access=true".to_string());
+            }
+            if require_doi {
+                inputs.push("require_doi=true".to_string());
+            }
+            if !normalized_expected_source_kinds.is_empty() {
+                inputs.push(format!(
+                    "expected_source_kinds={}",
+                    normalized_expected_source_kinds.join(", ")
+                ));
+            }
+            inputs
+        },
+        planned_search_filters: {
+            let mut filters = Vec::new();
+            if let Some(year_from) = year_from {
+                filters.push(format!("year_from={year_from}"));
+            }
+            if let Some(year_to) = year_to {
+                filters.push(format!("year_to={year_to}"));
+            }
+            if require_open_access {
+                filters.push("open_access_only_later".to_string());
+            }
+            if require_doi {
+                filters.push("doi_required_later".to_string());
+            }
+            if !selected_local_source_ids.is_empty()
+                || !normalized_preferred_metadata_sources.is_empty()
+                || !normalized_preferred_psychology_source_families.is_empty()
+            {
+                filters.push("source_family_filter_later".to_string());
+            }
+            filters
+        },
+        planned_source_channels: {
+            let mut channels = Vec::new();
+            if !selected_local_source_ids.is_empty() {
+                channels.push("local_source_context".to_string());
+            }
+            if !normalized_preferred_metadata_sources.is_empty() {
+                channels.push(format!(
+                    "metadata_sources={}",
+                    normalized_preferred_metadata_sources.join(", ")
+                ));
+            }
+            if !normalized_preferred_psychology_source_families.is_empty() {
+                channels.push(format!(
+                    "psychology_source_families={}",
+                    normalized_preferred_psychology_source_families.join(", ")
+                ));
+            }
+            channels
+        },
+        will_run_search: false,
+        will_call_connectors: false,
+        summary: "Search strategy planning stays preview-only and only outlines later search inputs, filters, and source channels."
+            .to_string(),
+    };
+
+    let evidence_pack_dependency_plan = ScholarChatScientificPaperEvidencePackDependencyPlan {
+        evidence_pack_plan_status: evidence_pack_plan_status.clone(),
+        evidence_pack_strategy: evidence_pack_strategy.clone(),
+        required_evidence_pack_fields: vec![
+            "evidence_items".to_string(),
+            "citation_attribution_plan".to_string(),
+            "evidence_quality_plan".to_string(),
+            "compliance_plan".to_string(),
+            "claim_coverage_plan".to_string(),
+            "source_family_evidence_plan".to_string(),
+            "metadata_evidence_plan".to_string(),
+        ],
+        required_evidence_item_kinds: vec![
+            "local_source_context".to_string(),
+            "metadata_record".to_string(),
+            "source_family_record".to_string(),
+            "citation_attribution_record".to_string(),
+            "quality_review_record".to_string(),
+            "claim_coverage_record".to_string(),
+        ],
+        will_create_evidence_pack: false,
+        summary: "Scientific paper literature review planning depends on the scientific evidence pack preview only and does not create an Evidence Pack."
+            .to_string(),
+    };
+
+    let review_section_plan = ScholarChatScientificPaperReviewSectionPlan {
+        requested_sections: normalized_review_section_preferences.clone(),
+        planned_sections,
+        unknown_sections: unknown_review_section_preferences.clone(),
+        section_requirements: section_requirements.clone(),
+        will_generate_section_text: false,
+        summary: "Review section planning stays preview-only and only prepares later section structure."
+            .to_string(),
+    };
+
+    let claim_synthesis_plan = {
+        let mut synthesis_units = vec![
+            "claim_group_later".to_string(),
+            "evidence_cluster_later".to_string(),
+            "citation_support_later".to_string(),
+            "limitation_note_later".to_string(),
+            "research_gap_note_later".to_string(),
+        ];
+        if !normalized_claim_scope.is_empty() {
+            push_unique_text(&mut synthesis_units, "claim_scope_alignment_later");
+        }
+        ScholarChatScientificPaperClaimSynthesisPlan {
+            claim_scope: normalized_claim_scope.clone(),
+            unknown_claim_scope: evidence_pack_preview.unknown_claim_scope.clone(),
+            synthesis_units,
+            evidence_requirements: vec![
+                "no_claim_without_evidence_item_later".to_string(),
+                "no_generated_sources".to_string(),
+                "unsupported_claims_marked_for_review_later".to_string(),
+                "evidence_pack_required_before_synthesis_later".to_string(),
+            ],
+            unsupported_claim_handling: vec![
+                "mark_unsupported_claims_for_review_later".to_string(),
+                "do_not_fabricate_supporting_sources".to_string(),
+                "block_literature_review_generation_until_grounded_later".to_string(),
+            ],
+            will_generate_claims: false,
+            summary: "Claim synthesis planning stays preview-only and only describes later claim grouping and support constraints."
+                .to_string(),
+        }
+    };
+
+    let citation_plan = ScholarChatScientificPaperCitationPlan {
+        citation_style: normalized_citation_style.clone(),
+        required_citation_fields: vec![
+            "title".to_string(),
+            "authors".to_string(),
+            "publication_year".to_string(),
+            "provider_record_id".to_string(),
+            "source_family".to_string(),
+            "doi_or_stable_identifier".to_string(),
+            "access_or_metadata_provider_note_later".to_string(),
+        ],
+        attribution_requirements: vec![
+            "cite_metadata_provider_later".to_string(),
+            "preserve_provider_record_ids_later".to_string(),
+            "preserve_doi_and_source_url_later".to_string(),
+            "include_access_date_later".to_string(),
+            "no_fabricated_citations".to_string(),
+        ],
+        citation_safety_notes: vec![
+            "metadata_preview_not_citation_evidence".to_string(),
+            "full_citation_requires_verified_metadata_later".to_string(),
+            "no_generated_sources".to_string(),
+            "no_literature_review_without_evidence_pack_later".to_string(),
+        ],
+        will_emit_citations_now: false,
+        summary: "Citation planning stays preview-only and only prepares later citation-safe attribution."
+            .to_string(),
+    };
+
+    let quality_review_plan = ScholarChatScientificPaperQualityReviewPlan {
+        quality_signals: vec![
+            "stable_identifier_present_later".to_string(),
+            "peer_review_or_scholarly_status_later".to_string(),
+            "methodology_match_later".to_string(),
+            "topic_area_match_later".to_string(),
+            "population_match_later_when_available".to_string(),
+            "source_family_relevance_later".to_string(),
+            "evidence_pack_completeness_later".to_string(),
+        ],
+        review_checks: vec![
+            "verify_metadata_before_citation".to_string(),
+            "verify_evidence_item_before_review".to_string(),
+            "verify_claim_coverage_before_generation".to_string(),
+            "verify_limitations_are_marked_later".to_string(),
+        ],
+        exclusion_rules: vec![
+            "exclude_fabricated_sources".to_string(),
+            "exclude_unverified_citations".to_string(),
+            "exclude_paywalled_full_text_scraping".to_string(),
+            "exclude_automated_authenticated_library_records".to_string(),
+            "exclude_non_scientific_sources_unless_explicitly_requested".to_string(),
+        ],
+        required_manual_checks_later: vec![
+            "citation_metadata_review_later".to_string(),
+            "methodology_scope_review_later".to_string(),
+            "population_scope_review_later_when_applicable".to_string(),
+            "institutional_access_review_later_when_required".to_string(),
+        ],
+        summary: "Quality review planning stays preview-only and only prepares later quality and review checks."
+            .to_string(),
+    };
+
+    let compliance_review_plan = ScholarChatScientificPaperComplianceReviewPlan {
+        no_fulltext_download: true,
+        no_scraping: true,
+        no_authenticated_library_access: true,
+        no_paywall_bypass: true,
+        external_metadata_only: true,
+        will_call_external_services: false,
+        will_write_metadata: false,
+        will_create_literature_review: false,
+        summary: "Compliance planning stays preview-only and only documents later external metadata boundaries."
+            .to_string(),
+    };
+
+    let step_active = !matches!(
+        status,
+        ScholarChatScientificPaperLiteratureReviewPlanStatus::Blocked
+    );
+    let planned_literature_review_steps = vec![
+        scientific_paper_literature_review_step(
+            ScholarChatScientificPaperLiteratureReviewStepKind::ScientificPaperModeAlignment,
+            "scientific_paper_mode_alignment",
+            "Scientific paper mode alignment",
+            "Align the literature-review preview with Scientific Paper Mode only.",
+            vec![
+                normalized_mode.clone(),
+                normalized_query.clone(),
+                requested_mode
+                    .clone()
+                    .unwrap_or_else(|| "scientific_paper".to_string()),
+            ],
+            vec!["scientific_paper_literature_review_preview".to_string()],
+            step_active,
+        ),
+        scientific_paper_literature_review_step(
+            ScholarChatScientificPaperLiteratureReviewStepKind::EvidencePackPlanAlignment,
+            "evidence_pack_plan_alignment",
+            "Evidence pack plan alignment",
+            "Align the literature-review preview with the scientific evidence pack preview only.",
+            vec![
+                format!("{:?}", evidence_pack_plan_status),
+                format!("{:?}", evidence_pack_strategy),
+            ],
+            vec!["evidence_pack_dependency_plan".to_string()],
+            step_active,
+        ),
+        scientific_paper_literature_review_step(
+            ScholarChatScientificPaperLiteratureReviewStepKind::ResearchQuestionPlanning,
+            "research_question_planning",
+            "Research question planning",
+            "Reserve later research-question derivation without generating one now.",
+            vec![
+                normalized_query.clone(),
+                normalized_review_goal.clone().unwrap_or_default(),
+                normalized_methodology_hints.join(", "),
+                normalized_population_hints.join(", "),
+                normalized_topic_area_hints.join(", "),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec![
+                "research_question_later".to_string(),
+                "inclusion_scope_later".to_string(),
+                "review_focus_later".to_string(),
+            ],
+            step_active,
+        ),
+        scientific_paper_literature_review_step(
+            ScholarChatScientificPaperLiteratureReviewStepKind::SearchStrategyPlanning,
+            "search_strategy_planning",
+            "Search strategy planning",
+            "Plan later search inputs, filters, and source channels without running search.",
+            vec![
+                normalized_query.clone(),
+                recognized_concept.clone().unwrap_or_default(),
+                inferred_topic.clone().unwrap_or_default(),
+                normalized_methodology_hints.join(", "),
+                normalized_population_hints.join(", "),
+                normalized_topic_area_hints.join(", "),
+                year_from
+                    .map(|value| format!("year_from={value}"))
+                    .unwrap_or_default(),
+                year_to
+                    .map(|value| format!("year_to={value}"))
+                    .unwrap_or_default(),
+                if require_open_access {
+                    "require_open_access=true".to_string()
+                } else {
+                    String::new()
+                },
+                if require_doi {
+                    "require_doi=true".to_string()
+                } else {
+                    String::new()
+                },
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec![
+                "planned_search_inputs".to_string(),
+                "planned_search_filters".to_string(),
+                "planned_source_channels".to_string(),
+            ],
+            step_active,
+        ),
+        scientific_paper_literature_review_step(
+            ScholarChatScientificPaperLiteratureReviewStepKind::EvidenceMapPlanning,
+            "evidence_map_planning",
+            "Evidence map planning",
+            "Plan later evidence-map structure from the scientific evidence pack preview only.",
+            vec![
+                selected_local_source_ids.join(", "),
+                normalized_preferred_metadata_sources.join(", "),
+                normalized_preferred_psychology_source_families.join(", "),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec!["evidence_map_later".to_string()],
+            step_active,
+        ),
+        scientific_paper_literature_review_step(
+            ScholarChatScientificPaperLiteratureReviewStepKind::ReviewSectionPlanning,
+            "review_section_planning",
+            "Review section planning",
+            "Plan later literature-review sections without generating prose.",
+            vec![
+                normalized_review_section_preferences.join(", "),
+                unknown_review_section_preferences.join(", "),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec![
+                "planned_sections".to_string(),
+                "unknown_sections".to_string(),
+            ],
+            step_active,
+        ),
+        scientific_paper_literature_review_step(
+            ScholarChatScientificPaperLiteratureReviewStepKind::ClaimSynthesisPlanning,
+            "claim_synthesis_planning",
+            "Claim synthesis planning",
+            "Plan later claim grouping and synthesis without generating claims.",
+            vec![
+                normalized_claim_scope.join(", "),
+                evidence_pack_preview.unknown_claim_scope.join(", "),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec![
+                "synthesis_units".to_string(),
+                "evidence_requirements".to_string(),
+            ],
+            step_active,
+        ),
+        scientific_paper_literature_review_step(
+            ScholarChatScientificPaperLiteratureReviewStepKind::CitationPlanning,
+            "citation_planning",
+            "Citation planning",
+            "Plan later citation-safe attribution without emitting citations now.",
+            vec![
+                normalized_citation_style.clone(),
+                if require_doi {
+                    "require_doi=true".to_string()
+                } else {
+                    String::new()
+                },
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec![
+                "required_citation_fields".to_string(),
+                "citation_safety_notes".to_string(),
+            ],
+            step_active,
+        ),
+        scientific_paper_literature_review_step(
+            ScholarChatScientificPaperLiteratureReviewStepKind::QualityReviewPlanning,
+            "quality_review_planning",
+            "Quality review planning",
+            "Plan later metadata, methodology, and citation quality checks without executing them.",
+            vec![
+                selected_local_source_ids.join(", "),
+                normalized_preferred_metadata_sources.join(", "),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec![
+                "review_checks".to_string(),
+                "required_manual_checks_later".to_string(),
+            ],
+            step_active,
+        ),
+        scientific_paper_literature_review_step(
+            ScholarChatScientificPaperLiteratureReviewStepKind::ComplianceBoundaryCheck,
+            "compliance_boundary_check",
+            "Compliance boundary check",
+            "Plan later compliance boundaries without making web or connector calls.",
+            vec![
+                format!("{:?}", evidence_pack_plan_status),
+                format!("{:?}", evidence_pack_strategy),
+            ],
+            vec!["compliance_review_plan".to_string()],
+            step_active,
+        ),
+        scientific_paper_literature_review_step(
+            ScholarChatScientificPaperLiteratureReviewStepKind::DownstreamPaperGenerationAlignment,
+            "downstream_paper_generation_alignment",
+            "Downstream paper-generation alignment",
+            "Reserve later alignment for a future literature-review generation phase.",
+            vec![
+                "review_section_plan".to_string(),
+                "claim_synthesis_plan".to_string(),
+                "citation_plan".to_string(),
+            ],
+            vec!["future_literature_review_alignment".to_string()],
+            step_active,
+        ),
+    ];
+
+    Ok(ScholarChatScientificPaperLiteratureReviewPlanPreview {
+        status,
+        normalized_query,
+        requested_mode,
+        normalized_mode,
+        normalized_context_tags,
+        selected_local_source_ids,
+        selected_source_count,
+        normalized_expected_source_kinds,
+        normalized_preferred_metadata_sources,
+        normalized_preferred_psychology_source_families,
+        normalized_methodology_hints,
+        normalized_population_hints,
+        normalized_topic_area_hints,
+        normalized_evidence_goal,
+        normalized_claim_scope,
+        unknown_claim_scope: evidence_pack_preview.unknown_claim_scope.clone(),
+        normalized_citation_style,
+        normalized_review_goal,
+        normalized_research_question,
+        normalized_review_section_preferences: normalized_review_section_preferences.clone(),
+        unknown_review_section_preferences: unknown_review_section_preferences.clone(),
+        normalized_max_results_per_source,
+        require_open_access,
+        require_doi,
+        year_from,
+        year_to,
+        evidence_pack_plan_status,
+        psychology_source_connector_status,
+        metadata_connector_plan_status,
+        scientific_search_plan_status,
+        query_understanding_status,
+        psychology_scope_status,
+        source_family_strategy,
+        evidence_pack_strategy,
+        inferred_topic,
+        query_intent,
+        recognized_concept,
+        label,
+        literature_review_strategy,
+        research_question_plan,
+        search_strategy_plan,
+        evidence_pack_dependency_plan,
+        review_section_plan,
+        claim_synthesis_plan,
+        citation_plan,
+        quality_review_plan,
+        compliance_review_plan,
+        planned_literature_review_steps,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        scientific_paper_literature_review_preview_only: true,
+        no_web_request: true,
+        no_http_client: true,
+        no_api_key_read: true,
+        no_environment_read: true,
+        no_scraping: true,
+        no_authenticated_library_access: true,
+        no_paywall_bypass: true,
+        no_connector_call: true,
+        no_source_import: true,
+        no_metadata_record_write: true,
+        no_local_file_indexing: true,
+        no_file_read: true,
+        no_pdf_extraction: true,
+        no_ocr: true,
+        no_chunking_run: true,
+        no_embedding_generation: true,
+        no_index_created: true,
+        no_retrieval_execution: true,
+        no_model_loading: true,
+        no_runtime_inference: true,
+        no_llm_call: true,
+        no_answer_generated: true,
+        no_literature_review_created: true,
         no_evidence_pack_created: true,
         no_artifact_write: true,
         no_persistence: true,
@@ -20556,6 +21822,140 @@ fn main() {
         first
     }
 
+    fn assert_scientific_paper_literature_review_plan_boundary_fields(
+        preview: &ScholarChatScientificPaperLiteratureReviewPlanPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.scientific_paper_literature_review_preview_only);
+        assert!(preview.no_web_request);
+        assert!(preview.no_http_client);
+        assert!(preview.no_api_key_read);
+        assert!(preview.no_environment_read);
+        assert!(preview.no_scraping);
+        assert!(preview.no_authenticated_library_access);
+        assert!(preview.no_paywall_bypass);
+        assert!(preview.no_connector_call);
+        assert!(preview.no_source_import);
+        assert!(preview.no_metadata_record_write);
+        assert!(preview.no_local_file_indexing);
+        assert!(preview.no_file_read);
+        assert!(preview.no_pdf_extraction);
+        assert!(preview.no_ocr);
+        assert!(preview.no_chunking_run);
+        assert!(preview.no_embedding_generation);
+        assert!(preview.no_index_created);
+        assert!(preview.no_retrieval_execution);
+        assert!(preview.no_model_loading);
+        assert!(preview.no_runtime_inference);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_literature_review_created);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_persistence);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
+    fn assert_scientific_paper_literature_review_plan_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatScientificPaperLiteratureReviewPlanRequest,
+    ) -> ScholarChatScientificPaperLiteratureReviewPlanPreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let first =
+            preview_scholar_chat_scientific_paper_literature_review_plan(temp.path(), request.clone())
+                .unwrap();
+        let second = preview_scholar_chat_scientific_paper_literature_review_plan(temp.path(), request)
+            .unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        assert!(!temp.path().join(".aegis").exists());
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert!(!debug.contains("http://"));
+            assert!(!debug.contains("https://"));
+            assert!(!json.contains("http://"));
+            assert!(!json.contains("https://"));
+            assert_scientific_paper_literature_review_plan_boundary_fields(preview);
+        }
+        first
+    }
+
+    fn scientific_paper_literature_review_plan_request(
+        query: &str,
+        mode: Option<&str>,
+        course_context: Option<&str>,
+        context_tags: Option<Vec<&str>>,
+        selected_local_source_ids: Option<Vec<&str>>,
+        expected_source_kinds: Option<Vec<&str>>,
+        preferred_metadata_sources: Option<Vec<&str>>,
+        preferred_psychology_source_families: Option<Vec<&str>>,
+        methodology_hints: Option<Vec<&str>>,
+        population_hints: Option<Vec<&str>>,
+        topic_area_hints: Option<Vec<&str>>,
+        evidence_goal: Option<&str>,
+        claim_scope: Option<Vec<&str>>,
+        citation_style: Option<&str>,
+        review_goal: Option<&str>,
+        research_question: Option<&str>,
+        review_section_preferences: Option<Vec<&str>>,
+        max_results_per_source: Option<u32>,
+        require_open_access: Option<bool>,
+        require_doi: Option<bool>,
+        year_from: Option<u16>,
+        year_to: Option<u16>,
+    ) -> ScholarChatScientificPaperLiteratureReviewPlanRequest {
+        ScholarChatScientificPaperLiteratureReviewPlanRequest {
+            query: query.to_string(),
+            mode: mode.map(|value| value.to_string()),
+            course_context: course_context.map(|value| value.to_string()),
+            context_tags: context_tags.map(|values| {
+                values.into_iter().map(|value| value.to_string()).collect()
+            }),
+            selected_local_source_ids: selected_local_source_ids.map(|values| {
+                values.into_iter().map(|value| value.to_string()).collect()
+            }),
+            expected_source_kinds: expected_source_kinds.map(|values| {
+                values.into_iter().map(|value| value.to_string()).collect()
+            }),
+            preferred_metadata_sources: preferred_metadata_sources.map(|values| {
+                values.into_iter().map(|value| value.to_string()).collect()
+            }),
+            preferred_psychology_source_families: preferred_psychology_source_families.map(
+                |values| values.into_iter().map(|value| value.to_string()).collect(),
+            ),
+            methodology_hints: methodology_hints.map(|values| {
+                values.into_iter().map(|value| value.to_string()).collect()
+            }),
+            population_hints: population_hints.map(|values| {
+                values.into_iter().map(|value| value.to_string()).collect()
+            }),
+            topic_area_hints: topic_area_hints.map(|values| {
+                values.into_iter().map(|value| value.to_string()).collect()
+            }),
+            evidence_goal: evidence_goal.map(|value| value.to_string()),
+            claim_scope: claim_scope.map(|values| {
+                values.into_iter().map(|value| value.to_string()).collect()
+            }),
+            citation_style: citation_style.map(|value| value.to_string()),
+            review_goal: review_goal.map(|value| value.to_string()),
+            research_question: research_question.map(|value| value.to_string()),
+            review_section_preferences: review_section_preferences.map(|values| {
+                values.into_iter().map(|value| value.to_string()).collect()
+            }),
+            max_results_per_source,
+            require_open_access,
+            require_doi,
+            year_from,
+            year_to,
+        }
+    }
+
     fn scientific_evidence_pack_plan_request(
         query: &str,
         mode: Option<&str>,
@@ -21064,6 +22464,159 @@ fn main() {
     }
 
     #[test]
+    fn scholar_chat_scientific_paper_literature_review_public_dto_declarations_are_declared_once()
+    {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        for marker in [
+            "pub enum ScholarChatScientificPaperLiteratureReviewPlanStatus",
+            "pub enum ScholarChatScientificPaperLiteratureReviewStrategy",
+            "pub enum ScholarChatScientificPaperLiteratureReviewStepKind",
+            "pub struct ScholarChatScientificPaperResearchQuestionPlan",
+            "pub struct ScholarChatScientificPaperSearchStrategyPlan",
+            "pub struct ScholarChatScientificPaperEvidencePackDependencyPlan",
+            "pub struct ScholarChatScientificPaperReviewSectionPlan",
+            "pub struct ScholarChatScientificPaperClaimSynthesisPlan",
+            "pub struct ScholarChatScientificPaperCitationPlan",
+            "pub struct ScholarChatScientificPaperQualityReviewPlan",
+            "pub struct ScholarChatScientificPaperComplianceReviewPlan",
+            "pub struct ScholarChatScientificPaperLiteratureReviewStep",
+            "pub struct ScholarChatScientificPaperLiteratureReviewPlanRequest",
+            "pub struct ScholarChatScientificPaperLiteratureReviewPlanPreview",
+        ] {
+            assert_public_declaration_marker_count(source, marker);
+        }
+    }
+
+    #[test]
+    fn scholar_chat_scientific_paper_literature_review_serde_values_are_snake_case() {
+        let status_cases = [
+            (
+                ScholarChatScientificPaperLiteratureReviewPlanStatus::Blocked,
+                "\"blocked\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewPlanStatus::LiteratureReviewPlanReady,
+                "\"literature_review_plan_ready\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsEvidencePackPlan,
+                "\"needs_evidence_pack_plan\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsResearchQuestion,
+                "\"needs_research_question\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsEvidenceSources,
+                "\"needs_evidence_sources\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsCitationMetadata,
+                "\"needs_citation_metadata\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsDisambiguation,
+                "\"needs_disambiguation\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewPlanStatus::UnknownConcept,
+                "\"unknown_concept\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsPsychologyScope,
+                "\"needs_psychology_scope\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsSourceFamily,
+                "\"needs_source_family\"",
+            ),
+        ];
+        for (value, expected) in status_cases {
+            assert_eq!(serde_json::to_string(&value).unwrap(), expected);
+        }
+
+        let strategy_cases = [
+            (
+                ScholarChatScientificPaperLiteratureReviewStrategy::EvidencePackFirst,
+                "\"evidence_pack_first\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewStrategy::ResearchQuestionFirst,
+                "\"research_question_first\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewStrategy::CitationMetadataFirst,
+                "\"citation_metadata_first\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewStrategy::PsychologyScopeFirst,
+                "\"psychology_scope_first\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewStrategy::SourceFamilyFirst,
+                "\"source_family_first\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewStrategy::Blocked,
+                "\"blocked\"",
+            ),
+        ];
+        for (value, expected) in strategy_cases {
+            assert_eq!(serde_json::to_string(&value).unwrap(), expected);
+        }
+
+        let step_kind_cases = [
+            (
+                ScholarChatScientificPaperLiteratureReviewStepKind::ScientificPaperModeAlignment,
+                "\"scientific_paper_mode_alignment\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewStepKind::EvidencePackPlanAlignment,
+                "\"evidence_pack_plan_alignment\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewStepKind::ResearchQuestionPlanning,
+                "\"research_question_planning\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewStepKind::SearchStrategyPlanning,
+                "\"search_strategy_planning\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewStepKind::EvidenceMapPlanning,
+                "\"evidence_map_planning\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewStepKind::ReviewSectionPlanning,
+                "\"review_section_planning\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewStepKind::ClaimSynthesisPlanning,
+                "\"claim_synthesis_planning\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewStepKind::CitationPlanning,
+                "\"citation_planning\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewStepKind::QualityReviewPlanning,
+                "\"quality_review_planning\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewStepKind::ComplianceBoundaryCheck,
+                "\"compliance_boundary_check\"",
+            ),
+            (
+                ScholarChatScientificPaperLiteratureReviewStepKind::DownstreamPaperGenerationAlignment,
+                "\"downstream_paper_generation_alignment\"",
+            ),
+        ];
+        for (value, expected) in step_kind_cases {
+            assert_eq!(serde_json::to_string(&value).unwrap(), expected);
+        }
+    }
+
+    #[test]
     fn scholar_chat_psychology_source_connector_plan_body_composes_metadata_connector_preview_and_forbids_execution_calls() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
         let start = source
@@ -21124,7 +22677,7 @@ fn main() {
             .find("pub fn preview_scholar_chat_scientific_evidence_pack_plan")
             .unwrap();
         let end = source[start..]
-            .find("pub fn preview_scholar_chat_answer_readiness")
+            .find("pub fn preview_scholar_chat_scientific_paper_literature_review_plan")
             .unwrap();
         let body = &source[start..start + end];
         assert_eq!(
@@ -21171,6 +22724,318 @@ fn main() {
                 "scientific evidence pack preview body should not contain {forbidden_call}"
             );
         }
+    }
+
+    #[test]
+    fn scholar_chat_scientific_paper_literature_review_plan_body_composes_scientific_evidence_pack_preview_and_forbids_execution_calls() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        let start = source
+            .find("pub fn preview_scholar_chat_scientific_paper_literature_review_plan")
+            .unwrap();
+        let end = source[start..]
+            .find("pub fn preview_scholar_chat_answer_readiness")
+            .unwrap();
+        let body = &source[start..start + end];
+        assert_eq!(
+            body.matches("preview_scholar_chat_scientific_evidence_pack_plan").count(),
+            1
+        );
+        for forbidden_call in [
+            "preview_scholar_chat_local_literature_index",
+            "preview_scholar_chat_course_literature_registry",
+            "preview_scholar_chat_retrieval",
+            "preview_scholar_chat_evidence_plan",
+            "preview_scholar_chat_prompt_pack",
+            "preview_scholar_chat_answer_readiness",
+            "preview_scholar_chat_draft_inference",
+            "preview_scholar_chat_grounded_answer",
+            "preview_scholar_chat_grounded_answer_write_eligibility",
+            "preview_scholar_chat_grounded_answer_execution_plan",
+            "Command::new",
+            "reqwest::",
+            "ureq::",
+            "std::fs",
+            "fs::",
+            "std::env",
+            "env::",
+            "http://",
+            "https://",
+            "CorpusAuthority::",
+            "SourceRegistry::",
+            "RetrievalService::new",
+            "extract_source",
+            "chunk_source",
+            "build_retrieval_index",
+            "smoke_test_local_runtime_inference",
+            "run_llama_runtime_smoke_diagnostic",
+            "run_smoke_inference_probe",
+            "build_answer_draft",
+            "build_grounded_answer",
+            "build_final_answer",
+            "build_evidence_pack",
+            "export_answer_artifacts",
+        ] {
+            assert!(
+                !body.contains(forbidden_call),
+                "scientific paper literature review preview body should not contain {forbidden_call}"
+            );
+        }
+    }
+
+    #[test]
+    fn scholar_chat_scientific_paper_literature_review_plan_blocks_blank_query_and_keeps_boundary_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_scientific_paper_literature_review_plan_deterministic_and_path_free(
+            &temp,
+            scientific_paper_literature_review_plan_request(
+                "   ",
+                Some("scientific_paper"),
+                None,
+                Some(vec!["psychology"]),
+                Some(vec!["source-a"]),
+                Some(vec!["pdf"]),
+                Some(vec!["openalex", "crossref"]),
+                Some(vec!["openalex_psychology", "crossref_psychology"]),
+                None,
+                None,
+                None,
+                Some("review local literature"),
+                None,
+                Some("doi_first"),
+                Some("literature review"),
+                None,
+                Some(vec!["background", "findings"]),
+                Some(3),
+                Some(true),
+                Some(true),
+                Some(2018),
+                Some(2024),
+            ),
+        );
+
+        assert_eq!(
+            preview.status,
+            ScholarChatScientificPaperLiteratureReviewPlanStatus::Blocked
+        );
+        assert!(preview.normalized_query.is_empty());
+        assert!(preview
+            .blockers
+            .iter()
+            .any(|value| value.contains("query_missing")));
+        assert!(preview
+            .planned_literature_review_steps
+            .iter()
+            .all(|step| !step.active));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_paper_literature_review_plan_blocks_without_selected_sources() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_scientific_paper_literature_review_plan_deterministic_and_path_free(
+            &temp,
+            scientific_paper_literature_review_plan_request(
+                "Signalentdeckung und Wahrnehmung",
+                Some("scientific_paper"),
+                Some("Psychology literature review"),
+                Some(vec!["psychology"]),
+                Some(vec![]),
+                Some(vec!["pdf"]),
+                Some(vec!["openalex", "crossref"]),
+                Some(vec!["openalex_psychology", "crossref_psychology"]),
+                Some(vec!["methods"]),
+                Some(vec!["students"]),
+                Some(vec!["signal detection"]),
+                Some("review local literature"),
+                Some(vec!["signal detection"]),
+                Some("doi_first"),
+                Some("literature review"),
+                Some("What predicts signal detection?"),
+                Some(vec!["background", "findings"]),
+                Some(3),
+                Some(true),
+                Some(true),
+                Some(2018),
+                Some(2024),
+            ),
+        );
+
+        assert_eq!(
+            preview.status,
+            ScholarChatScientificPaperLiteratureReviewPlanStatus::LiteratureReviewPlanReady
+        );
+        assert_eq!(preview.selected_source_count, 0);
+        assert!(preview
+            .planned_literature_review_steps
+            .iter()
+            .all(|step| step.active));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_paper_literature_review_plan_requires_research_question_when_upstream_is_ready() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_scientific_paper_literature_review_plan_deterministic_and_path_free(
+            &temp,
+            scientific_paper_literature_review_plan_request(
+                "Signalentdeckung und Wahrnehmung",
+                Some("scientific_paper"),
+                Some("Psychology literature review"),
+                Some(vec!["psychology"]),
+                Some(vec!["source-a"]),
+                Some(vec!["pdf"]),
+                Some(vec!["openalex", "crossref"]),
+                Some(vec!["openalex_psychology", "crossref_psychology"]),
+                Some(vec!["methods"]),
+                Some(vec!["students"]),
+                Some(vec!["signal detection"]),
+                Some("review local literature"),
+                Some(vec!["signal detection"]),
+                Some("doi_first"),
+                Some("literature review"),
+                None,
+                Some(vec!["background", "findings", "citation_plan", "compliance_notes", "unknown_section"]),
+                Some(3),
+                Some(true),
+                Some(true),
+                Some(2018),
+                Some(2024),
+            ),
+        );
+
+        assert_eq!(
+            preview.evidence_pack_plan_status,
+            ScholarChatScientificEvidencePackPlanStatus::EvidencePackPlanReady
+        );
+        assert_eq!(
+            preview.status,
+            ScholarChatScientificPaperLiteratureReviewPlanStatus::NeedsResearchQuestion
+        );
+        assert_eq!(
+            preview.literature_review_strategy,
+            ScholarChatScientificPaperLiteratureReviewStrategy::CitationMetadataFirst
+        );
+        assert_eq!(
+            preview.review_section_plan.requested_sections,
+            vec![
+                "background".to_string(),
+                "citation_plan".to_string(),
+                "compliance_notes".to_string(),
+                "findings".to_string(),
+                "unknown_section".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.review_section_plan.unknown_sections,
+            vec!["unknown_section".to_string()]
+        );
+        assert_eq!(
+            preview.review_section_plan.planned_sections,
+            vec![
+                "background".to_string(),
+                "findings".to_string(),
+                "citation_plan".to_string(),
+                "compliance_notes".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.review_section_plan.section_requirements,
+            vec![
+                "evidence_pack_plan_ready_later".to_string(),
+                "claim_coverage_plan_later".to_string(),
+                "verified_citation_metadata_later".to_string(),
+                "compliance_boundary_review_later".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn scholar_chat_scientific_paper_literature_review_plan_is_ready_later_and_normalizes_step_order() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_scientific_paper_literature_review_plan_deterministic_and_path_free(
+            &temp,
+            scientific_paper_literature_review_plan_request(
+                "Signalentdeckung und Wahrnehmung",
+                Some("scientific_paper"),
+                Some("Psychology literature review"),
+                Some(vec!["psychology"]),
+                Some(vec!["source-a"]),
+                Some(vec!["pdf"]),
+                Some(vec!["openalex", "crossref"]),
+                Some(vec!["openalex_psychology", "crossref_psychology"]),
+                Some(vec!["methods", "methods"]),
+                Some(vec!["students"]),
+                Some(vec!["signal detection"]),
+                Some("review local literature"),
+                Some(vec!["signal detection"]),
+                Some("doi_first"),
+                Some("literature review"),
+                Some("What predicts signal detection?"),
+                Some(vec![" background ", "findings", "citation_plan", "compliance_notes", "background"]),
+                Some(3),
+                Some(true),
+                Some(true),
+                Some(2018),
+                Some(2024),
+            ),
+        );
+
+        assert_eq!(
+            preview.status,
+            ScholarChatScientificPaperLiteratureReviewPlanStatus::LiteratureReviewPlanReady
+        );
+        assert_eq!(
+            preview.literature_review_strategy,
+            ScholarChatScientificPaperLiteratureReviewStrategy::CitationMetadataFirst
+        );
+        assert_eq!(
+            preview.selected_source_count,
+            preview.selected_local_source_ids.len()
+        );
+        assert_eq!(
+            preview.review_section_plan.requested_sections,
+            vec![
+                "background".to_string(),
+                "citation_plan".to_string(),
+                "compliance_notes".to_string(),
+                "findings".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.review_section_plan.planned_sections,
+            vec![
+                "background".to_string(),
+                "findings".to_string(),
+                "citation_plan".to_string(),
+                "compliance_notes".to_string(),
+            ]
+        );
+        assert_eq!(preview.planned_literature_review_steps.len(), 11);
+        assert!(preview
+            .planned_literature_review_steps
+            .iter()
+            .all(|step| step.active && step.preview_only && step.boundary_notes == scientific_paper_literature_review_step_notes()));
+        assert_eq!(
+            preview
+                .planned_literature_review_steps
+                .iter()
+                .map(|step| step.kind.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                ScholarChatScientificPaperLiteratureReviewStepKind::ScientificPaperModeAlignment,
+                ScholarChatScientificPaperLiteratureReviewStepKind::EvidencePackPlanAlignment,
+                ScholarChatScientificPaperLiteratureReviewStepKind::ResearchQuestionPlanning,
+                ScholarChatScientificPaperLiteratureReviewStepKind::SearchStrategyPlanning,
+                ScholarChatScientificPaperLiteratureReviewStepKind::EvidenceMapPlanning,
+                ScholarChatScientificPaperLiteratureReviewStepKind::ReviewSectionPlanning,
+                ScholarChatScientificPaperLiteratureReviewStepKind::ClaimSynthesisPlanning,
+                ScholarChatScientificPaperLiteratureReviewStepKind::CitationPlanning,
+                ScholarChatScientificPaperLiteratureReviewStepKind::QualityReviewPlanning,
+                ScholarChatScientificPaperLiteratureReviewStepKind::ComplianceBoundaryCheck,
+                ScholarChatScientificPaperLiteratureReviewStepKind::DownstreamPaperGenerationAlignment,
+            ]
+        );
+        assert!(preview.next_required_actions.iter().any(|action| {
+            action.contains("keep this preview-only and plan the literature review later")
+        }));
     }
 
     #[test]
@@ -21248,7 +23113,7 @@ fn main() {
         let imports_end = source[imports_start..].find("};").unwrap() + imports_start + 2;
         let imports = &source[imports_start..imports_end];
 
-        let expected: [(&str, &str, &str, &str); 9] = [
+        let expected: [(&str, &str, &str, &str); 10] = [
             (
                 "preview_scholar_chat_scientific_discipline_registry",
                 "ScholarChatScientificDisciplineRegistryPreviewRequest",
@@ -21303,6 +23168,12 @@ fn main() {
                 "ScholarChatScientificEvidencePackPlanPreview",
                 "preview_scholar_chat_scientific_evidence_pack_plan_impl(root, request)",
             ),
+            (
+                "preview_scholar_chat_scientific_paper_literature_review_plan",
+                "ScholarChatScientificPaperLiteratureReviewPlanRequest",
+                "ScholarChatScientificPaperLiteratureReviewPlanPreview",
+                "preview_scholar_chat_scientific_paper_literature_review_plan_impl(root, request)",
+            ),
         ];
 
         let mut previous_position = None;
@@ -21332,11 +23203,18 @@ fn main() {
 
         let scientific_evidence_pack_position =
             handler.find("preview_scholar_chat_scientific_evidence_pack_plan").unwrap();
+        let scientific_paper_literature_review_position = handler
+            .find("preview_scholar_chat_scientific_paper_literature_review_plan")
+            .unwrap();
         let psychology_source_connector_position =
             handler.find("preview_scholar_chat_psychology_source_connector_plan").unwrap();
         assert!(
             psychology_source_connector_position < scientific_evidence_pack_position,
             "scientific evidence pack preview should follow psychology source connector preview"
+        );
+        assert!(
+            scientific_evidence_pack_position < scientific_paper_literature_review_position,
+            "scientific paper literature review preview should follow scientific evidence pack preview"
         );
         for runtime_command in [
             "preview_scholar_chat_runtime_answer_pipeline_gate",
@@ -21353,6 +23231,14 @@ fn main() {
                 );
             }
         }
+        if let Some(runtime_diagnostic_bridge_position) =
+            handler.find("preview_scholar_chat_runtime_diagnostic_bridge")
+        {
+            assert!(
+                scientific_paper_literature_review_position < runtime_diagnostic_bridge_position,
+                "scientific paper literature review preview should appear before runtime diagnostic bridge"
+            );
+        }
 
         assert!(handler.contains("preview_scholar_chat_scientific_discipline_registry"));
         assert!(handler.contains("preview_scholar_chat_scientific_source_registry"));
@@ -21363,6 +23249,7 @@ fn main() {
         assert!(handler.contains("preview_scholar_chat_metadata_connector_plan"));
         assert!(handler.contains("preview_scholar_chat_psychology_source_connector_plan"));
         assert!(handler.contains("preview_scholar_chat_scientific_evidence_pack_plan"));
+        assert!(handler.contains("preview_scholar_chat_scientific_paper_literature_review_plan"));
     }
 
     #[test]
