@@ -1,0 +1,303 @@
+# 13 — Scientific Retrieval Architecture
+
+## Purpose
+
+AEGIS Scientific Retrieval is not generic web search.
+It is a controlled scientific retrieval pipeline for disciplined local-first work:
+
+- discipline understanding
+- source selection
+- query planning
+- local and external evidence planning
+- evidence pack preparation
+- Scholar Chat support
+- Scientific Paper Mode support
+- Course Mode support
+
+The architecture is designed to support preview-first rollout phases before any execution or answer-writing behavior is enabled.
+
+## Current State
+
+The currently implemented system has preview gates for local runtime and Scholar Chat answer-related planning.
+It does not yet implement the scientific retrieval stack itself.
+
+Not yet implemented:
+
+- discipline registry
+- source registry
+- scientific query planner
+- external metadata connectors
+- local literature index
+- BM25 retrieval
+- vector retrieval
+- evidence pack generation from scientific search
+- automatic literature search
+
+## Target Architecture
+
+Target pipeline:
+
+User query
+→ Scientific query understanding
+→ Discipline graph lookup
+→ Source registry lookup
+→ Query expansion
+→ Local data search plan
+→ External metadata search plan
+→ Ranking / deduplication plan
+→ Evidence Pack plan
+→ Scholar Chat / Scientific Paper Mode / Course Mode response
+
+Early phases remain preview-only until explicitly changed.
+
+## Discipline Graph
+
+The discipline layer is a graph, not a rigid tree.
+
+Required relationship types:
+
+- `belongs_to`
+- `parent_path`
+- `uses_methods_from`
+- `appears_in`
+- `preferred_sources`
+- `curriculum_sources`
+- `canonical_mappings`
+
+A graph is better than a simple tree because scientific concepts can participate in multiple useful relationships at once.
+For example, Signal Detection Theory belongs to psychology / psychophysics, but it also uses statistics, probability theory, decision theory, and ROC analysis.
+
+## Core Science Classification
+
+The internal science classes are:
+
+- `core_science`
+- `method_science`
+- `applied_domain`
+- `curriculum_layer`
+
+Working taxonomy:
+
+### core_science
+
+- mathematics
+- statistics
+- physics
+- chemistry
+- biology
+- psychology
+- neuroscience
+- medicine_biomedical_science
+- computer_science
+
+### method_science
+
+- logic
+- measurement_theory
+- research_methods
+- experimental_design
+- information_retrieval
+- machine_learning
+- data_analysis
+
+### applied_domain
+
+- engineering
+- education
+- economics
+- social_sciences
+- law
+- business
+
+Social sciences are not treated as a core science in this AEGIS taxonomy.
+They may be included as `applied_domain` or neighboring-domain metadata when needed.
+
+## Canonical Classification Systems
+
+These are target mapping candidates, not implemented claims:
+
+- MSC2020 for mathematics / statistics
+- MeSH for medicine / biomedical science
+- ACM CCS for computer science
+- OpenAlex Topics for broad multidisciplinary mapping
+- APA / PsycInfo / PubPsych-style categories for psychology
+- arXiv categories for preprints
+- zbMATH classification for mathematics
+- custom AEGIS method tags for cross-disciplinary methods
+
+## Curriculum Layer
+
+Module handbooks can be useful curriculum metadata.
+
+Examples of useful curriculum signals:
+
+- module names
+- course hierarchy
+- prerequisites
+- ECTS
+- learning goals
+- topic lists
+
+Curriculum metadata is not the same as scientific truth.
+It must be mapped to canonical classifications and literature sources.
+
+Do not scrape protected or access-restricted full texts.
+User-authenticated or local user-provided documents may be indexed later only within user-controlled / local boundaries.
+
+## Source Registry
+
+Candidate source families:
+
+### Multidisciplinary
+
+- OpenAlex
+- Crossref
+- DOAJ
+
+### Psychology
+
+- PubPsych
+- PsychArchives
+- PsyArXiv
+- PubMed when biomedical / neuro / clinical context applies
+
+### Mathematics / Statistics
+
+- zbMATH Open
+- arXiv
+- Crossref
+- OpenAlex
+
+### Medicine / Neuroscience
+
+- PubMed
+- Europe PMC
+- MeSH-linked sources
+- OpenAlex
+- Crossref
+
+### Computer Science
+
+- arXiv
+- ACM / DBLP-style metadata where legally / API appropriate
+- OpenAlex
+- Crossref
+
+### Library / Curriculum
+
+- TU Darmstadt / ULB Darmstadt catalog or discovery metadata where legally / API appropriate
+- local user-provided course PDFs and module materials later
+
+Document access classes:
+
+- `open_metadata`
+- `open_full_text`
+- `user_provided_local_file`
+- `user_authenticated_access`
+- `restricted_no_ingest`
+- `catalog_only`
+
+Official APIs and metadata endpoints are preferred over scraping.
+
+## Mode Behavior
+
+### Scholar Chat
+
+- interprets topic
+- searches local evidence first
+- plans external scientific search if needed
+- answers only from verified evidence later
+
+### Scientific Paper Mode
+
+- research question decomposition
+- literature search plan
+- source ranking
+- deduplication
+- review / meta-analysis prioritization where appropriate
+- citation / evidence pack planning
+- no fabricated citations
+
+### Course Mode
+
+- course / module context first
+- local course literature first
+- module handbook / curriculum alignment
+- prerequisite and learning path support
+- external literature only as supplement
+
+### Kursmodus
+
+Course Mode may also be referenced as Kursmodus in UI or documentation that targets German-speaking academic users.
+
+## Examples
+
+### Example A: Signalentdeckung
+
+Input: `Signalentdeckung`
+
+Expected preview:
+
+- `recognized_concept`: `signal_detection_theory`
+- German label: `Signalentdeckungstheorie`
+- path: `psychology > general_psychology > perception > psychophysics > signal_detection_theory`
+- related methods: `statistics`, `probability_theory`, `decision_theory`, `roc_analysis`
+- preferred sources: `pubpsych`, `psycharchives`, `openalex`, `crossref`, `pubmed` if biomedical context
+- `no_web_request`: `true`
+- `no_scraping`: `true`
+- `preview_only`: `true`
+
+### Example B: ANOVA
+
+Input: `ANOVA`
+
+Expected preview:
+
+- `recognized_concept`: `analysis_of_variance`
+- path: `statistics > inferential_statistics > hypothesis_testing > analysis_of_variance`
+- psychology mapping: `psychology > methods > experimental_design > group_comparisons`
+- related methods: `linear_models`, `f_test`, `effect_size`, `post_hoc_tests`, `repeated_measures`
+- preferred sources: `openalex`, `crossref`, `psycharchives` / `pubpsych` for psychology context, `zbmath` / `arxiv` for mathematical / statistical theory
+- local course materials prioritized in Course Mode
+- `preview_only`: `true`
+
+### Example C: Hypothesentests
+
+Input: `Hypothesentests`
+
+Expected preview:
+
+- `recognized_concept`: `hypothesis_testing`
+- path: `statistics > inferential_statistics > hypothesis_testing`
+- related concepts: `null_hypothesis`, `alternative_hypothesis`, `p_value`, `type_i_error`, `type_ii_error`, `power`, `confidence_intervals`
+- preferred sources: `openalex`, `crossref`, `zbmath`, `arxiv`, psychology-specific sources if applied psychology context
+- `preview_only`: `true`
+
+## Legal and Boundary Rules
+
+- no scraping of protected full text
+- no bypassing paywalls
+- no automated scraping of authenticated library sessions
+- prefer APIs and metadata
+- user-provided local documents may be indexed later under local / user control
+- store license / access metadata for every source
+- full text ingestion requires explicit legal / access status
+- preview phases must not perform network access
+
+## Preview-First Implementation Roadmap
+
+Proposed phases:
+
+- Phase 98.0 - Scientific Retrieval Architecture Docs
+- Phase 98.1 - Scientific Discipline Registry Preview
+- Phase 98.2 - Scientific Source Registry Preview
+- Phase 99.0 - Scientific Query Understanding Preview
+- Phase 99.1 - Scholar Chat Scientific Search Plan Preview
+- Phase 100.0 - Local Literature Index Preview
+- Phase 100.1 - Course Literature Registry Preview
+- Phase 101.0 - OpenAlex / Crossref Metadata Connector Preview
+- Phase 102.0 - Psychology Source Connector Preview
+- Phase 103.0 - Scientific Evidence Pack Preview
+- Phase 104.0 - Scientific Paper Mode Literature Review Preview
+
+Each phase remains preview-first until explicitly changed.
