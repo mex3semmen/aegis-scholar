@@ -5332,9 +5332,9 @@ pub fn preview_scholar_chat_psychology_source_connector_plan(
         ScholarChatPsychologyScopeStatus::NeedsPsychologyScope
     };
 
-    let mut warnings = metadata_connector_plan_preview.warnings.clone();
-    let mut blockers = metadata_connector_plan_preview.blockers.clone();
-    let mut next_required_actions = metadata_connector_plan_preview.next_required_actions.clone();
+    let warnings = metadata_connector_plan_preview.warnings.clone();
+    let blockers = metadata_connector_plan_preview.blockers.clone();
+    let next_required_actions = metadata_connector_plan_preview.next_required_actions.clone();
 
     let mut psychology_scope_warnings = Vec::new();
     let mut psychology_scope_actions = Vec::new();
@@ -5961,37 +5961,6 @@ pub fn preview_scholar_chat_psychology_source_connector_plan(
         step_active,
     ));
 
-    let source_family_strategy = if matches!(
-        metadata_connector_plan_status,
-        ScholarChatMetadataConnectorPlanStatus::Blocked
-    ) {
-        ScholarChatPsychologySourceFamilyStrategy::Blocked
-    } else if matches!(
-        psychology_scope_status,
-        ScholarChatPsychologyScopeStatus::NeedsPsychologyScope
-    ) {
-        ScholarChatPsychologySourceFamilyStrategy::SourceFamilySelectionNeeded
-    } else if normalized_mode == "course"
-        && selected_psychology_source_families_sorted
-            .iter()
-            .any(|family| family == "local_course_literature")
-    {
-        ScholarChatPsychologySourceFamilyStrategy::CourseLiteratureFirst
-    } else if selected_psychology_source_families_sorted
-        .iter()
-        .any(|family| family == "apa_psycnet_discovery")
-    {
-        ScholarChatPsychologySourceFamilyStrategy::ScholarlyIndexFirst
-    } else if !selected_psychology_source_families_sorted.is_empty()
-        && selected_psychology_source_families_sorted
-            .iter()
-            .all(|family| family == "openalex_psychology" || family == "crossref_psychology")
-    {
-        ScholarChatPsychologySourceFamilyStrategy::OpenMetadataFirst
-    } else {
-        ScholarChatPsychologySourceFamilyStrategy::PsychologyMetadataBalanced
-    };
-
     let status = if normalized_query.is_empty()
         || matches!(
             metadata_connector_plan_status,
@@ -6023,6 +5992,40 @@ pub fn preview_scholar_chat_psychology_source_connector_plan(
         ScholarChatPsychologySourceConnectorPlanStatus::NeedsSourceFamily
     } else {
         ScholarChatPsychologySourceConnectorPlanStatus::SourceConnectorPlanReady
+    };
+
+    let source_family_strategy = if matches!(
+        metadata_connector_plan_status,
+        ScholarChatMetadataConnectorPlanStatus::Blocked
+    ) {
+        ScholarChatPsychologySourceFamilyStrategy::Blocked
+    } else if matches!(
+        status,
+        ScholarChatPsychologySourceConnectorPlanStatus::NeedsSourceFamily
+    ) || matches!(
+        psychology_scope_status,
+        ScholarChatPsychologyScopeStatus::NeedsPsychologyScope
+    ) {
+        ScholarChatPsychologySourceFamilyStrategy::SourceFamilySelectionNeeded
+    } else if normalized_mode == "course"
+        && selected_psychology_source_families_sorted
+            .iter()
+            .any(|family| family == "local_course_literature")
+    {
+        ScholarChatPsychologySourceFamilyStrategy::CourseLiteratureFirst
+    } else if selected_psychology_source_families_sorted
+        .iter()
+        .any(|family| family == "apa_psycnet_discovery")
+    {
+        ScholarChatPsychologySourceFamilyStrategy::ScholarlyIndexFirst
+    } else if !selected_psychology_source_families_sorted.is_empty()
+        && selected_psychology_source_families_sorted
+            .iter()
+            .all(|family| family == "openalex_psychology" || family == "crossref_psychology")
+    {
+        ScholarChatPsychologySourceFamilyStrategy::OpenMetadataFirst
+    } else {
+        ScholarChatPsychologySourceFamilyStrategy::PsychologyMetadataBalanced
     };
 
     let mut blocker_notes = blockers.clone();
@@ -6151,7 +6154,7 @@ pub fn preview_scholar_chat_psychology_source_connector_plan(
 
     let source_family_selection_plan = ScholarChatPsychologySourceFamilySelectionPlan {
         requested_families: requested_psychology_source_families.clone(),
-        supported_families: selected_psychology_source_families_sorted.clone(),
+        supported_families: supported_psychology_source_families.clone(),
         unknown_families: unknown_psychology_source_families.clone(),
         selected_families: selected_psychology_source_families_sorted.clone(),
         needs_source_family_selection: matches!(
@@ -20430,11 +20433,22 @@ fn main() {
         );
         assert_eq!(
             preview.source_family_strategy,
-            ScholarChatPsychologySourceFamilyStrategy::PsychologyMetadataBalanced
+            ScholarChatPsychologySourceFamilyStrategy::SourceFamilySelectionNeeded
         );
         assert!(preview
             .source_family_selection_plan
             .needs_source_family_selection);
+        assert_eq!(
+            preview.source_family_selection_plan.supported_families,
+            vec![
+                "openalex_psychology".to_string(),
+                "crossref_psychology".to_string(),
+                "pubmed_psychology".to_string(),
+                "eric_psychology".to_string(),
+                "apa_psycnet_discovery".to_string(),
+                "local_course_literature".to_string(),
+            ]
+        );
         assert_eq!(
             preview.source_family_selection_plan.unknown_families,
             vec!["unknown_family".to_string()]
