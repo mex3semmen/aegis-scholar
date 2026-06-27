@@ -257,6 +257,100 @@ pub struct ScholarChatScientificSourceRegistryPreview {
     pub no_audit_write: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificQueryUnderstandingStatus {
+    Blocked,
+    Understood,
+    Ambiguous,
+    UnknownConcept,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificQueryIntent {
+    ConceptExplanation,
+    MethodApplication,
+    LiteratureSearch,
+    CourseLearning,
+    Comparison,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificAmbiguityLevel {
+    None,
+    Low,
+    Medium,
+    High,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificQueryDetectedAlias {
+    pub alias: String,
+    pub concept: String,
+    pub language: String,
+    pub start_index: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificQueryUnderstandingPreviewRequest {
+    pub query: String,
+    pub mode: Option<String>,
+    pub course_context: Option<String>,
+    pub context_tags: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificQueryUnderstandingPreview {
+    pub status: ScholarChatScientificQueryUnderstandingStatus,
+    pub normalized_query: String,
+    pub normalized_mode: String,
+    pub normalized_context_tags: Vec<String>,
+    pub inferred_topic: Option<String>,
+    pub query_intent: ScholarChatScientificQueryIntent,
+    pub ambiguity_level: ScholarChatScientificAmbiguityLevel,
+    pub ambiguity_warnings: Vec<String>,
+    pub language_hints: Vec<String>,
+    pub detected_aliases: Vec<ScholarChatScientificQueryDetectedAlias>,
+    pub discipline_status: ScholarChatScientificDisciplineRegistryStatus,
+    pub recognized_concept: Option<String>,
+    pub label: Option<String>,
+    pub source_registry_status: ScholarChatScientificSourceRegistryStatus,
+    pub preferred_source_ids: Vec<String>,
+    pub conditional_source_ids: Vec<String>,
+    pub excluded_source_ids: Vec<String>,
+    pub planned_metadata_queries: Vec<String>,
+    pub planned_local_search_queries: Vec<String>,
+    pub planned_expanded_queries: Vec<String>,
+    pub evidence_requirements: Vec<String>,
+    pub ranking_hints: Vec<String>,
+    pub deduplication_hints: Vec<String>,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub query_understanding_preview_only: bool,
+    pub no_web_request: bool,
+    pub no_scraping: bool,
+    pub no_connector_call: bool,
+    pub no_source_import: bool,
+    pub no_local_file_indexing: bool,
+    pub no_bm25_index: bool,
+    pub no_vector_index: bool,
+    pub no_model_loading: bool,
+    pub no_runtime_inference: bool,
+    pub no_llm_call: bool,
+    pub no_answer_generated: bool,
+    pub no_evidence_pack_created: bool,
+    pub no_artifact_write: bool,
+    pub no_persistence: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScholarChatRetrievalCandidate {
     pub source_id: String,
@@ -2102,6 +2196,227 @@ pub fn preview_scholar_chat_scientific_source_registry(
         summary,
         preview_only: true,
         source_registry_preview_only: true,
+        no_web_request: true,
+        no_scraping: true,
+        no_connector_call: true,
+        no_source_import: true,
+        no_local_file_indexing: true,
+        no_bm25_index: true,
+        no_vector_index: true,
+        no_model_loading: true,
+        no_runtime_inference: true,
+        no_llm_call: true,
+        no_answer_generated: true,
+        no_evidence_pack_created: true,
+        no_artifact_write: true,
+        no_persistence: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+    })
+}
+
+pub fn preview_scholar_chat_scientific_query_understanding(
+    root: impl Into<PathBuf>,
+    request: ScholarChatScientificQueryUnderstandingPreviewRequest,
+) -> AegisResult<ScholarChatScientificQueryUnderstandingPreview> {
+    let root = root.into();
+    let normalized_query = normalize_scientific_query_text(&request.query);
+    let normalized_mode = normalize_scientific_mode(request.mode.clone());
+    let normalized_context_tags = normalize_scientific_context_tags(request.context_tags.clone());
+    let query_lower = normalized_query.to_lowercase();
+    let detected_aliases = scientific_query_detected_aliases(&normalized_query);
+    let detected_concepts = scientific_query_detected_concepts(&normalized_query);
+    let ambiguity_warnings = scientific_query_ambiguity_warnings(&detected_concepts);
+    let query_intent = scientific_query_intent(&normalized_mode, &query_lower);
+    let language_hints = scientific_query_language_hints(&query_lower, &detected_aliases);
+
+    let status = if normalized_query.is_empty() {
+        ScholarChatScientificQueryUnderstandingStatus::Blocked
+    } else if detected_concepts.len() > 1 {
+        ScholarChatScientificQueryUnderstandingStatus::Ambiguous
+    } else if detected_concepts.is_empty() {
+        ScholarChatScientificQueryUnderstandingStatus::UnknownConcept
+    } else {
+        ScholarChatScientificQueryUnderstandingStatus::Understood
+    };
+
+    let ambiguity_level = if matches!(status, ScholarChatScientificQueryUnderstandingStatus::Ambiguous) {
+        ScholarChatScientificAmbiguityLevel::Medium
+    } else {
+        ScholarChatScientificAmbiguityLevel::None
+    };
+
+    let inferred_topic = if normalized_query.is_empty() {
+        None
+    } else if let Some(first_concept) = detected_concepts.first() {
+        Some(first_concept.topic_label.to_string())
+    } else {
+        Some(normalized_query.clone())
+    };
+
+    let preview_topic = inferred_topic.clone().unwrap_or_else(|| normalized_query.clone());
+    let discipline_preview = preview_scholar_chat_scientific_discipline_registry(
+        &root,
+        ScholarChatScientificDisciplineRegistryPreviewRequest {
+            topic: preview_topic.clone(),
+            mode: Some(normalized_mode.clone()),
+            course_context: request.course_context.clone(),
+        },
+    )?;
+    let source_preview = preview_scholar_chat_scientific_source_registry(
+        &root,
+        ScholarChatScientificSourceRegistryPreviewRequest {
+            topic: preview_topic.clone(),
+            mode: Some(normalized_mode.clone()),
+            course_context: request.course_context.clone(),
+            context_tags: Some(normalized_context_tags.clone()),
+        },
+    )?;
+
+    let recognized_concept = discipline_preview.recognized_concept.clone();
+    let label = discipline_preview.label.clone();
+    let discipline_status = discipline_preview.status.clone();
+    let source_registry_status = source_preview.status.clone();
+
+    let mut blockers = Vec::new();
+    let mut warnings = vec![
+        "This is a scientific query understanding preview only; no web requests, scraping, connectors, local indexing, model loading, runtime inference, or answer generation were run.".to_string(),
+    ];
+    let mut next_required_actions = Vec::new();
+
+    if normalized_query.is_empty() {
+        blockers.push("query_missing: Provide a scientific query to preview.".to_string());
+        next_required_actions.push("Provide a scientific query to preview the understanding plan.".to_string());
+    }
+
+    if matches!(status, ScholarChatScientificQueryUnderstandingStatus::Ambiguous) {
+        if !ambiguity_warnings.is_empty() {
+            warnings.extend(ambiguity_warnings.iter().cloned());
+        }
+        next_required_actions.push(
+            "Narrow the topic or accept the first inferred concept before expanding retrieval planning."
+                .to_string(),
+        );
+    } else if matches!(status, ScholarChatScientificQueryUnderstandingStatus::UnknownConcept) && !normalized_query.is_empty() {
+        warnings.push(
+            "The query does not yet map to a known scientific concept.".to_string(),
+        );
+        next_required_actions.push(
+            "Add discipline and source registry mappings before expanding retrieval planning."
+                .to_string(),
+        );
+    }
+
+    match normalized_mode.as_str() {
+        "scientific_paper" => {
+            warnings.push(
+                "Scientific Paper Mode will later prioritize metadata search planning, deduplication, ranking, and citation-safe evidence preparation."
+                    .to_string(),
+            );
+            next_required_actions.push(
+                "Future Scientific Paper Mode phases should prioritize metadata search planning, deduplication, ranking, and citation-safe evidence preparation."
+                    .to_string(),
+            );
+        }
+        "course" => {
+            warnings.push(
+                "Course Mode will later prioritize local course materials, module context, prerequisites, and learning path support."
+                    .to_string(),
+            );
+            next_required_actions.push(
+                "Future Course Mode phases should prioritize local course materials, module context, prerequisites, and learning path support."
+                    .to_string(),
+            );
+        }
+        _ => {
+            warnings.push(
+                "Later Scholar Chat phases should retrieve local evidence before answering."
+                    .to_string(),
+            );
+            next_required_actions.push(
+                "Later Scholar Chat phases should retrieve local evidence before answering."
+                    .to_string(),
+            );
+        }
+    }
+
+    if !matches!(source_registry_status, ScholarChatScientificSourceRegistryStatus::SourcePlanReady) {
+        warnings.push(
+            "The source registry preview is not yet ready later for this inferred topic."
+                .to_string(),
+        );
+        next_required_actions.push(
+            "Expand discipline and source registry coverage before retrieval planning."
+                .to_string(),
+        );
+    }
+
+    let planned_metadata_queries = if normalized_query.is_empty() {
+        Vec::new()
+    } else {
+        source_preview.planned_metadata_queries.clone()
+    };
+    let planned_local_search_queries = scientific_query_planned_local_search_queries(
+        recognized_concept.as_deref(),
+        &normalized_query,
+    );
+    let planned_expanded_queries = scientific_query_planned_expanded_queries(recognized_concept.as_deref());
+    let evidence_requirements = scientific_query_evidence_requirements(
+        &normalized_mode,
+        &query_intent,
+        &source_registry_status,
+    );
+
+    let summary = match status {
+        ScholarChatScientificQueryUnderstandingStatus::Blocked => {
+            "Scientific query understanding preview blocked because the query is blank.".to_string()
+        }
+        ScholarChatScientificQueryUnderstandingStatus::Ambiguous => format!(
+            "Scientific query understanding preview found multiple scientific concepts and prefers {} first.",
+            inferred_topic.as_deref().unwrap_or("the first inferred concept")
+        ),
+        ScholarChatScientificQueryUnderstandingStatus::Understood => format!(
+            "Scientific query understanding preview understood '{}' as {} in {} mode.",
+            normalized_query,
+            inferred_topic.as_deref().unwrap_or("the inferred topic"),
+            normalized_mode
+        ),
+        ScholarChatScientificQueryUnderstandingStatus::UnknownConcept => format!(
+            "Scientific query understanding preview could not yet map '{}' to a known scientific concept.",
+            normalized_query
+        ),
+    };
+
+    Ok(ScholarChatScientificQueryUnderstandingPreview {
+        status,
+        normalized_query,
+        normalized_mode,
+        normalized_context_tags,
+        inferred_topic,
+        query_intent,
+        ambiguity_level,
+        ambiguity_warnings,
+        language_hints,
+        detected_aliases,
+        discipline_status,
+        recognized_concept,
+        label,
+        source_registry_status,
+        preferred_source_ids: source_preview.preferred_source_ids,
+        conditional_source_ids: source_preview.conditional_source_ids,
+        excluded_source_ids: source_preview.excluded_source_ids,
+        planned_metadata_queries,
+        planned_local_search_queries,
+        planned_expanded_queries,
+        evidence_requirements,
+        ranking_hints: source_preview.ranking_hints,
+        deduplication_hints: source_preview.deduplication_hints,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        query_understanding_preview_only: true,
         no_web_request: true,
         no_scraping: true,
         no_connector_call: true,
@@ -6338,6 +6653,479 @@ fn scientific_source_registry_deduplication_hints(
     hints
 }
 
+#[derive(Clone, Copy)]
+struct ScientificQueryAliasSpec {
+    alias: &'static str,
+    concept: &'static str,
+    topic_label: &'static str,
+    language: &'static str,
+}
+
+#[derive(Clone, Copy)]
+struct ScientificQueryConceptCandidate {
+    concept: &'static str,
+    topic_label: &'static str,
+    start_index: usize,
+}
+
+const SCIENTIFIC_QUERY_ALIAS_SPECS: &[ScientificQueryAliasSpec] = &[
+    ScientificQueryAliasSpec {
+        alias: "Signalentdeckung",
+        concept: "signal_detection_theory",
+        topic_label: "Signalentdeckung",
+        language: "german",
+    },
+    ScientificQueryAliasSpec {
+        alias: "Signalentdeckungstheorie",
+        concept: "signal_detection_theory",
+        topic_label: "Signalentdeckung",
+        language: "german",
+    },
+    ScientificQueryAliasSpec {
+        alias: "signal detection",
+        concept: "signal_detection_theory",
+        topic_label: "Signalentdeckung",
+        language: "english",
+    },
+    ScientificQueryAliasSpec {
+        alias: "signal detection theory",
+        concept: "signal_detection_theory",
+        topic_label: "Signalentdeckung",
+        language: "english",
+    },
+    ScientificQueryAliasSpec {
+        alias: "d prime",
+        concept: "signal_detection_theory",
+        topic_label: "Signalentdeckung",
+        language: "english",
+    },
+    ScientificQueryAliasSpec {
+        alias: "d-prime",
+        concept: "signal_detection_theory",
+        topic_label: "Signalentdeckung",
+        language: "english",
+    },
+    ScientificQueryAliasSpec {
+        alias: "dprime",
+        concept: "signal_detection_theory",
+        topic_label: "Signalentdeckung",
+        language: "english",
+    },
+    ScientificQueryAliasSpec {
+        alias: "ANOVA",
+        concept: "analysis_of_variance",
+        topic_label: "ANOVA",
+        language: "english",
+    },
+    ScientificQueryAliasSpec {
+        alias: "Varianzanalyse",
+        concept: "analysis_of_variance",
+        topic_label: "ANOVA",
+        language: "german",
+    },
+    ScientificQueryAliasSpec {
+        alias: "analysis of variance",
+        concept: "analysis_of_variance",
+        topic_label: "ANOVA",
+        language: "english",
+    },
+    ScientificQueryAliasSpec {
+        alias: "factorial ANOVA",
+        concept: "analysis_of_variance",
+        topic_label: "ANOVA",
+        language: "english",
+    },
+    ScientificQueryAliasSpec {
+        alias: "repeated measures ANOVA",
+        concept: "analysis_of_variance",
+        topic_label: "ANOVA",
+        language: "english",
+    },
+    ScientificQueryAliasSpec {
+        alias: "Hypothesentests",
+        concept: "hypothesis_testing",
+        topic_label: "Hypothesentests",
+        language: "german",
+    },
+    ScientificQueryAliasSpec {
+        alias: "Hypothesentest",
+        concept: "hypothesis_testing",
+        topic_label: "Hypothesentests",
+        language: "german",
+    },
+    ScientificQueryAliasSpec {
+        alias: "hypothesis testing",
+        concept: "hypothesis_testing",
+        topic_label: "Hypothesentests",
+        language: "english",
+    },
+    ScientificQueryAliasSpec {
+        alias: "null hypothesis",
+        concept: "hypothesis_testing",
+        topic_label: "Hypothesentests",
+        language: "english",
+    },
+    ScientificQueryAliasSpec {
+        alias: "nullhypothese",
+        concept: "hypothesis_testing",
+        topic_label: "Hypothesentests",
+        language: "german",
+    },
+    ScientificQueryAliasSpec {
+        alias: "p-value",
+        concept: "hypothesis_testing",
+        topic_label: "Hypothesentests",
+        language: "english",
+    },
+    ScientificQueryAliasSpec {
+        alias: "p value",
+        concept: "hypothesis_testing",
+        topic_label: "Hypothesentests",
+        language: "english",
+    },
+    ScientificQueryAliasSpec {
+        alias: "p-wert",
+        concept: "hypothesis_testing",
+        topic_label: "Hypothesentests",
+        language: "german",
+    },
+];
+
+fn normalize_scientific_query_text(query: &str) -> String {
+    query.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn scientific_query_contains_any(query_lower: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| query_lower.contains(needle))
+}
+
+fn scientific_query_detected_aliases(query: &str) -> Vec<ScholarChatScientificQueryDetectedAlias> {
+    let query_lower = query.to_lowercase();
+    let mut aliases = Vec::new();
+    for spec in SCIENTIFIC_QUERY_ALIAS_SPECS {
+        let alias_search = spec.alias.to_lowercase();
+        if let Some(byte_index) = query_lower.find(&alias_search) {
+            aliases.push(ScholarChatScientificQueryDetectedAlias {
+                alias: spec.alias.to_string(),
+                concept: spec.concept.to_string(),
+                language: spec.language.to_string(),
+                start_index: query[..byte_index].chars().count(),
+            });
+        }
+    }
+    aliases.sort_by(|left, right| {
+        left.start_index
+            .cmp(&right.start_index)
+            .then_with(|| left.alias.cmp(&right.alias))
+            .then_with(|| left.concept.cmp(&right.concept))
+    });
+    aliases
+}
+
+fn scientific_query_detected_concepts(query: &str) -> Vec<ScientificQueryConceptCandidate> {
+    let query_lower = query.to_lowercase();
+    let mut concepts = BTreeMap::<&'static str, ScientificQueryConceptCandidate>::new();
+    for spec in SCIENTIFIC_QUERY_ALIAS_SPECS {
+        let alias_search = spec.alias.to_lowercase();
+        if let Some(byte_index) = query_lower.find(&alias_search) {
+            let start_index = query[..byte_index].chars().count();
+            let candidate = ScientificQueryConceptCandidate {
+                concept: spec.concept,
+                topic_label: spec.topic_label,
+                start_index,
+            };
+            concepts
+                .entry(spec.concept)
+                .and_modify(|existing| {
+                    if candidate.start_index < existing.start_index
+                        || (candidate.start_index == existing.start_index
+                            && candidate.topic_label < existing.topic_label)
+                    {
+                        *existing = candidate;
+                    }
+                })
+                .or_insert(candidate);
+        }
+    }
+    let mut detected: Vec<_> = concepts.into_values().collect();
+    detected.sort_by(|left, right| {
+        left.start_index
+            .cmp(&right.start_index)
+            .then_with(|| left.topic_label.cmp(right.topic_label))
+            .then_with(|| left.concept.cmp(right.concept))
+    });
+    detected
+}
+
+fn scientific_query_ambiguity_warnings(
+    detected_concepts: &[ScientificQueryConceptCandidate],
+) -> Vec<String> {
+    if detected_concepts.len() <= 1 {
+        return Vec::new();
+    }
+    let concept_list = detected_concepts
+        .iter()
+        .map(|candidate| candidate.topic_label.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    vec![
+        format!("Detected multiple scientific concepts: {}.", concept_list),
+        format!(
+            "Preferred first occurrence: {}.",
+            detected_concepts
+                .first()
+                .map(|candidate| candidate.topic_label)
+                .unwrap_or("the first inferred concept")
+        ),
+    ]
+}
+
+fn scientific_query_language_hints(
+    query_lower: &str,
+    detected_aliases: &[ScholarChatScientificQueryDetectedAlias],
+) -> Vec<String> {
+    let mut hints = Vec::new();
+    if detected_aliases.iter().any(|alias| alias.language == "german")
+        || scientific_query_contains_any(
+            query_lower,
+            &[
+                "was ist",
+                "erklär",
+                "erklaer",
+                "lernen",
+                "klausur",
+                "prüfung",
+                "pruefung",
+                "vorlesung",
+                "seminar",
+                "modul",
+                "auswertung",
+                "berechnen",
+                "beispiel",
+                "unterschied",
+                "vergleich",
+                "metaanalyse",
+                "quelle",
+                "quellen",
+                "studie",
+                "studien",
+            ],
+        )
+    {
+        push_unique_text(&mut hints, "german");
+    }
+    if detected_aliases.iter().any(|alias| alias.language == "english")
+        || scientific_query_contains_any(
+            query_lower,
+            &[
+                "what is",
+                "explain",
+                "define",
+                "definition",
+                "literature",
+                "literatur",
+                "paper",
+                "papers",
+                "review",
+                "meta-analysis",
+                "citation",
+                "cite",
+                "compare",
+                "comparison",
+                "example",
+                "calculate",
+                "dataset",
+                "interpret",
+                "regression",
+                "experiment",
+            ],
+        )
+    {
+        push_unique_text(&mut hints, "english");
+    }
+    hints
+}
+
+fn scientific_query_intent(normalized_mode: &str, query_lower: &str) -> ScholarChatScientificQueryIntent {
+    if normalized_mode == "scientific_paper" {
+        ScholarChatScientificQueryIntent::LiteratureSearch
+    } else if normalized_mode == "course" {
+        ScholarChatScientificQueryIntent::CourseLearning
+    } else if scientific_query_contains_any(
+        query_lower,
+        &[
+            "literature",
+            "literatur",
+            "paper",
+            "papers",
+            "studie",
+            "studien",
+            "review",
+            "meta-analysis",
+            "metaanalyse",
+            "systematic review",
+            "citation",
+            "cite",
+            "quelle",
+            "quellen",
+        ],
+    ) {
+        ScholarChatScientificQueryIntent::LiteratureSearch
+    } else if scientific_query_contains_any(
+        query_lower,
+        &[
+            "kurs",
+            "course",
+            "lernen",
+            "explain for exam",
+            "klausur",
+            "prüfung",
+            "pruefung",
+            "modul",
+            "vorlesung",
+            "seminar",
+        ],
+    ) {
+        ScholarChatScientificQueryIntent::CourseLearning
+    } else if scientific_query_contains_any(
+        query_lower,
+        &[
+            "anwenden",
+            "berechnen",
+            "calculate",
+            "example",
+            "beispiel",
+            "dataset",
+            "daten",
+            "auswertung",
+            "interpretieren",
+            "regression",
+            "experiment",
+        ],
+    ) {
+        ScholarChatScientificQueryIntent::MethodApplication
+    } else if scientific_query_contains_any(
+        query_lower,
+        &[
+            "unterschied",
+            "compare",
+            "comparison",
+            "vs",
+            "versus",
+            "unterschied zwischen",
+        ],
+    ) {
+        ScholarChatScientificQueryIntent::Comparison
+    } else if scientific_query_contains_any(
+        query_lower,
+        &[
+            "was ist",
+            "erklären",
+            "erklaeren",
+            "explain",
+            "define",
+            "definition",
+            "meaning",
+            "bedeutung",
+        ],
+    ) {
+        ScholarChatScientificQueryIntent::ConceptExplanation
+    } else {
+        ScholarChatScientificQueryIntent::Unknown
+    }
+}
+
+fn scientific_query_planned_local_search_queries(recognized_concept: Option<&str>, normalized_query: &str) -> Vec<String> {
+    match recognized_concept {
+        Some("signal_detection_theory") => vec![
+            "Signalentdeckung".to_string(),
+            "Signalentdeckungstheorie".to_string(),
+            "d prime".to_string(),
+            "ROC".to_string(),
+        ],
+        Some("analysis_of_variance") => vec![
+            "ANOVA".to_string(),
+            "Varianzanalyse".to_string(),
+            "F test".to_string(),
+            "repeated measures".to_string(),
+        ],
+        Some("hypothesis_testing") => vec![
+            "Hypothesentests".to_string(),
+            "Nullhypothese".to_string(),
+            "p-Wert".to_string(),
+            "Fehler 1. Art".to_string(),
+            "Fehler 2. Art".to_string(),
+        ],
+        _ if normalized_query.is_empty() => Vec::new(),
+        _ => vec![normalized_query.to_string()],
+    }
+}
+
+fn scientific_query_planned_expanded_queries(recognized_concept: Option<&str>) -> Vec<String> {
+    match recognized_concept {
+        Some("signal_detection_theory") => vec![
+            "Signal Detection Theory".to_string(),
+            "Signalentdeckungstheorie".to_string(),
+            "d-prime".to_string(),
+            "ROC analysis".to_string(),
+        ],
+        Some("analysis_of_variance") => vec![
+            "analysis of variance".to_string(),
+            "Varianzanalyse".to_string(),
+            "F-test".to_string(),
+            "repeated measures ANOVA".to_string(),
+        ],
+        Some("hypothesis_testing") => vec![
+            "hypothesis testing".to_string(),
+            "Hypothesentests".to_string(),
+            "null hypothesis".to_string(),
+            "p-value".to_string(),
+        ],
+        _ => Vec::new(),
+    }
+}
+
+fn scientific_query_evidence_requirements(
+    normalized_mode: &str,
+    query_intent: &ScholarChatScientificQueryIntent,
+    source_registry_status: &ScholarChatScientificSourceRegistryStatus,
+) -> Vec<String> {
+    let mut requirements = Vec::new();
+    if !matches!(source_registry_status, ScholarChatScientificSourceRegistryStatus::SourcePlanReady) {
+        push_unique_text(
+            &mut requirements,
+            "source_family_plan_required",
+        );
+    }
+    if normalized_mode == "scholar_chat" || normalized_mode == "course" {
+        push_unique_text(
+            &mut requirements,
+            "local_evidence_required_before_answer",
+        );
+    }
+    if normalized_mode == "scientific_paper"
+        || matches!(query_intent, ScholarChatScientificQueryIntent::LiteratureSearch)
+    {
+        push_unique_text(
+            &mut requirements,
+            "citation_safe_metadata_required",
+        );
+        push_unique_text(
+            &mut requirements,
+            "deduplication_required_before_literature_review",
+        );
+    }
+    if normalized_mode == "course"
+        || matches!(query_intent, ScholarChatScientificQueryIntent::CourseLearning)
+    {
+        push_unique_text(
+            &mut requirements,
+            "course_material_alignment_required",
+        );
+    }
+    requirements
+}
+
 #[derive(Clone)]
 struct ScientificDisciplineRegistryEntry {
     recognized_concept: &'static str,
@@ -7486,6 +8274,20 @@ fn main() {
         }
     }
 
+    fn scientific_query_understanding_request(
+        query: &str,
+        mode: Option<&str>,
+        course_context: Option<&str>,
+        context_tags: Option<Vec<&str>>,
+    ) -> ScholarChatScientificQueryUnderstandingPreviewRequest {
+        ScholarChatScientificQueryUnderstandingPreviewRequest {
+            query: query.to_string(),
+            mode: mode.map(|value| value.to_string()),
+            course_context: course_context.map(|value| value.to_string()),
+            context_tags: context_tags.map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
+        }
+    }
+
     fn runtime_diagnostic_result_request(
         bridge_preview_request: ScholarChatRuntimeDiagnosticBridgePreviewRequest,
         diagnostic_preview: LocalRuntimeSmokeDiagnosticPreview,
@@ -7961,6 +8763,51 @@ fn main() {
         assert!(preview.no_persistence);
         assert!(preview.no_registry_status_change);
         assert!(preview.no_audit_write);
+    }
+
+    fn assert_scientific_query_understanding_boundary_fields(
+        preview: &ScholarChatScientificQueryUnderstandingPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.query_understanding_preview_only);
+        assert!(preview.no_web_request);
+        assert!(preview.no_scraping);
+        assert!(preview.no_connector_call);
+        assert!(preview.no_source_import);
+        assert!(preview.no_local_file_indexing);
+        assert!(preview.no_bm25_index);
+        assert!(preview.no_vector_index);
+        assert!(preview.no_model_loading);
+        assert!(preview.no_runtime_inference);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_persistence);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
+    fn assert_scientific_query_understanding_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatScientificQueryUnderstandingPreviewRequest,
+    ) -> ScholarChatScientificQueryUnderstandingPreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let first = preview_scholar_chat_scientific_query_understanding(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_scientific_query_understanding(temp.path(), request).unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        assert!(!temp.path().join(".aegis").exists());
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_scientific_query_understanding_boundary_fields(preview);
+        }
+        first
     }
 
     fn assert_runtime_diagnostic_bridge_boundary_fields(
@@ -11485,6 +12332,256 @@ fn main() {
             assert!(!json.contains(temp_path.as_ref()));
             assert_scientific_source_registry_boundary_fields(preview);
         }
+    }
+
+    #[test]
+    fn scholar_chat_scientific_query_understanding_blocks_blank_query_and_keeps_boundary_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_scientific_query_understanding(
+            temp.path(),
+            scientific_query_understanding_request("   ", None, None, None),
+        )
+        .unwrap();
+        assert_eq!(result.status, ScholarChatScientificQueryUnderstandingStatus::Blocked);
+        assert!(result.normalized_query.is_empty());
+        assert!(result.inferred_topic.is_none());
+        assert!(result.recognized_concept.is_none());
+        assert!(result.label.is_none());
+        assert!(result.detected_aliases.is_empty());
+        assert!(result.planned_metadata_queries.is_empty());
+        assert!(result.planned_local_search_queries.is_empty());
+        assert!(result.planned_expanded_queries.is_empty());
+        assert!(result
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("query_missing")));
+        assert_scientific_query_understanding_boundary_fields(&result);
+        let debug = format!("{result:?}");
+        let json = serde_json::to_string(&result).unwrap();
+        let temp_path = temp.path().to_string_lossy();
+        assert!(!debug.contains(temp_path.as_ref()));
+        assert!(!json.contains(temp_path.as_ref()));
+        assert_eq!(count_entries_recursively(temp.path()), 0);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_query_understanding_maps_signalentdeckung_and_includes_registry_ids() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_query_understanding_deterministic_and_path_free(
+            &temp,
+            scientific_query_understanding_request("Signalentdeckung", None, None, None),
+        );
+        assert_eq!(result.status, ScholarChatScientificQueryUnderstandingStatus::Understood);
+        assert_eq!(result.inferred_topic.as_deref(), Some("Signalentdeckung"));
+        assert_eq!(result.recognized_concept.as_deref(), Some("signal_detection_theory"));
+        assert_eq!(result.label.as_deref(), Some("Signalentdeckungstheorie"));
+        assert_eq!(result.source_registry_status, ScholarChatScientificSourceRegistryStatus::SourcePlanReady);
+        assert!(result.preferred_source_ids.iter().any(|value| value == "pubpsych"));
+        assert!(result.preferred_source_ids.iter().any(|value| value == "psycharchives"));
+        assert!(result.preferred_source_ids.iter().any(|value| value == "openalex"));
+        assert!(result.preferred_source_ids.iter().any(|value| value == "crossref"));
+        assert!(result
+            .planned_metadata_queries
+            .iter()
+            .any(|value| value == "Signalentdeckungstheorie"));
+        assert!(result
+            .planned_local_search_queries
+            .iter()
+            .any(|value| value == "Signalentdeckung"));
+        assert!(result
+            .detected_aliases
+            .iter()
+            .any(|alias| alias.alias == "Signalentdeckung" && alias.language == "german"));
+        assert!(result.language_hints.iter().any(|hint| hint == "german"));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_query_understanding_detects_english_signal_detection_alias_and_bridge_queries() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_query_understanding_deterministic_and_path_free(
+            &temp,
+            scientific_query_understanding_request("Explain signal detection theory and d-prime", None, None, None),
+        );
+        assert_eq!(result.status, ScholarChatScientificQueryUnderstandingStatus::Understood);
+        assert_eq!(result.query_intent, ScholarChatScientificQueryIntent::ConceptExplanation);
+        assert!(result
+            .detected_aliases
+            .iter()
+            .any(|alias| alias.alias == "signal detection theory" && alias.language == "english"));
+        assert!(result.language_hints.iter().any(|hint| hint == "english"));
+        assert!(result
+            .planned_expanded_queries
+            .iter()
+            .any(|value| value == "Signal Detection Theory"));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_query_understanding_anova_literature_query_prefers_literature_search_and_evidence_requirements() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_query_understanding_deterministic_and_path_free(
+            &temp,
+            scientific_query_understanding_request("ANOVA literature review", Some("scholar_chat"), None, None),
+        );
+        assert_eq!(result.status, ScholarChatScientificQueryUnderstandingStatus::Understood);
+        assert_eq!(result.query_intent, ScholarChatScientificQueryIntent::LiteratureSearch);
+        assert!(result
+            .evidence_requirements
+            .iter()
+            .any(|value| value == "citation_safe_metadata_required"));
+        assert!(result
+            .evidence_requirements
+            .iter()
+            .any(|value| value == "deduplication_required_before_literature_review"));
+        assert!(result
+            .planned_metadata_queries
+            .iter()
+            .any(|value| value == "ANOVA"));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_query_understanding_hypothesentests_course_query_prefers_course_learning_and_course_requirements() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_query_understanding_deterministic_and_path_free(
+            &temp,
+            scientific_query_understanding_request("Hypothesentests für die Klausur", Some("course"), None, None),
+        );
+        assert_eq!(result.status, ScholarChatScientificQueryUnderstandingStatus::Understood);
+        assert_eq!(result.query_intent, ScholarChatScientificQueryIntent::CourseLearning);
+        assert!(result
+            .evidence_requirements
+            .iter()
+            .any(|value| value == "course_material_alignment_required"));
+        assert!(result
+            .evidence_requirements
+            .iter()
+            .any(|value| value == "local_evidence_required_before_answer"));
+        assert!(result.no_local_file_indexing);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_query_understanding_marks_mixed_concepts_ambiguous_and_prefers_first_occurrence() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_query_understanding_deterministic_and_path_free(
+            &temp,
+            scientific_query_understanding_request("Hypothesentests und ANOVA Vergleich", None, None, None),
+        );
+        assert_eq!(result.status, ScholarChatScientificQueryUnderstandingStatus::Ambiguous);
+        assert_eq!(result.ambiguity_level, ScholarChatScientificAmbiguityLevel::Medium);
+        assert_eq!(result.inferred_topic.as_deref(), Some("Hypothesentests"));
+        assert!(result
+            .ambiguity_warnings
+            .iter()
+            .any(|warning| warning.contains("Hypothesentests")));
+        assert!(result
+            .ambiguity_warnings
+            .iter()
+            .any(|warning| warning.contains("ANOVA")));
+        assert_eq!(result.detected_aliases.first().map(|alias| alias.alias.as_str()), Some("Hypothesentest"));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_query_understanding_returns_unknown_concept_with_normalized_query_and_local_search() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_query_understanding_deterministic_and_path_free(
+            &temp,
+            scientific_query_understanding_request("  Signal graph theory  ", None, None, None),
+        );
+        assert_eq!(result.status, ScholarChatScientificQueryUnderstandingStatus::UnknownConcept);
+        assert_eq!(result.inferred_topic.as_deref(), Some("Signal graph theory"));
+        assert!(result.recognized_concept.is_none());
+        assert!(result.label.is_none());
+        assert_eq!(result.planned_metadata_queries, vec!["Signal graph theory".to_string()]);
+        assert_eq!(result.planned_local_search_queries, vec!["Signal graph theory".to_string()]);
+        assert!(result.planned_expanded_queries.is_empty());
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("does not yet map to a known scientific concept")));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_query_understanding_normalizes_context_tags_and_passes_them_through() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_query_understanding_deterministic_and_path_free(
+            &temp,
+            scientific_query_understanding_request(
+                "ANOVA",
+                None,
+                Some("Psychology statistics seminar"),
+                Some(vec!["  neuroscience  ", "Psychology", "neuroscience", "clinical-science"]),
+            ),
+        );
+        assert_eq!(
+            result.normalized_context_tags,
+            vec![
+                "clinical_science".to_string(),
+                "neuroscience".to_string(),
+                "psychology".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn scholar_chat_scientific_query_understanding_scientific_paper_mode_forces_literature_search() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_query_understanding_deterministic_and_path_free(
+            &temp,
+            scientific_query_understanding_request("x", Some("scientific_paper"), None, None),
+        );
+        assert_eq!(result.query_intent, ScholarChatScientificQueryIntent::LiteratureSearch);
+        assert!(result
+            .evidence_requirements
+            .iter()
+            .any(|value| value == "citation_safe_metadata_required"));
+        assert!(result
+            .evidence_requirements
+            .iter()
+            .any(|value| value == "deduplication_required_before_literature_review"));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_query_understanding_course_mode_forces_course_learning_and_no_local_file_indexing() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = assert_scientific_query_understanding_deterministic_and_path_free(
+            &temp,
+            scientific_query_understanding_request("x", Some("course"), None, None),
+        );
+        assert_eq!(result.query_intent, ScholarChatScientificQueryIntent::CourseLearning);
+        assert!(result.no_local_file_indexing);
+        assert!(result
+            .evidence_requirements
+            .iter()
+            .any(|value| value == "course_material_alignment_required"));
+    }
+
+    #[test]
+    fn scholar_chat_scientific_query_understanding_body_does_not_call_execution_functions() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        let start = source
+            .find("pub fn preview_scholar_chat_scientific_query_understanding")
+            .unwrap();
+        let end = source[start..]
+            .find("pub fn preview_scholar_chat_answer_readiness")
+            .unwrap();
+        let body = &source[start..start + end];
+        assert!(!body.contains("Command::new"));
+        assert!(!body.contains("reqwest::"));
+        assert!(!body.contains("ureq::"));
+        assert!(!body.contains("std::fs"));
+        assert!(!body.contains("fs::"));
+        assert!(!body.contains("RetrievalService::new"));
+        assert!(!body.contains("SourceRegistry::"));
+        assert!(!body.contains("preview_scholar_chat_retrieval"));
+        assert!(!body.contains("preview_scholar_chat_evidence_plan"));
+        assert!(!body.contains("preview_scholar_chat_prompt_pack"));
+        assert!(!body.contains("smoke_test_local_runtime_inference"));
+        assert!(!body.contains("run_llama_runtime_smoke_diagnostic"));
+        assert!(!body.contains("run_smoke_inference_probe"));
+        assert!(!body.contains("build_answer_draft"));
+        assert!(!body.contains("build_grounded_answer"));
+        assert!(!body.contains("build_final_answer"));
+        assert!(!body.contains("build_evidence_pack"));
+        assert!(!body.contains("export_answer_artifacts"));
     }
 
     #[test]

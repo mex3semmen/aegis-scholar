@@ -1525,6 +1525,9 @@ It is docs/.gitignore only and keeps local GGUF/GGML/Safetensors files, generate
 Phase 98.2 adds a backend-only Scientific Source Registry Preview.
 It maps source-family plans for early scientific concepts, stays preview-only, and does not add web requests, scraping, connector implementation, source import, local file indexing, BM25/vector index, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
 
+Phase 99.0 adds a backend-only Scientific Query Understanding Preview.
+It composes the discipline and source registry previews, stays preview-only, and does not add web requests, scraping, connector implementation, source import, local file indexing, BM25/vector index, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
+
 Do not implement:
 
 - web requests
