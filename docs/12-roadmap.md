@@ -1492,7 +1492,7 @@ Phase 96.0 adds a backend-only Scholar Chat runtime diagnostic result preview th
 
 Phase 96.1 adds a UI/docs sync for the runtime diagnostic result preview. It surfaces the already-loaded smoke diagnostic preview/result, does not run smoke diagnostics or inference, and does not create artifacts, persistence, registry changes, or audit writes.
 
-## Phase 97 - Scholar Chat Runtime Answer Pipeline Gate Preview
+## Phase 97 — Scholar Chat Runtime Answer Pipeline Gate Preview
 
 Phase 97.0 adds a backend-only Scholar Chat runtime answer pipeline gate preview that combines the grounded-answer execution plan preview and the runtime diagnostic result preview. It is preview/gate only and does not run smoke diagnostics, does not run inference, does not spawn a process, does not call an LLM, does not generate an answer, and does not build Evidence Packs or write artifacts.
 
@@ -1504,6 +1504,27 @@ Do not implement:
 - Scholar Chat answer generation
 - artifact writes
 - persistence
+- registry status changes
+- audit writes
+- source import
+- export/report/share workflows
+- routing/charts/frontend test framework
+
+## Phase 98 — Scientific Retrieval Architecture Docs
+
+Phase 98.0 documents the scientific retrieval architecture for the next product direction.
+It is docs-only and introduces the planned discipline graph, source registry, curriculum layer, mode behavior, and preview-first roadmap.
+It does not add production code, web requests, scraping, model loading, runtime inference, answer generation, or artifact writes.
+
+Do not implement:
+
+- web requests
+- scraping
+- connector implementation
+- model loading
+- runtime inference
+- answer generation
+- artifact writes
 - registry status changes
 - audit writes
 - source import
