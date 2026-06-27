@@ -314,3 +314,4 @@ Proposed phases:
 - Phase 104.0 - Scientific Paper Mode Literature Review Preview
 
 Each phase remains preview-first until explicitly changed.
+Phase 99.0 composes the discipline and source registry previews only; it stays preview-only and does not add web requests, scraping, connector implementation, source import, local file indexing, BM25/vector index, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
