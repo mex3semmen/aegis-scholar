@@ -785,6 +785,191 @@ pub struct ScholarChatCourseLiteratureRegistryPreview {
     pub no_audit_write: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatMetadataConnectorPlanStatus {
+    Blocked,
+    ConnectorPlanReady,
+    NeedsDisambiguation,
+    UnknownConcept,
+    NeedsMetadataSource,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatMetadataConnectorStrategy {
+    OpenalexAndCrossref,
+    OpenalexFirst,
+    CrossrefFirst,
+    MetadataSourceSelectionNeeded,
+    Blocked,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatMetadataConnectorStepKind {
+    QueryUnderstandingAlignment,
+    MetadataSourceSelection,
+    OpenalexQueryPlan,
+    CrossrefQueryPlan,
+    ResultShapeMappingPlan,
+    DoiFilterPlan,
+    OpenAccessFilterPlan,
+    YearFilterPlan,
+    DeduplicationPlan,
+    AttributionRequirementCheck,
+    ComplianceBoundaryCheck,
+    DownstreamEvidencePackAlignment,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatMetadataConnectorSourceSelectionPlan {
+    pub requested_sources: Vec<String>,
+    pub supported_sources: Vec<String>,
+    pub unknown_sources: Vec<String>,
+    pub selected_sources: Vec<String>,
+    pub needs_source_selection: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatMetadataConnectorQueryPlan {
+    pub source_id: String,
+    pub enabled: bool,
+    pub endpoint_family: String,
+    pub planned_query_terms: Vec<String>,
+    pub planned_filters: Vec<String>,
+    pub max_results: u32,
+    pub requires_api_key: bool,
+    pub will_call_api: bool,
+    pub will_fetch_url: bool,
+    pub will_scrape: bool,
+    pub expected_result_fields: Vec<String>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatMetadataDeduplicationPlan {
+    pub key_fields: Vec<String>,
+    pub preferred_source_order: Vec<String>,
+    pub doi_required: bool,
+    pub title_year_fallback_allowed: bool,
+    pub will_deduplicate_now: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatMetadataAttributionPlan {
+    pub required_attribution_notes: Vec<String>,
+    pub planned_user_agent_note: String,
+    pub citation_safety_notes: Vec<String>,
+    pub will_emit_attribution_now: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatMetadataCompliancePlan {
+    pub external_metadata_only: bool,
+    pub no_fulltext_download: bool,
+    pub no_scraping: bool,
+    pub respects_rate_limits_later: bool,
+    pub requires_terms_review_later: bool,
+    pub will_call_external_services: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatMetadataConnectorStep {
+    pub kind: ScholarChatMetadataConnectorStepKind,
+    pub id: String,
+    pub label: String,
+    pub description: String,
+    pub planned_inputs: Vec<String>,
+    pub planned_outputs: Vec<String>,
+    pub active: bool,
+    pub preview_only: bool,
+    pub boundary_notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatMetadataConnectorPlanRequest {
+    pub query: String,
+    pub mode: Option<String>,
+    pub course_context: Option<String>,
+    pub context_tags: Option<Vec<String>>,
+    pub selected_local_source_ids: Option<Vec<String>>,
+    pub expected_source_kinds: Option<Vec<String>>,
+    pub preferred_metadata_sources: Option<Vec<String>>,
+    pub max_results_per_source: Option<u32>,
+    pub require_open_access: Option<bool>,
+    pub require_doi: Option<bool>,
+    pub year_from: Option<u16>,
+    pub year_to: Option<u16>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatMetadataConnectorPlanPreview {
+    pub status: ScholarChatMetadataConnectorPlanStatus,
+    pub normalized_query: String,
+    pub normalized_mode: String,
+    pub normalized_context_tags: Vec<String>,
+    pub selected_local_source_ids: Vec<String>,
+    pub expected_source_kinds: Vec<String>,
+    pub preferred_metadata_sources: Vec<String>,
+    pub unknown_metadata_sources: Vec<String>,
+    pub normalized_max_results_per_source: u32,
+    pub require_open_access: bool,
+    pub require_doi: bool,
+    pub year_from: Option<u16>,
+    pub year_to: Option<u16>,
+    pub search_plan_status: ScholarChatScientificSearchPlanStatus,
+    pub query_understanding_status: ScholarChatScientificQueryUnderstandingStatus,
+    pub inferred_topic: Option<String>,
+    pub query_intent: ScholarChatScientificQueryIntent,
+    pub recognized_concept: Option<String>,
+    pub label: Option<String>,
+    pub connector_strategy: ScholarChatMetadataConnectorStrategy,
+    pub source_selection_plan: ScholarChatMetadataConnectorSourceSelectionPlan,
+    pub openalex_plan: ScholarChatMetadataConnectorQueryPlan,
+    pub crossref_plan: ScholarChatMetadataConnectorQueryPlan,
+    pub deduplication_plan: ScholarChatMetadataDeduplicationPlan,
+    pub attribution_plan: ScholarChatMetadataAttributionPlan,
+    pub compliance_plan: ScholarChatMetadataCompliancePlan,
+    pub planned_metadata_queries: Vec<String>,
+    pub planned_connector_steps: Vec<ScholarChatMetadataConnectorStep>,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub metadata_connector_plan_preview_only: bool,
+    pub no_web_request: bool,
+    pub no_http_client: bool,
+    pub no_api_key_read: bool,
+    pub no_environment_read: bool,
+    pub no_scraping: bool,
+    pub no_connector_call: bool,
+    pub no_source_import: bool,
+    pub no_metadata_record_write: bool,
+    pub no_local_file_indexing: bool,
+    pub no_file_read: bool,
+    pub no_pdf_extraction: bool,
+    pub no_ocr: bool,
+    pub no_chunking_run: bool,
+    pub no_embedding_generation: bool,
+    pub no_index_created: bool,
+    pub no_retrieval_execution: bool,
+    pub no_model_loading: bool,
+    pub no_runtime_inference: bool,
+    pub no_llm_call: bool,
+    pub no_answer_generated: bool,
+    pub no_evidence_pack_created: bool,
+    pub no_artifact_write: bool,
+    pub no_persistence: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScholarChatRetrievalCandidate {
     pub source_id: String,
@@ -3769,6 +3954,794 @@ pub fn preview_scholar_chat_course_literature_registry(
         no_connector_call: true,
         no_source_import: true,
         no_local_file_indexing: true,
+        no_model_loading: true,
+        no_runtime_inference: true,
+        no_llm_call: true,
+        no_answer_generated: true,
+        no_evidence_pack_created: true,
+        no_artifact_write: true,
+        no_persistence: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+    })
+}
+
+fn normalize_metadata_connector_sources(sources: Option<Vec<String>>) -> Vec<String> {
+    let mut normalized = sources
+        .unwrap_or_default()
+        .into_iter()
+        .map(|value| normalize_scientific_tag_text(&value))
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+    normalized
+}
+
+fn metadata_connector_supported_sources() -> Vec<String> {
+    vec!["openalex".to_string(), "crossref".to_string()]
+}
+
+fn metadata_connector_step_notes() -> Vec<String> {
+    vec![
+        "preview-only".to_string(),
+        "no web request".to_string(),
+        "no HTTP client".to_string(),
+        "no API key read".to_string(),
+        "no environment read".to_string(),
+        "no scraping".to_string(),
+        "no connector call".to_string(),
+        "no metadata record write".to_string(),
+        "no artifact write".to_string(),
+        "no persistence".to_string(),
+    ]
+}
+
+fn metadata_connector_step(
+    kind: ScholarChatMetadataConnectorStepKind,
+    id: &str,
+    label: &str,
+    description: &str,
+    planned_inputs: Vec<String>,
+    planned_outputs: Vec<String>,
+    active: bool,
+) -> ScholarChatMetadataConnectorStep {
+    ScholarChatMetadataConnectorStep {
+        kind,
+        id: id.to_string(),
+        label: label.to_string(),
+        description: description.to_string(),
+        planned_inputs,
+        planned_outputs,
+        active,
+        preview_only: true,
+        boundary_notes: metadata_connector_step_notes(),
+    }
+}
+
+fn metadata_connector_source_selection_plan(
+    requested_sources: Vec<String>,
+    selected_sources: Vec<String>,
+    unknown_sources: Vec<String>,
+) -> ScholarChatMetadataConnectorSourceSelectionPlan {
+    let needs_source_selection = !requested_sources.is_empty() && selected_sources.is_empty();
+    let summary = if requested_sources.is_empty() {
+        "OpenAlex and Crossref are selected by default later; no connector calls are made now.".to_string()
+    } else if selected_sources.is_empty() {
+        "No supported metadata source remains after normalization; choose OpenAlex or Crossref later.".to_string()
+    } else if unknown_sources.is_empty() {
+        "Metadata source preferences were normalized and selected later without connector calls.".to_string()
+    } else {
+        "Supported metadata sources are selected later while unknown source hints remain preview-only.".to_string()
+    };
+    ScholarChatMetadataConnectorSourceSelectionPlan {
+        requested_sources,
+        supported_sources: selected_sources.clone(),
+        unknown_sources,
+        selected_sources,
+        needs_source_selection,
+        summary,
+    }
+}
+
+fn metadata_connector_query_plan(
+    source_id: &str,
+    enabled: bool,
+    endpoint_family: &str,
+    planned_query_terms: Vec<String>,
+    planned_filters: Vec<String>,
+    max_results: u32,
+    expected_result_fields: Vec<String>,
+) -> ScholarChatMetadataConnectorQueryPlan {
+    let summary = if enabled {
+        format!(
+            "{} connector planning is preview-only and does not call an API, fetch URLs, scrape, or write metadata.",
+            source_id.to_uppercase()
+        )
+    } else {
+        format!(
+            "{} connector planning is preview-only and remains disabled until the source is selected.",
+            source_id.to_uppercase()
+        )
+    };
+    ScholarChatMetadataConnectorQueryPlan {
+        source_id: source_id.to_string(),
+        enabled,
+        endpoint_family: endpoint_family.to_string(),
+        planned_query_terms,
+        planned_filters,
+        max_results,
+        requires_api_key: false,
+        will_call_api: false,
+        will_fetch_url: false,
+        will_scrape: false,
+        expected_result_fields,
+        summary,
+    }
+}
+
+fn metadata_connector_deduplication_plan(
+    preferred_source_order: Vec<String>,
+    doi_required: bool,
+) -> ScholarChatMetadataDeduplicationPlan {
+    ScholarChatMetadataDeduplicationPlan {
+        key_fields: vec![
+            "doi".to_string(),
+            "normalized_title".to_string(),
+            "publication_year".to_string(),
+            "first_author".to_string(),
+            "source_id".to_string(),
+        ],
+        preferred_source_order,
+        doi_required,
+        title_year_fallback_allowed: !doi_required,
+        will_deduplicate_now: false,
+        summary: if doi_required {
+            "Deduplication is preview-only and DOI-required planning disables title/year fallback later.".to_string()
+        } else {
+            "Deduplication is preview-only and will later prefer DOI, normalized title, publication year, first author, and source id.".to_string()
+        },
+    }
+}
+
+fn metadata_connector_attribution_plan() -> ScholarChatMetadataAttributionPlan {
+    ScholarChatMetadataAttributionPlan {
+        required_attribution_notes: vec![
+            "cite_metadata_provider_later".to_string(),
+            "preserve_provider_record_ids_later".to_string(),
+            "preserve_doi_and_source_url_later".to_string(),
+            "include_access_date_later".to_string(),
+            "no_fabricated_citations".to_string(),
+        ],
+        planned_user_agent_note: "later_connector_should_identify_aegis_scholar_and_contact_when_configured"
+            .to_string(),
+        citation_safety_notes: vec![
+            "metadata_preview_not_citation_evidence".to_string(),
+            "full_citation_requires_verified_metadata_later".to_string(),
+            "no_generated_sources".to_string(),
+        ],
+        will_emit_attribution_now: false,
+        summary: "Metadata attribution is preview-only and will later preserve provider record ids, DOIs, source URLs, and access dates without fabricating citations."
+            .to_string(),
+    }
+}
+
+fn metadata_connector_compliance_plan() -> ScholarChatMetadataCompliancePlan {
+    ScholarChatMetadataCompliancePlan {
+        external_metadata_only: true,
+        no_fulltext_download: true,
+        no_scraping: true,
+        respects_rate_limits_later: true,
+        requires_terms_review_later: true,
+        will_call_external_services: false,
+        summary: "Metadata connector compliance is preview-only and does not call external services.".to_string(),
+    }
+}
+
+pub fn preview_scholar_chat_metadata_connector_plan(
+    root: impl Into<PathBuf>,
+    request: ScholarChatMetadataConnectorPlanRequest,
+) -> AegisResult<ScholarChatMetadataConnectorPlanPreview> {
+    let root = root.into();
+    let normalized_query = normalize_scientific_query_text(&request.query);
+    let normalized_mode = normalize_scientific_mode(request.mode.clone());
+    let normalized_context_tags = normalize_scientific_context_tags(request.context_tags.clone());
+    let selected_local_source_ids = normalize_scientific_selected_local_source_ids(
+        request.selected_local_source_ids.clone(),
+    );
+    let expected_source_kinds = normalize_scientific_expected_source_kinds(
+        request.expected_source_kinds.clone(),
+    );
+    let normalized_requested_metadata_sources =
+        normalize_metadata_connector_sources(request.preferred_metadata_sources.clone());
+    let supported_metadata_sources = metadata_connector_supported_sources();
+    let selected_metadata_sources = if normalized_requested_metadata_sources.is_empty() {
+        supported_metadata_sources.clone()
+    } else {
+        supported_metadata_sources
+            .iter()
+            .filter(|source| normalized_requested_metadata_sources.contains(source))
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let unknown_metadata_sources = if normalized_requested_metadata_sources.is_empty() {
+        Vec::new()
+    } else {
+        normalized_requested_metadata_sources
+            .iter()
+            .filter(|source| !supported_metadata_sources.contains(source))
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let search_plan_preview = preview_scholar_chat_scientific_search_plan(
+        &root,
+        ScholarChatScientificSearchPlanRequest {
+            query: normalized_query.clone(),
+            mode: Some(normalized_mode.clone()),
+            course_context: request.course_context.clone(),
+            context_tags: Some(normalized_context_tags.clone()),
+            selected_local_source_ids: Some(selected_local_source_ids.clone()),
+        },
+    )?;
+    let search_plan_status = search_plan_preview.status.clone();
+    let query_understanding_status = search_plan_preview.query_understanding_status.clone();
+    let inferred_topic = search_plan_preview.inferred_topic.clone();
+    let query_intent = search_plan_preview.query_intent.clone();
+    let recognized_concept = search_plan_preview.recognized_concept.clone();
+    let label = search_plan_preview.label.clone();
+
+    let mut warnings = search_plan_preview.warnings.clone();
+    let mut blockers = search_plan_preview.blockers.clone();
+    let mut next_required_actions = search_plan_preview.next_required_actions.clone();
+
+    let year_range_invalid = matches!(
+        (request.year_from, request.year_to),
+        (Some(year_from), Some(year_to)) if year_from > year_to
+    );
+    if year_range_invalid {
+        push_unique_text(
+            &mut blockers,
+            "invalid_year_range: year_from must be less than or equal to year_to.",
+        );
+        push_unique_text(
+            &mut warnings,
+            "invalid_year_range: year_from is after year_to.",
+        );
+        push_unique_text(
+            &mut next_required_actions,
+            "Correct the year range before connector planning can continue.",
+        );
+    }
+
+    let mut normalized_max_results_per_source = request.max_results_per_source.unwrap_or(25);
+    if normalized_max_results_per_source == 0 {
+        normalized_max_results_per_source = 1;
+        push_unique_text(
+            &mut warnings,
+            "max_results_per_source=0 was clamped to 1.",
+        );
+    } else if normalized_max_results_per_source > 200 {
+        normalized_max_results_per_source = 200;
+        push_unique_text(
+            &mut warnings,
+            "max_results_per_source above 200 was clamped to 200.",
+        );
+    }
+
+    if !unknown_metadata_sources.is_empty() {
+        push_unique_text(
+            &mut warnings,
+            &format!(
+                "Unknown metadata source hints are preserved as preview-only hints: {}.",
+                unknown_metadata_sources.join(", ")
+            ),
+        );
+    }
+
+    let status = if normalized_query.is_empty()
+        || year_range_invalid
+        || matches!(search_plan_status, ScholarChatScientificSearchPlanStatus::Blocked)
+    {
+        ScholarChatMetadataConnectorPlanStatus::Blocked
+    } else if matches!(
+        search_plan_status,
+        ScholarChatScientificSearchPlanStatus::NeedsDisambiguation
+    ) {
+        ScholarChatMetadataConnectorPlanStatus::NeedsDisambiguation
+    } else if matches!(
+        search_plan_status,
+        ScholarChatScientificSearchPlanStatus::UnknownConcept
+    ) {
+        ScholarChatMetadataConnectorPlanStatus::UnknownConcept
+    } else if selected_metadata_sources.is_empty() {
+        ScholarChatMetadataConnectorPlanStatus::NeedsMetadataSource
+    } else {
+        ScholarChatMetadataConnectorPlanStatus::ConnectorPlanReady
+    };
+
+    if matches!(status, ScholarChatMetadataConnectorPlanStatus::NeedsDisambiguation) {
+        push_unique_text(
+            &mut warnings,
+            "The scientific search plan still needs disambiguation before metadata connector planning can continue.",
+        );
+        push_unique_text(
+            &mut next_required_actions,
+            "Narrow the scientific concept before metadata connector planning can continue.",
+        );
+    }
+
+    if matches!(status, ScholarChatMetadataConnectorPlanStatus::UnknownConcept) {
+        push_unique_text(
+            &mut warnings,
+            "The query still does not map to a known scientific concept for metadata connector planning.",
+        );
+        push_unique_text(
+            &mut next_required_actions,
+            "Add discipline and source registry mappings before metadata connector planning can continue.",
+        );
+    }
+
+    if matches!(status, ScholarChatMetadataConnectorPlanStatus::NeedsMetadataSource) {
+        push_unique_text(
+            &mut warnings,
+            "No supported metadata source selected.",
+        );
+        push_unique_text(
+            &mut next_required_actions,
+            "Choose OpenAlex or Crossref before later metadata connector planning can continue.",
+        );
+    }
+
+    match normalized_mode.as_str() {
+        "scientific_paper" => {
+            push_unique_text(
+                &mut warnings,
+                "Scientific Paper Mode will later prioritize citation-safe metadata, DOI deduplication, and result-shape mapping.",
+            );
+            push_unique_text(
+                &mut next_required_actions,
+                "Future Scientific Paper Mode phases should prioritize citation-safe metadata, DOI deduplication, and result-shape mapping.",
+            );
+        }
+        "course" => {
+            push_unique_text(
+                &mut warnings,
+                "Course Mode will later prioritize course-context metadata and reading alignment.",
+            );
+            push_unique_text(
+                &mut next_required_actions,
+                "Future Course Mode phases should prioritize course-context metadata and local reading alignment.",
+            );
+        }
+        _ => {
+            push_unique_text(
+                &mut warnings,
+                "Scholar Chat metadata planning stays balanced and local evidence will still be required later.",
+            );
+            push_unique_text(
+                &mut next_required_actions,
+                "Later Scholar Chat phases should still gather local evidence before answering.",
+            );
+        }
+    }
+
+    if !unknown_metadata_sources.is_empty() && !selected_metadata_sources.is_empty() {
+        push_unique_text(
+            &mut warnings,
+            "Unknown metadata sources are preserved as preview-only hints while supported sources remain selected.",
+        );
+    }
+
+    let mut planned_metadata_queries = if search_plan_preview.planned_metadata_queries.is_empty() {
+        vec![normalized_query.clone()]
+    } else {
+        search_plan_preview.planned_metadata_queries.clone()
+    };
+    planned_metadata_queries.extend(search_plan_preview.planned_expanded_queries.iter().cloned());
+    planned_metadata_queries.retain(|value| !value.trim().is_empty());
+    planned_metadata_queries.sort();
+    planned_metadata_queries.dedup();
+
+    let require_doi = request.require_doi.unwrap_or(false);
+    let require_open_access = request.require_open_access.unwrap_or(false);
+    let openalex_filters = {
+        let mut filters = Vec::new();
+        if require_open_access {
+            filters.push("open_access=true".to_string());
+        }
+        if require_doi {
+            filters.push("has_doi=true".to_string());
+        }
+        if let Some(year_from) = request.year_from {
+            filters.push(format!("from_publication_year={year_from}"));
+        }
+        if let Some(year_to) = request.year_to {
+            filters.push(format!("to_publication_year={year_to}"));
+        }
+        filters.push(format!("mode={normalized_mode}"));
+        if let Some(recognized_concept) = recognized_concept.as_deref() {
+            filters.push(format!("inferred_concept={recognized_concept}"));
+        }
+        filters.sort();
+        filters.dedup();
+        filters
+    };
+    let crossref_filters = {
+        let mut filters = Vec::new();
+        if require_doi {
+            filters.push("has_doi=true".to_string());
+        }
+        if let Some(year_from) = request.year_from {
+            filters.push(format!("from_pub_date={year_from}"));
+        }
+        if let Some(year_to) = request.year_to {
+            filters.push(format!("until_pub_date={year_to}"));
+        }
+        filters.push(format!("mode={normalized_mode}"));
+        if let Some(recognized_concept) = recognized_concept.as_deref() {
+            filters.push(format!("inferred_concept={recognized_concept}"));
+        }
+        if require_open_access {
+            filters.push("open_access_filter_not_native".to_string());
+        }
+        filters.sort();
+        filters.dedup();
+        filters
+    };
+
+    let openalex_enabled = selected_metadata_sources.iter().any(|source| source == "openalex");
+    let crossref_enabled = selected_metadata_sources.iter().any(|source| source == "crossref");
+    let preferred_source_order = selected_metadata_sources.clone();
+    let connector_strategy = if matches!(status, ScholarChatMetadataConnectorPlanStatus::Blocked) {
+        ScholarChatMetadataConnectorStrategy::Blocked
+    } else if matches!(
+        status,
+        ScholarChatMetadataConnectorPlanStatus::NeedsMetadataSource
+    ) || selected_metadata_sources.is_empty()
+    {
+        ScholarChatMetadataConnectorStrategy::MetadataSourceSelectionNeeded
+    } else if selected_metadata_sources.len() == 2 {
+        ScholarChatMetadataConnectorStrategy::OpenalexAndCrossref
+    } else if openalex_enabled {
+        ScholarChatMetadataConnectorStrategy::OpenalexFirst
+    } else {
+        ScholarChatMetadataConnectorStrategy::CrossrefFirst
+    };
+
+    let openalex_plan = metadata_connector_query_plan(
+        "openalex",
+        openalex_enabled,
+        "openalex_works",
+        planned_metadata_queries.clone(),
+        openalex_filters,
+        normalized_max_results_per_source,
+        vec![
+            "id".to_string(),
+            "doi".to_string(),
+            "title".to_string(),
+            "display_name".to_string(),
+            "publication_year".to_string(),
+            "authorships".to_string(),
+            "primary_location".to_string(),
+            "open_access".to_string(),
+            "cited_by_count".to_string(),
+            "concepts".to_string(),
+        ],
+    );
+    let crossref_plan = metadata_connector_query_plan(
+        "crossref",
+        crossref_enabled,
+        "crossref_works",
+        planned_metadata_queries.clone(),
+        crossref_filters,
+        normalized_max_results_per_source,
+        vec![
+            "DOI".to_string(),
+            "title".to_string(),
+            "author".to_string(),
+            "issued".to_string(),
+            "container-title".to_string(),
+            "publisher".to_string(),
+            "type".to_string(),
+            "URL".to_string(),
+            "is-referenced-by-count".to_string(),
+        ],
+    );
+    let source_selection_plan = metadata_connector_source_selection_plan(
+        normalized_requested_metadata_sources.clone(),
+        selected_metadata_sources.clone(),
+        unknown_metadata_sources.clone(),
+    );
+    let deduplication_plan = metadata_connector_deduplication_plan(
+        preferred_source_order.clone(),
+        require_doi,
+    );
+    let attribution_plan = metadata_connector_attribution_plan();
+    let compliance_plan = metadata_connector_compliance_plan();
+    let step_active = !matches!(status, ScholarChatMetadataConnectorPlanStatus::Blocked);
+    let planned_connector_steps = vec![
+        metadata_connector_step(
+            ScholarChatMetadataConnectorStepKind::QueryUnderstandingAlignment,
+            "query_understanding_alignment",
+            "Query understanding alignment",
+            "Align the metadata connector plan with the existing scientific search plan preview only.",
+            vec![
+                normalized_query.clone(),
+                normalized_mode.clone(),
+                normalized_context_tags.join(", "),
+                selected_local_source_ids.join(", "),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec![
+                format!("{:?}", search_plan_status),
+                format!("{:?}", query_understanding_status),
+                inferred_topic.clone().unwrap_or_default(),
+                format!("{:?}", query_intent),
+                recognized_concept.clone().unwrap_or_default(),
+                label.clone().unwrap_or_default(),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            step_active,
+        ),
+        metadata_connector_step(
+            ScholarChatMetadataConnectorStepKind::MetadataSourceSelection,
+            "metadata_source_selection",
+            "Metadata source selection",
+            "Select OpenAlex and Crossref later without connector calls or metadata writes.",
+            vec![
+                normalized_requested_metadata_sources.join(", "),
+                selected_metadata_sources.join(", "),
+                unknown_metadata_sources.join(", "),
+                expected_source_kinds.join(", "),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec![
+                source_selection_plan.selected_sources.join(", "),
+                format!("needs_source_selection={}", source_selection_plan.needs_source_selection),
+            ],
+            step_active,
+        ),
+        metadata_connector_step(
+            ScholarChatMetadataConnectorStepKind::OpenalexQueryPlan,
+            "openalex_query_plan",
+            "OpenAlex query plan",
+            "Plan OpenAlex metadata queries only; no API call, URL fetch, scraping, or metadata write occurs.",
+            vec![
+                openalex_plan.planned_query_terms.join(", "),
+                openalex_plan.planned_filters.join(", "),
+                openalex_plan.max_results.to_string(),
+            ],
+            vec![
+                "openalex_query_plan_preview".to_string(),
+                "openalex_works_result_shape_preview".to_string(),
+            ],
+            step_active,
+        ),
+        metadata_connector_step(
+            ScholarChatMetadataConnectorStepKind::CrossrefQueryPlan,
+            "crossref_query_plan",
+            "Crossref query plan",
+            "Plan Crossref metadata queries only; no API call, URL fetch, scraping, or metadata write occurs.",
+            vec![
+                crossref_plan.planned_query_terms.join(", "),
+                crossref_plan.planned_filters.join(", "),
+                crossref_plan.max_results.to_string(),
+            ],
+            vec![
+                "crossref_query_plan_preview".to_string(),
+                "crossref_works_result_shape_preview".to_string(),
+            ],
+            step_active,
+        ),
+        metadata_connector_step(
+            ScholarChatMetadataConnectorStepKind::ResultShapeMappingPlan,
+            "result_shape_mapping_plan",
+            "Result shape mapping plan",
+            "Plan how OpenAlex and Crossref result shapes would later be aligned for downstream evidence use.",
+            vec![
+                openalex_plan.expected_result_fields.join(", "),
+                crossref_plan.expected_result_fields.join(", "),
+                expected_source_kinds.join(", "),
+            ],
+            vec!["metadata_result_shape_preview".to_string()],
+            step_active,
+        ),
+        metadata_connector_step(
+            ScholarChatMetadataConnectorStepKind::DoiFilterPlan,
+            "doi_filter_plan",
+            "DOI filter plan",
+            "Plan DOI handling only; no connector call or metadata record write occurs.",
+            vec![
+                format!("require_doi={require_doi}"),
+                openalex_plan.planned_filters.join(", "),
+                crossref_plan.planned_filters.join(", "),
+            ],
+            vec!["doi_filter_preview".to_string()],
+            step_active,
+        ),
+        metadata_connector_step(
+            ScholarChatMetadataConnectorStepKind::OpenAccessFilterPlan,
+            "open_access_filter_plan",
+            "Open access filter plan",
+            "Plan open-access handling only; no API call or web request occurs.",
+            vec![
+                format!("require_open_access={require_open_access}"),
+                openalex_plan.planned_filters.join(", "),
+                crossref_plan.planned_filters.join(", "),
+            ],
+            vec!["open_access_filter_preview".to_string()],
+            step_active,
+        ),
+        metadata_connector_step(
+            ScholarChatMetadataConnectorStepKind::YearFilterPlan,
+            "year_filter_plan",
+            "Year filter plan",
+            "Plan publication-year filtering only; no date-based web request occurs.",
+            vec![
+                request.year_from.map(|value| value.to_string()).unwrap_or_default(),
+                request.year_to.map(|value| value.to_string()).unwrap_or_default(),
+                openalex_plan.planned_filters.join(", "),
+                crossref_plan.planned_filters.join(", "),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec!["year_filter_preview".to_string()],
+            step_active,
+        ),
+        metadata_connector_step(
+            ScholarChatMetadataConnectorStepKind::DeduplicationPlan,
+            "deduplication_plan",
+            "Deduplication plan",
+            "Plan deduplication only; no connector call, evidence pack build, or artifact write occurs.",
+            vec![
+                deduplication_plan.key_fields.join(", "),
+                deduplication_plan.preferred_source_order.join(", "),
+                format!("doi_required={}", deduplication_plan.doi_required),
+                format!(
+                    "title_year_fallback_allowed={}",
+                    deduplication_plan.title_year_fallback_allowed
+                ),
+            ],
+            vec!["deduplication_preview".to_string()],
+            step_active,
+        ),
+        metadata_connector_step(
+            ScholarChatMetadataConnectorStepKind::AttributionRequirementCheck,
+            "attribution_requirement_check",
+            "Attribution requirement check",
+            "Plan metadata attribution only; no fabricated citations are emitted in this preview.",
+            vec![
+                attribution_plan.required_attribution_notes.join(", "),
+                attribution_plan.planned_user_agent_note.clone(),
+                attribution_plan.citation_safety_notes.join(", "),
+            ],
+            vec!["attribution_preview".to_string()],
+            step_active,
+        ),
+        metadata_connector_step(
+            ScholarChatMetadataConnectorStepKind::ComplianceBoundaryCheck,
+            "compliance_boundary_check",
+            "Compliance boundary check",
+            "Confirm external-metadata-only boundaries without any external call.",
+            vec![
+                format!(
+                    "external_metadata_only={}",
+                    compliance_plan.external_metadata_only
+                ),
+                format!("no_fulltext_download={}", compliance_plan.no_fulltext_download),
+                format!("no_scraping={}", compliance_plan.no_scraping),
+                format!(
+                    "respects_rate_limits_later={}",
+                    compliance_plan.respects_rate_limits_later
+                ),
+                format!(
+                    "requires_terms_review_later={}",
+                    compliance_plan.requires_terms_review_later
+                ),
+            ],
+            vec!["compliance_preview".to_string()],
+            step_active,
+        ),
+        metadata_connector_step(
+            ScholarChatMetadataConnectorStepKind::DownstreamEvidencePackAlignment,
+            "downstream_evidence_pack_alignment",
+            "Downstream Evidence Pack alignment",
+            "Plan downstream Evidence Pack alignment only; no Evidence Pack is created now.",
+            vec![
+                format!("{:?}", search_plan_status),
+                format!("{:?}", query_intent),
+                recognized_concept.clone().unwrap_or_default(),
+                expected_source_kinds.join(", "),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec!["downstream_evidence_pack_alignment_preview".to_string()],
+            step_active,
+        ),
+    ];
+
+    let summary = match status {
+        ScholarChatMetadataConnectorPlanStatus::Blocked => {
+            "OpenAlex/Crossref metadata connector preview blocked because the query is blank, the year range is invalid, or the scientific search plan is blocked."
+                .to_string()
+        }
+        ScholarChatMetadataConnectorPlanStatus::NeedsDisambiguation => {
+            "OpenAlex/Crossref metadata connector preview needs disambiguation before later connector planning can continue."
+                .to_string()
+        }
+        ScholarChatMetadataConnectorPlanStatus::UnknownConcept => {
+            "OpenAlex/Crossref metadata connector preview found an unknown concept and can only outline later metadata planning steps."
+                .to_string()
+        }
+        ScholarChatMetadataConnectorPlanStatus::NeedsMetadataSource => {
+            "OpenAlex/Crossref metadata connector preview is waiting for a supported metadata source selection."
+                .to_string()
+        }
+        ScholarChatMetadataConnectorPlanStatus::ConnectorPlanReady => {
+            "OpenAlex/Crossref metadata connector preview is ready later and only describes future metadata query planning, deduplication, attribution, and compliance."
+                .to_string()
+        }
+    };
+
+    Ok(ScholarChatMetadataConnectorPlanPreview {
+        status,
+        normalized_query,
+        normalized_mode,
+        normalized_context_tags,
+        selected_local_source_ids,
+        expected_source_kinds,
+        preferred_metadata_sources: selected_metadata_sources.clone(),
+        unknown_metadata_sources,
+        normalized_max_results_per_source,
+        require_open_access,
+        require_doi,
+        year_from: request.year_from,
+        year_to: request.year_to,
+        search_plan_status,
+        query_understanding_status,
+        inferred_topic,
+        query_intent,
+        recognized_concept,
+        label,
+        connector_strategy,
+        source_selection_plan,
+        openalex_plan,
+        crossref_plan,
+        deduplication_plan,
+        attribution_plan,
+        compliance_plan,
+        planned_metadata_queries,
+        planned_connector_steps,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        metadata_connector_plan_preview_only: true,
+        no_web_request: true,
+        no_http_client: true,
+        no_api_key_read: true,
+        no_environment_read: true,
+        no_scraping: true,
+        no_connector_call: true,
+        no_source_import: true,
+        no_metadata_record_write: true,
+        no_local_file_indexing: true,
+        no_file_read: true,
+        no_pdf_extraction: true,
+        no_ocr: true,
+        no_chunking_run: true,
+        no_embedding_generation: true,
+        no_index_created: true,
+        no_retrieval_execution: true,
         no_model_loading: true,
         no_runtime_inference: true,
         no_llm_call: true,
@@ -10512,6 +11485,40 @@ fn main() {
         }
     }
 
+    fn metadata_connector_plan_request(
+        query: &str,
+        mode: Option<&str>,
+        course_context: Option<&str>,
+        context_tags: Option<Vec<&str>>,
+        selected_local_source_ids: Option<Vec<&str>>,
+        expected_source_kinds: Option<Vec<&str>>,
+        preferred_metadata_sources: Option<Vec<&str>>,
+        max_results_per_source: Option<u32>,
+        require_open_access: Option<bool>,
+        require_doi: Option<bool>,
+        year_from: Option<u16>,
+        year_to: Option<u16>,
+    ) -> ScholarChatMetadataConnectorPlanRequest {
+        ScholarChatMetadataConnectorPlanRequest {
+            query: query.to_string(),
+            mode: mode.map(|value| value.to_string()),
+            course_context: course_context.map(|value| value.to_string()),
+            context_tags: context_tags
+                .map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
+            selected_local_source_ids: selected_local_source_ids
+                .map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
+            expected_source_kinds: expected_source_kinds
+                .map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
+            preferred_metadata_sources: preferred_metadata_sources
+                .map(|tags| tags.into_iter().map(|value| value.to_string()).collect()),
+            max_results_per_source,
+            require_open_access,
+            require_doi,
+            year_from,
+            year_to,
+        }
+    }
+
     fn runtime_diagnostic_result_request(
         bridge_preview_request: ScholarChatRuntimeDiagnosticBridgePreviewRequest,
         diagnostic_preview: LocalRuntimeSmokeDiagnosticPreview,
@@ -15323,7 +16330,7 @@ fn main() {
             .find("pub fn preview_scholar_chat_local_literature_index")
             .unwrap();
         let end = source[start..]
-            .find("pub fn preview_scholar_chat_answer_readiness")
+            .find("pub fn preview_scholar_chat_metadata_connector_plan")
             .unwrap();
         let body = &source[start..start + end];
         assert_eq!(body.matches("preview_scholar_chat_scientific_search_plan").count(), 1);
@@ -15702,7 +16709,7 @@ fn main() {
             .find("pub fn preview_scholar_chat_course_literature_registry")
             .unwrap();
         let end = source[start..]
-            .find("pub fn preview_scholar_chat_answer_readiness")
+            .find("pub fn preview_scholar_chat_metadata_connector_plan")
             .unwrap();
         let body = &source[start..start + end];
         assert_eq!(body.matches("preview_scholar_chat_local_literature_index").count(), 1);
@@ -15876,6 +16883,61 @@ fn main() {
         first
     }
 
+    fn assert_metadata_connector_plan_boundary_fields(
+        preview: &ScholarChatMetadataConnectorPlanPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.metadata_connector_plan_preview_only);
+        assert!(preview.no_web_request);
+        assert!(preview.no_http_client);
+        assert!(preview.no_api_key_read);
+        assert!(preview.no_environment_read);
+        assert!(preview.no_scraping);
+        assert!(preview.no_connector_call);
+        assert!(preview.no_source_import);
+        assert!(preview.no_metadata_record_write);
+        assert!(preview.no_local_file_indexing);
+        assert!(preview.no_file_read);
+        assert!(preview.no_pdf_extraction);
+        assert!(preview.no_ocr);
+        assert!(preview.no_chunking_run);
+        assert!(preview.no_embedding_generation);
+        assert!(preview.no_index_created);
+        assert!(preview.no_retrieval_execution);
+        assert!(preview.no_model_loading);
+        assert!(preview.no_runtime_inference);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_persistence);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
+    fn assert_metadata_connector_plan_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatMetadataConnectorPlanRequest,
+    ) -> ScholarChatMetadataConnectorPlanPreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let first = preview_scholar_chat_metadata_connector_plan(temp.path(), request.clone())
+            .unwrap();
+        let second = preview_scholar_chat_metadata_connector_plan(temp.path(), request).unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        assert!(!temp.path().join(".aegis").exists());
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_metadata_connector_plan_boundary_fields(preview);
+        }
+        first
+    }
+
     #[test]
     fn scholar_chat_scientific_query_understanding_body_does_not_call_execution_functions() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
@@ -15947,7 +17009,11 @@ fn main() {
             .unwrap();
         let handler = &source[handler_start..handler_start + handler_end];
 
-        let expected: [(&str, &str, &str, &str); 6] = [
+        let imports_start = source.find("use scholar_chat::{").unwrap();
+        let imports_end = source[imports_start..].find("};").unwrap() + imports_start + 2;
+        let imports = &source[imports_start..imports_end];
+
+        let expected: [(&str, &str, &str, &str); 7] = [
             (
                 "preview_scholar_chat_scientific_discipline_registry",
                 "ScholarChatScientificDisciplineRegistryPreviewRequest",
@@ -15984,6 +17050,12 @@ fn main() {
                 "ScholarChatCourseLiteratureRegistryPreview",
                 "preview_scholar_chat_course_literature_registry_impl(root, request)",
             ),
+            (
+                "preview_scholar_chat_metadata_connector_plan",
+                "ScholarChatMetadataConnectorPlanRequest",
+                "ScholarChatMetadataConnectorPlanPreview",
+                "preview_scholar_chat_metadata_connector_plan_impl(root, request)",
+            ),
         ];
 
         let mut previous_position = None;
@@ -15993,6 +17065,8 @@ fn main() {
             assert_eq!(source.matches(&format!("request: {request_ty}")).count(), 1, "{name} request type should appear exactly once");
             assert_eq!(source.matches(&format!("Result<{response_ty}, String>")).count(), 1, "{name} response type should appear exactly once");
             assert_eq!(source.matches(impl_call).count(), 1, "{name} should call its impl exactly once");
+            assert!(imports.contains(request_ty), "{name} request type should be imported");
+            assert!(imports.contains(response_ty), "{name} response type should be imported");
             let wrapper_start = source.find(&wrapper_marker).unwrap();
             let wrapper_end = source[wrapper_start + wrapper_marker.len()..]
                 .find("#[tauri::command]\nfn ")
@@ -16015,12 +17089,13 @@ fn main() {
         assert!(handler.contains("preview_scholar_chat_scientific_search_plan"));
         assert!(handler.contains("preview_scholar_chat_local_literature_index"));
         assert!(handler.contains("preview_scholar_chat_course_literature_registry"));
+        assert!(handler.contains("preview_scholar_chat_metadata_connector_plan"));
     }
 
     #[test]
     fn scholar_chat_scientific_preview_implementations_compose_the_expected_chain_without_execution() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
-        let bodies: [(&str, &str, &[&str], &[&str]); 6] = [
+        let bodies: [(&str, &str, &[&str], &[&str]); 7] = [
             (
                 "pub fn preview_scholar_chat_scientific_discipline_registry",
                 "pub fn preview_scholar_chat_scientific_source_registry",
@@ -16156,6 +17231,44 @@ fn main() {
                     "export_answer_artifacts",
                 ][..],
             ),
+            (
+                "pub fn preview_scholar_chat_metadata_connector_plan",
+                "pub fn preview_scholar_chat_answer_readiness",
+                &["preview_scholar_chat_scientific_search_plan"][..],
+                &[
+                    "Command::new",
+                    "reqwest::",
+                    "ureq::",
+                    "std::fs",
+                    "fs::",
+                    "std::env",
+                    "env::",
+                    "CorpusAuthority::",
+                    "SourceRegistry::",
+                    "RetrievalService::new",
+                    "extract_source",
+                    "chunk_source",
+                    "build_retrieval_index",
+                    "preview_scholar_chat_local_literature_index",
+                    "preview_scholar_chat_course_literature_registry",
+                    "preview_scholar_chat_retrieval",
+                    "preview_scholar_chat_evidence_plan",
+                    "preview_scholar_chat_prompt_pack",
+                    "preview_scholar_chat_answer_readiness",
+                    "preview_scholar_chat_draft_inference",
+                    "preview_scholar_chat_grounded_answer",
+                    "smoke_test_local_runtime_inference",
+                    "run_llama_runtime_smoke_diagnostic",
+                    "run_smoke_inference_probe",
+                    "build_answer_draft",
+                    "build_grounded_answer",
+                    "build_final_answer",
+                    "build_evidence_pack",
+                    "export_answer_artifacts",
+                    "http://",
+                    "https://",
+                ][..],
+            ),
         ];
 
         for (start_marker, end_marker, required_once, forbidden) in bodies {
@@ -16169,6 +17282,536 @@ fn main() {
                 assert!(!body.contains(forbidden_call), "{start_marker} should not call {forbidden_call}");
             }
         }
+    }
+
+    #[test]
+    fn scholar_chat_metadata_connector_plan_blocks_blank_query_and_keeps_boundary_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_metadata_connector_plan_deterministic_and_path_free(
+            &temp,
+            metadata_connector_plan_request(
+                "   ",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ),
+        );
+        assert_eq!(
+            preview.status,
+            ScholarChatMetadataConnectorPlanStatus::Blocked
+        );
+        assert!(preview.normalized_query.is_empty());
+        assert!(preview
+            .blockers
+            .iter()
+            .any(|value| value.contains("query_missing")));
+        assert_metadata_connector_plan_boundary_fields(&preview);
+    }
+
+    #[test]
+    fn scholar_chat_metadata_connector_plan_defaults_to_openalex_and_crossref() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_metadata_connector_plan_deterministic_and_path_free(
+            &temp,
+            metadata_connector_plan_request(
+                "Signalentdeckung",
+                None,
+                None,
+                Some(vec!["psychology"]),
+                Some(vec![" source-b ", "source-a"]),
+                Some(vec![" pdf ", "markdown"]),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ),
+        );
+        assert_eq!(
+            preview.status,
+            ScholarChatMetadataConnectorPlanStatus::ConnectorPlanReady
+        );
+        assert_eq!(
+            preview.connector_strategy,
+            ScholarChatMetadataConnectorStrategy::OpenalexAndCrossref
+        );
+        assert_eq!(
+            preview.preferred_metadata_sources,
+            vec!["openalex".to_string(), "crossref".to_string()]
+        );
+        assert_eq!(
+            preview.source_selection_plan.selected_sources,
+            vec!["openalex".to_string(), "crossref".to_string()]
+        );
+        assert!(preview.openalex_plan.enabled);
+        assert!(preview.crossref_plan.enabled);
+        assert!(preview
+            .warnings
+            .iter()
+            .any(|value| value.contains("balanced")));
+    }
+
+    #[test]
+    fn scholar_chat_metadata_connector_plan_prefers_openalex_only_when_requested() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_metadata_connector_plan_deterministic_and_path_free(
+            &temp,
+            metadata_connector_plan_request(
+                "Signalentdeckung",
+                Some("scientific_paper"),
+                None,
+                Some(vec!["psychology"]),
+                Some(vec!["source-a"]),
+                None,
+                Some(vec!["openalex"]),
+                Some(40),
+                Some(true),
+                Some(true),
+                Some(2020),
+                Some(2024),
+            ),
+        );
+        assert_eq!(
+            preview.status,
+            ScholarChatMetadataConnectorPlanStatus::ConnectorPlanReady
+        );
+        assert_eq!(
+            preview.connector_strategy,
+            ScholarChatMetadataConnectorStrategy::OpenalexFirst
+        );
+        assert_eq!(preview.preferred_metadata_sources, vec!["openalex".to_string()]);
+        assert!(preview.openalex_plan.enabled);
+        assert!(!preview.crossref_plan.enabled);
+        assert!(preview
+            .openalex_plan
+            .planned_filters
+            .iter()
+            .any(|value| value == "open_access=true"));
+        assert!(preview
+            .openalex_plan
+            .planned_filters
+            .iter()
+            .any(|value| value == "has_doi=true"));
+        assert!(preview
+            .crossref_plan
+            .planned_filters
+            .iter()
+            .any(|value| value == "has_doi=true"));
+        assert!(!preview.deduplication_plan.title_year_fallback_allowed);
+        assert!(preview
+            .warnings
+            .iter()
+            .any(|value| value.contains("citation-safe metadata")));
+    }
+
+    #[test]
+    fn scholar_chat_metadata_connector_plan_prefers_crossref_only_when_requested() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_metadata_connector_plan_deterministic_and_path_free(
+            &temp,
+            metadata_connector_plan_request(
+                "Signalentdeckung",
+                Some("course"),
+                Some("Psychology course"),
+                Some(vec!["course"]),
+                Some(vec!["source-b"]),
+                Some(vec!["lecture_slide"]),
+                Some(vec!["crossref"]),
+                Some(15),
+                Some(false),
+                Some(false),
+                Some(2021),
+                Some(2023),
+            ),
+        );
+        assert_eq!(
+            preview.status,
+            ScholarChatMetadataConnectorPlanStatus::ConnectorPlanReady
+        );
+        assert_eq!(
+            preview.connector_strategy,
+            ScholarChatMetadataConnectorStrategy::CrossrefFirst
+        );
+        assert_eq!(preview.preferred_metadata_sources, vec!["crossref".to_string()]);
+        assert!(!preview.openalex_plan.enabled);
+        assert!(preview.crossref_plan.enabled);
+        assert!(preview
+            .warnings
+            .iter()
+            .any(|value| value.contains("course-context metadata")));
+    }
+
+    #[test]
+    fn scholar_chat_metadata_connector_plan_needs_metadata_source_for_unknown_preference_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_metadata_connector_plan_deterministic_and_path_free(
+            &temp,
+            metadata_connector_plan_request(
+                "Signalentdeckung",
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(vec!["  custom-source  "]),
+                Some(25),
+                None,
+                None,
+                None,
+                None,
+            ),
+        );
+        assert_eq!(
+            preview.status,
+            ScholarChatMetadataConnectorPlanStatus::NeedsMetadataSource
+        );
+        assert!(preview.preferred_metadata_sources.is_empty());
+        assert_eq!(preview.unknown_metadata_sources, vec!["custom_source".to_string()]);
+        assert!(preview
+            .warnings
+            .iter()
+            .any(|value| value.contains("No supported metadata source selected")));
+        assert!(preview
+            .next_required_actions
+            .iter()
+            .any(|value| value.contains("Choose OpenAlex or Crossref")));
+    }
+
+    #[test]
+    fn scholar_chat_metadata_connector_plan_clamps_zero_and_high_max_results() {
+        let temp = tempfile::tempdir().unwrap();
+        let zero_preview = assert_metadata_connector_plan_deterministic_and_path_free(
+            &temp,
+            metadata_connector_plan_request(
+                "Signalentdeckung",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(0),
+                None,
+                None,
+                None,
+                None,
+            ),
+        );
+        assert_eq!(zero_preview.normalized_max_results_per_source, 1);
+        assert!(zero_preview
+            .warnings
+            .iter()
+            .any(|value| value.contains("clamped to 1")));
+
+        let high_preview = assert_metadata_connector_plan_deterministic_and_path_free(
+            &temp,
+            metadata_connector_plan_request(
+                "Signalentdeckung",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(250),
+                None,
+                None,
+                None,
+                None,
+            ),
+        );
+        assert_eq!(high_preview.normalized_max_results_per_source, 200);
+        assert!(high_preview
+            .warnings
+            .iter()
+            .any(|value| value.contains("clamped to 200")));
+    }
+
+    #[test]
+    fn scholar_chat_metadata_connector_plan_rejects_invalid_year_range() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_metadata_connector_plan_deterministic_and_path_free(
+            &temp,
+            metadata_connector_plan_request(
+                "Signalentdeckung",
+                Some("scientific_paper"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(2024),
+                Some(2020),
+            ),
+        );
+        assert_eq!(
+            preview.status,
+            ScholarChatMetadataConnectorPlanStatus::Blocked
+        );
+        assert!(preview
+            .blockers
+            .iter()
+            .any(|value| value.contains("invalid_year_range")));
+        assert!(preview
+            .warnings
+            .iter()
+            .any(|value| value.contains("year_from is after year_to")));
+    }
+
+    #[test]
+    fn scholar_chat_metadata_connector_plan_uses_expected_filters_for_doi_and_open_access() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_metadata_connector_plan_deterministic_and_path_free(
+            &temp,
+            metadata_connector_plan_request(
+                "Signalentdeckung",
+                Some("scientific_paper"),
+                None,
+                None,
+                None,
+                Some(vec!["pdf"]),
+                Some(vec!["openalex", "crossref"]),
+                Some(25),
+                Some(true),
+                Some(true),
+                Some(2018),
+                Some(2022),
+            ),
+        );
+        assert!(preview.deduplication_plan.doi_required);
+        assert!(!preview.deduplication_plan.title_year_fallback_allowed);
+        assert!(preview
+            .openalex_plan
+            .planned_filters
+            .iter()
+            .any(|value| value == "open_access=true"));
+        assert!(preview
+            .openalex_plan
+            .planned_filters
+            .iter()
+            .any(|value| value == "has_doi=true"));
+        assert!(preview
+            .crossref_plan
+            .planned_filters
+            .iter()
+            .any(|value| value == "has_doi=true"));
+        assert!(preview
+            .crossref_plan
+            .planned_filters
+            .iter()
+            .any(|value| value == "open_access_filter_not_native"));
+    }
+
+    #[test]
+    fn scholar_chat_metadata_connector_plan_uses_mode_specific_notes() {
+        let scientific_paper = assert_metadata_connector_plan_deterministic_and_path_free(
+            &tempfile::tempdir().unwrap(),
+            metadata_connector_plan_request(
+                "Signalentdeckung",
+                Some("scientific_paper"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ),
+        );
+        assert!(scientific_paper
+            .warnings
+            .iter()
+            .any(|value| value.contains("citation-safe metadata")));
+
+        let course = assert_metadata_connector_plan_deterministic_and_path_free(
+            &tempfile::tempdir().unwrap(),
+            metadata_connector_plan_request(
+                "Signalentdeckung",
+                Some("course"),
+                Some("Psychology course"),
+                Some(vec!["course"]),
+                Some(vec!["source-a"]),
+                Some(vec!["lecture_slide"]),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ),
+        );
+        assert!(course
+            .warnings
+            .iter()
+            .any(|value| value.contains("course-context metadata")));
+    }
+
+    #[test]
+    fn scholar_chat_metadata_connector_plan_reports_ambiguous_and_unknown_concepts() {
+        let ambiguous = assert_metadata_connector_plan_deterministic_and_path_free(
+            &tempfile::tempdir().unwrap(),
+            metadata_connector_plan_request(
+                "Hypothesentests und ANOVA Vergleich",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ),
+        );
+        assert_eq!(
+            ambiguous.status,
+            ScholarChatMetadataConnectorPlanStatus::NeedsDisambiguation
+        );
+        assert_eq!(
+            ambiguous.search_plan_status,
+            ScholarChatScientificSearchPlanStatus::NeedsDisambiguation
+        );
+
+        let unknown = assert_metadata_connector_plan_deterministic_and_path_free(
+            &tempfile::tempdir().unwrap(),
+            metadata_connector_plan_request(
+                "Signal graph theory",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ),
+        );
+        assert_eq!(
+            unknown.status,
+            ScholarChatMetadataConnectorPlanStatus::UnknownConcept
+        );
+        assert_eq!(
+            unknown.search_plan_status,
+            ScholarChatScientificSearchPlanStatus::UnknownConcept
+        );
+    }
+
+    #[test]
+    fn scholar_chat_metadata_connector_plan_emits_stable_step_order_and_boundary_only_plans() {
+        let preview = assert_metadata_connector_plan_deterministic_and_path_free(
+            &tempfile::tempdir().unwrap(),
+            metadata_connector_plan_request(
+                "Signalentdeckung",
+                None,
+                None,
+                None,
+                Some(vec!["source-b", "source-a"]),
+                Some(vec!["pdf", "markdown"]),
+                None,
+                Some(25),
+                Some(true),
+                Some(true),
+                Some(2020),
+                Some(2024),
+            ),
+        );
+        assert_eq!(
+            preview
+                .planned_connector_steps
+                .iter()
+                .map(|step| step.kind.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                ScholarChatMetadataConnectorStepKind::QueryUnderstandingAlignment,
+                ScholarChatMetadataConnectorStepKind::MetadataSourceSelection,
+                ScholarChatMetadataConnectorStepKind::OpenalexQueryPlan,
+                ScholarChatMetadataConnectorStepKind::CrossrefQueryPlan,
+                ScholarChatMetadataConnectorStepKind::ResultShapeMappingPlan,
+                ScholarChatMetadataConnectorStepKind::DoiFilterPlan,
+                ScholarChatMetadataConnectorStepKind::OpenAccessFilterPlan,
+                ScholarChatMetadataConnectorStepKind::YearFilterPlan,
+                ScholarChatMetadataConnectorStepKind::DeduplicationPlan,
+                ScholarChatMetadataConnectorStepKind::AttributionRequirementCheck,
+                ScholarChatMetadataConnectorStepKind::ComplianceBoundaryCheck,
+                ScholarChatMetadataConnectorStepKind::DownstreamEvidencePackAlignment,
+            ]
+        );
+        assert!(preview
+            .planned_connector_steps
+            .iter()
+            .all(|step| step.preview_only && step.boundary_notes.iter().any(|note| note == "preview-only")));
+        assert!(preview
+            .planned_connector_steps
+            .iter()
+            .all(|step| step.boundary_notes.iter().any(|note| note == "no web request")));
+        assert!(preview.openalex_plan.summary.contains("preview-only"));
+        assert!(preview.crossref_plan.summary.contains("preview-only"));
+        assert!(preview.compliance_plan.external_metadata_only);
+        assert!(preview.compliance_plan.no_fulltext_download);
+    }
+
+    #[test]
+    fn scholar_chat_metadata_connector_plan_body_does_not_call_execution_functions() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        let start = source
+            .find("pub fn preview_scholar_chat_metadata_connector_plan")
+            .unwrap();
+        let end = source[start..]
+            .find("pub fn preview_scholar_chat_answer_readiness")
+            .unwrap();
+        let body = &source[start..start + end];
+        assert_eq!(body.matches("preview_scholar_chat_scientific_search_plan").count(), 1);
+        assert!(!body.contains("Command::new"));
+        assert!(!body.contains("reqwest::"));
+        assert!(!body.contains("ureq::"));
+        assert!(!body.contains("std::fs"));
+        assert!(!body.contains("fs::"));
+        assert!(!body.contains("std::env"));
+        assert!(!body.contains("env::"));
+        assert!(!body.contains("CorpusAuthority::"));
+        assert!(!body.contains("SourceRegistry::"));
+        assert!(!body.contains("RetrievalService::new"));
+        assert!(!body.contains("extract_source"));
+        assert!(!body.contains("chunk_source"));
+        assert!(!body.contains("build_retrieval_index"));
+        assert!(!body.contains("preview_scholar_chat_local_literature_index"));
+        assert!(!body.contains("preview_scholar_chat_course_literature_registry"));
+        assert!(!body.contains("preview_scholar_chat_retrieval"));
+        assert!(!body.contains("preview_scholar_chat_evidence_plan"));
+        assert!(!body.contains("preview_scholar_chat_prompt_pack"));
+        assert!(!body.contains("preview_scholar_chat_answer_readiness"));
+        assert!(!body.contains("preview_scholar_chat_draft_inference"));
+        assert!(!body.contains("preview_scholar_chat_grounded_answer"));
+        assert!(!body.contains("smoke_test_local_runtime_inference"));
+        assert!(!body.contains("run_llama_runtime_smoke_diagnostic"));
+        assert!(!body.contains("run_smoke_inference_probe"));
+        assert!(!body.contains("build_answer_draft"));
+        assert!(!body.contains("build_grounded_answer"));
+        assert!(!body.contains("build_final_answer"));
+        assert!(!body.contains("build_evidence_pack"));
+        assert!(!body.contains("export_answer_artifacts"));
+        assert!(!body.contains("http://"));
+        assert!(!body.contains("https://"));
     }
 
     #[test]
