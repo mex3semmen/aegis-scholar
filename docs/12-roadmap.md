@@ -1528,6 +1528,9 @@ It maps source-family plans for early scientific concepts, stays preview-only, a
 Phase 99.0 adds a backend-only Scientific Query Understanding Preview.
 It composes the discipline and source registry previews, stays preview-only, and does not add web requests, scraping, connector implementation, source import, local file indexing, BM25/vector index, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
 
+Phase 99.1 adds a backend-only Scholar Chat Scientific Search Plan Preview.
+It composes scientific query understanding and plans local-first search, metadata search, query expansion, source-family routing, ranking, deduplication, and evidence requirements. It stays preview-only and does not add retrieval execution, web requests, scraping, connector implementation, source import, local file indexing, BM25/vector index, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
+
 Do not implement:
 
 - web requests
