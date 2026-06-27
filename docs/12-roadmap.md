@@ -1549,6 +1549,11 @@ Do not implement:
 - export/report/share workflows
 - routing/charts/frontend test framework
 
+## Phase 100 — Local Literature Index Preview
+
+Phase 100.0 adds a backend-only Local Literature Index Preview that composes the scientific search plan preview and only plans later local corpus, metadata, chunking, lexical index, vector index, and retrieval-readiness work.
+It is preview-only and does not add file reading, PDF extraction, OCR, chunking, embedding generation, index creation, retrieval execution, web requests, scraping, connectors, source import, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
+
 ## Phase 11 — Obsidian Export
 
 Generate notes, backlinks and source cards.
