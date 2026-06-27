@@ -1519,6 +1519,9 @@ It does not add production code, web requests, scraping, model loading, runtime 
 Phase 98.1 adds a backend-only Scientific Discipline Registry Preview.
 It maps early example concepts, stays preview-only, and does not add web requests, scraping, connector implementation, local file indexing, BM25/vector index, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
 
+Phase 98.1.1 adds local workspace hygiene guardrails for models, build output, and local research data.
+It is docs/.gitignore only and keeps local GGUF/GGML/Safetensors files, generated artifacts, and local corpus data outside Git until explicit app-managed storage is implemented.
+
 Do not implement:
 
 - web requests

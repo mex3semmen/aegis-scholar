@@ -2,6 +2,14 @@ node_modules/
 dist/
 src-tauri/target/
 src-tauri/gen/
+/models/
+*.gguf
+*.ggml
+*.safetensors
+/.aegis-local/
+/local-data/
+/local-corpus/
+/local-indexes/
 .DS_Store
 .env
 .env.local

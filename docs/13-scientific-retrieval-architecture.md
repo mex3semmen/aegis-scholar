@@ -20,6 +20,7 @@ The architecture is designed to support preview-first rollout phases before any 
 
 The currently implemented system has preview gates for local runtime and Scholar Chat answer-related planning.
 It does not yet implement the scientific retrieval stack itself.
+Local scientific models and corpus data must remain outside Git in user-controlled storage until explicit app-managed storage is implemented.
 
 Not yet implemented:
 
