@@ -967,6 +967,67 @@ pub struct ScholarChatRuntimeDiagnosticResultPreview {
     pub no_audit_write: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatRuntimeAnswerPipelineGateStatus {
+    Blocked,
+    NeedsReview,
+    ReadyLater,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ScholarChatRuntimeAnswerPipelineGatePreviewRequest {
+    pub grounded_answer_execution_plan_preview_request: ScholarChatGroundedAnswerExecutionPlanPreviewRequest,
+    pub runtime_diagnostic_result_preview_request: ScholarChatRuntimeDiagnosticResultPreviewRequest,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ScholarChatRuntimeAnswerPipelineGatePreview {
+    pub status: ScholarChatRuntimeAnswerPipelineGateStatus,
+    pub grounded_answer_execution_plan_status: ScholarChatGroundedAnswerExecutionPlanStatus,
+    pub grounded_answer_execution_readiness_status: ScholarChatGroundedAnswerExecutionReadinessStatus,
+    pub runtime_diagnostic_result_status: ScholarChatRuntimeDiagnosticResultStatus,
+    pub runtime_diagnostic_bridge_status: ScholarChatRuntimeDiagnosticBridgeStatus,
+    pub smoke_diagnostic_status: LocalRuntimeSmokeDiagnosticStatus,
+    pub smoke_execution_plan_status: LocalRuntimeSmokeExecutionPlanStatus,
+    pub smoke_readiness_status: LocalRuntimeSmokeReadinessStatus,
+    pub capability_status: LocalRuntimeCapabilityStatus,
+    pub version_probe_status: LocalRuntimeVersionProbeStatus,
+    pub probe_readiness_status: LocalRuntimeProbeReadinessStatus,
+    pub validation_status: LocalRuntimeValidationStatus,
+    pub adapter_contract_status: LocalRuntimeAdapterContractStatus,
+    pub adapter_kind: LocalRuntimeAdapterKind,
+    pub selected_source_count: usize,
+    pub normalized_model_family: Option<String>,
+    pub normalized_model_format: String,
+    pub safe_executable_file_name: Option<String>,
+    pub safe_model_file_name: Option<String>,
+    pub diagnostic_prompt_char_count: usize,
+    pub max_output_tokens: u32,
+    pub timeout_ms: u64,
+    pub pipeline_gate_reasons: Vec<String>,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub gate_only: bool,
+    pub no_smoke_execution: bool,
+    pub no_runtime_inference: bool,
+    pub no_new_process_spawn: bool,
+    pub no_llm_call: bool,
+    pub no_answer_generated: bool,
+    pub no_answer_draft_created: bool,
+    pub no_grounded_answer_created: bool,
+    pub no_final_answer_created: bool,
+    pub no_grounding_applied: bool,
+    pub no_evidence_pack_built: bool,
+    pub no_persistence: bool,
+    pub no_artifact_write: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
 enum ScholarChatPreviewKind {
     Request,
     Retrieval,
@@ -3142,6 +3203,362 @@ pub fn preview_scholar_chat_runtime_diagnostic_bridge(
         preview_only: true,
         no_smoke_execution: true,
         no_runtime_inference: true,
+        no_llm_call: true,
+        no_answer_generated: true,
+        no_answer_draft_created: true,
+        no_grounded_answer_created: true,
+        no_final_answer_created: true,
+        no_grounding_applied: true,
+        no_evidence_pack_built: true,
+        no_persistence: true,
+        no_artifact_write: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+    })
+}
+
+pub fn preview_scholar_chat_runtime_answer_pipeline_gate(
+    root: impl Into<PathBuf>,
+    request: ScholarChatRuntimeAnswerPipelineGatePreviewRequest,
+) -> AegisResult<ScholarChatRuntimeAnswerPipelineGatePreview> {
+    let root = root.into();
+    let grounded_answer_execution_plan_preview_request = request.grounded_answer_execution_plan_preview_request;
+    let runtime_diagnostic_result_preview_request = request.runtime_diagnostic_result_preview_request;
+
+    let grounded_answer_scholar_chat_request = grounded_answer_execution_plan_preview_request
+        .execution_readiness_preview_request
+        .build_preflight_preview_request
+        .build_request_preview_request
+        .build_intent_request
+        .grounding_request
+        .scholar_chat_request
+        .clone();
+    let runtime_diagnostic_scholar_chat_request = runtime_diagnostic_result_preview_request
+        .bridge_preview_request
+        .scholar_chat_request
+        .clone();
+
+    let (grounded_selected_source_ids, selected_source_count) =
+        normalize_selected_source_ids(grounded_answer_scholar_chat_request.selected_source_ids.clone())?;
+    let (runtime_selected_source_ids, _runtime_selected_source_count) =
+        normalize_selected_source_ids(runtime_diagnostic_scholar_chat_request.selected_source_ids.clone())?;
+    let normalized_prompt = grounded_answer_scholar_chat_request.prompt.trim().to_string();
+    let runtime_normalized_prompt = runtime_diagnostic_scholar_chat_request.prompt.trim().to_string();
+    let prompt_is_blank = normalized_prompt.is_empty();
+    let sources_are_missing = selected_source_count == 0;
+    let normalized_requests_match = ScholarChatRequest {
+        prompt: normalized_prompt.clone(),
+        mode: grounded_answer_scholar_chat_request.mode.clone(),
+        grounding_policy: grounded_answer_scholar_chat_request.grounding_policy.clone(),
+        selected_source_ids: grounded_selected_source_ids.clone(),
+    } == ScholarChatRequest {
+        prompt: runtime_normalized_prompt.clone(),
+        mode: runtime_diagnostic_scholar_chat_request.mode.clone(),
+        grounding_policy: runtime_diagnostic_scholar_chat_request.grounding_policy.clone(),
+        selected_source_ids: runtime_selected_source_ids.clone(),
+    };
+
+    if prompt_is_blank || sources_are_missing {
+        let mut blockers = Vec::new();
+        let mut warnings = Vec::new();
+        let mut pipeline_gate_reasons = Vec::new();
+        let mut next_required_actions = Vec::new();
+
+        push_unique_text(
+            &mut warnings,
+            "boundary: This is a pipeline-gate preview only; it does not run smoke diagnostics, inference, or Scholar Chat answers.",
+        );
+
+        if prompt_is_blank {
+            push_unique_text(
+                &mut blockers,
+                "scholar_chat_prompt_missing: The Scholar Chat prompt is blank.",
+            );
+            push_unique_text(
+                &mut pipeline_gate_reasons,
+                "The future runtime answer pipeline is blocked until the Scholar Chat prompt is nonblank.",
+            );
+            push_unique_text(
+                &mut next_required_actions,
+                "Provide a nonblank Scholar Chat prompt before previewing the runtime answer pipeline gate.",
+            );
+        }
+
+        if sources_are_missing {
+            push_unique_text(
+                &mut blockers,
+                "scholar_chat_sources_missing: No Scholar Chat sources are selected.",
+            );
+            push_unique_text(
+                &mut pipeline_gate_reasons,
+                "The future runtime answer pipeline is blocked until at least one Scholar Chat source is selected.",
+            );
+            push_unique_text(
+                &mut next_required_actions,
+                "Select at least one Scholar Chat source before previewing the runtime answer pipeline gate.",
+            );
+        }
+
+        push_unique_text(
+            &mut next_required_actions,
+            "A future grounded-answer execution plan and runtime diagnostic result can be added later once the preview inputs are valid.",
+        );
+
+        return Ok(ScholarChatRuntimeAnswerPipelineGatePreview {
+            status: ScholarChatRuntimeAnswerPipelineGateStatus::Blocked,
+            grounded_answer_execution_plan_status: ScholarChatGroundedAnswerExecutionPlanStatus::Blocked,
+            grounded_answer_execution_readiness_status: ScholarChatGroundedAnswerExecutionReadinessStatus::Blocked,
+            runtime_diagnostic_result_status: ScholarChatRuntimeDiagnosticResultStatus::Blocked,
+            runtime_diagnostic_bridge_status: ScholarChatRuntimeDiagnosticBridgeStatus::Blocked,
+            smoke_diagnostic_status: LocalRuntimeSmokeDiagnosticStatus::Blocked,
+            smoke_execution_plan_status: LocalRuntimeSmokeExecutionPlanStatus::Blocked,
+            smoke_readiness_status: LocalRuntimeSmokeReadinessStatus::Blocked,
+            capability_status: LocalRuntimeCapabilityStatus::Blocked,
+            version_probe_status: LocalRuntimeVersionProbeStatus::Blocked,
+            probe_readiness_status: LocalRuntimeProbeReadinessStatus::Blocked,
+            validation_status: LocalRuntimeValidationStatus::Blocked,
+            adapter_contract_status: LocalRuntimeAdapterContractStatus::Blocked,
+            adapter_kind: LocalRuntimeAdapterKind::LlamaCpp,
+            selected_source_count,
+            normalized_model_family: None,
+            normalized_model_format: "unknown".to_string(),
+            safe_executable_file_name: None,
+            safe_model_file_name: None,
+            diagnostic_prompt_char_count: normalized_prompt.chars().count(),
+            max_output_tokens: 0,
+            timeout_ms: 0,
+            pipeline_gate_reasons,
+            blockers,
+            warnings,
+            next_required_actions,
+            summary: if prompt_is_blank {
+                "The future runtime answer pipeline is blocked until the Scholar Chat prompt is nonblank.".to_string()
+            } else {
+                "The future runtime answer pipeline is blocked until at least one Scholar Chat source is selected.".to_string()
+            },
+            preview_only: true,
+            gate_only: true,
+            no_smoke_execution: true,
+            no_runtime_inference: true,
+            no_new_process_spawn: true,
+            no_llm_call: true,
+            no_answer_generated: true,
+            no_answer_draft_created: true,
+            no_grounded_answer_created: true,
+            no_final_answer_created: true,
+            no_grounding_applied: true,
+            no_evidence_pack_built: true,
+            no_persistence: true,
+            no_artifact_write: true,
+            no_registry_status_change: true,
+            no_audit_write: true,
+        });
+    }
+
+    let grounded_answer_execution_plan_preview = preview_scholar_chat_grounded_answer_execution_plan(
+        &root,
+        grounded_answer_execution_plan_preview_request,
+    )?;
+    let runtime_diagnostic_result_preview = preview_scholar_chat_runtime_diagnostic_result(
+        &root,
+        runtime_diagnostic_result_preview_request,
+    )?;
+
+    let mut status = if matches!(
+        grounded_answer_execution_plan_preview.status,
+        ScholarChatGroundedAnswerExecutionPlanStatus::Blocked
+    ) || matches!(
+        runtime_diagnostic_result_preview.status,
+        ScholarChatRuntimeDiagnosticResultStatus::Blocked
+    ) || matches!(
+        runtime_diagnostic_result_preview.status,
+        ScholarChatRuntimeDiagnosticResultStatus::RuntimeDiagnosticFailed
+    ) {
+        ScholarChatRuntimeAnswerPipelineGateStatus::Blocked
+    } else if matches!(
+        grounded_answer_execution_plan_preview.status,
+        ScholarChatGroundedAnswerExecutionPlanStatus::NeedsReview
+    ) || matches!(
+        runtime_diagnostic_result_preview.status,
+        ScholarChatRuntimeDiagnosticResultStatus::NeedsReview
+    ) {
+        ScholarChatRuntimeAnswerPipelineGateStatus::NeedsReview
+    } else if matches!(
+        grounded_answer_execution_plan_preview.status,
+        ScholarChatGroundedAnswerExecutionPlanStatus::PlanReadyLater
+    ) && matches!(
+        runtime_diagnostic_result_preview.status,
+        ScholarChatRuntimeDiagnosticResultStatus::RuntimeDiagnosticSucceededLater
+    ) && normalized_requests_match {
+        ScholarChatRuntimeAnswerPipelineGateStatus::ReadyLater
+    } else {
+        ScholarChatRuntimeAnswerPipelineGateStatus::NeedsReview
+    };
+
+    let grounded_answer_execution_plan_status = grounded_answer_execution_plan_preview.status.clone();
+    let grounded_answer_execution_readiness_status = grounded_answer_execution_plan_preview.readiness_status.clone();
+    let runtime_diagnostic_result_status = runtime_diagnostic_result_preview.status.clone();
+    let runtime_diagnostic_bridge_status = runtime_diagnostic_result_preview.bridge_status.clone();
+    let smoke_diagnostic_status = runtime_diagnostic_result_preview.smoke_diagnostic_status.clone();
+    let smoke_execution_plan_status = runtime_diagnostic_result_preview.smoke_execution_plan_status.clone();
+    let smoke_readiness_status = runtime_diagnostic_result_preview.smoke_readiness_status.clone();
+    let capability_status = runtime_diagnostic_result_preview.capability_status.clone();
+    let version_probe_status = runtime_diagnostic_result_preview.version_probe_status.clone();
+    let probe_readiness_status = runtime_diagnostic_result_preview.probe_readiness_status.clone();
+    let validation_status = runtime_diagnostic_result_preview.validation_status.clone();
+    let adapter_contract_status = runtime_diagnostic_result_preview.adapter_contract_status.clone();
+    let adapter_kind = runtime_diagnostic_result_preview.adapter_kind.clone();
+    let normalized_model_family = runtime_diagnostic_result_preview.normalized_model_family.clone();
+    let normalized_model_format = runtime_diagnostic_result_preview.normalized_model_format.clone();
+    let safe_executable_file_name = runtime_diagnostic_result_preview.safe_executable_file_name.clone();
+    let safe_model_file_name = runtime_diagnostic_result_preview.safe_model_file_name.clone();
+    let diagnostic_prompt_char_count = runtime_diagnostic_result_preview.diagnostic_prompt_char_count;
+    let max_output_tokens = runtime_diagnostic_result_preview.max_output_tokens;
+    let timeout_ms = runtime_diagnostic_result_preview.timeout_ms;
+
+    let mut pipeline_gate_reasons = grounded_answer_execution_plan_preview.plan_reasons.clone();
+    pipeline_gate_reasons.extend(runtime_diagnostic_result_preview.runtime_result_reasons.clone());
+    let mut blockers = grounded_answer_execution_plan_preview
+        .blockers
+        .iter()
+        .map(|blocker| format!("{}: {}", blocker.kind, blocker.message))
+        .collect::<Vec<String>>();
+    blockers.extend(
+        runtime_diagnostic_result_preview
+            .blockers
+            .iter()
+            .map(|blocker| format!("{}: {}", blocker.kind, blocker.message)),
+    );
+    let mut warnings = grounded_answer_execution_plan_preview
+        .warnings
+        .iter()
+        .map(|warning| format!("{}: {}", warning.kind, warning.message))
+        .collect::<Vec<String>>();
+    warnings.extend(
+        runtime_diagnostic_result_preview
+            .warnings
+            .iter()
+            .map(|warning| format!("{}: {}", warning.kind, warning.message)),
+    );
+    let mut next_required_actions = grounded_answer_execution_plan_preview.next_required_actions.clone();
+    next_required_actions.extend(runtime_diagnostic_result_preview.next_required_actions.clone());
+
+    if !normalized_requests_match {
+        push_unique_text(
+            &mut blockers,
+            "runtime_answer_pipeline_gate_metadata_mismatch: The grounded-answer execution plan preview and runtime diagnostic result preview do not use the same normalized Scholar Chat inputs.",
+        );
+        push_unique_text(
+            &mut warnings,
+            "runtime_answer_pipeline_gate_metadata_mismatch: The grounded-answer execution plan preview and runtime diagnostic result preview do not use the same normalized Scholar Chat inputs.",
+        );
+        push_unique_text(
+            &mut pipeline_gate_reasons,
+            "The grounded-answer execution plan preview and runtime diagnostic result preview do not use the same normalized Scholar Chat inputs.",
+        );
+        push_unique_text(
+            &mut next_required_actions,
+            "Make the grounded-answer execution plan preview and runtime diagnostic result preview inputs match before retrying the pipeline gate.",
+        );
+        if !matches!(status, ScholarChatRuntimeAnswerPipelineGateStatus::Blocked) {
+            status = ScholarChatRuntimeAnswerPipelineGateStatus::NeedsReview;
+        }
+    }
+
+    match status {
+        ScholarChatRuntimeAnswerPipelineGateStatus::Blocked => {
+            push_unique_text(
+                &mut pipeline_gate_reasons,
+                "The future runtime answer pipeline cannot proceed later because one or more dependencies are blocked or failed.",
+            );
+            push_unique_text(
+                &mut next_required_actions,
+                "Resolve the blocked dependency preview before previewing the runtime answer pipeline gate again.",
+            );
+        }
+        ScholarChatRuntimeAnswerPipelineGateStatus::NeedsReview => {
+            push_unique_text(
+                &mut pipeline_gate_reasons,
+                "The future runtime answer pipeline still needs review before it can be allowed later.",
+            );
+            push_unique_text(
+                &mut next_required_actions,
+                "Review the dependency preview warnings before trying the runtime answer pipeline gate again.",
+            );
+        }
+        ScholarChatRuntimeAnswerPipelineGateStatus::ReadyLater => {
+            push_unique_text(
+                &mut pipeline_gate_reasons,
+                "The future runtime answer pipeline gate is satisfied and no answer was generated.",
+            );
+            push_unique_text(
+                &mut next_required_actions,
+                "A future Scholar Chat runtime answer pipeline step can be added later without changing this preview.",
+            );
+        }
+    }
+
+    let summary = match status {
+        ScholarChatRuntimeAnswerPipelineGateStatus::Blocked => {
+            if grounded_answer_execution_plan_preview.status == ScholarChatGroundedAnswerExecutionPlanStatus::Blocked {
+                "The future runtime answer pipeline is blocked because the grounded-answer execution plan is blocked.".to_string()
+            } else if runtime_diagnostic_result_preview.status == ScholarChatRuntimeDiagnosticResultStatus::Blocked {
+                "The future runtime answer pipeline is blocked because the runtime diagnostic result is blocked.".to_string()
+            } else if runtime_diagnostic_result_preview.status == ScholarChatRuntimeDiagnosticResultStatus::RuntimeDiagnosticFailed {
+                "The future runtime answer pipeline is blocked because the runtime diagnostic result failed.".to_string()
+            } else {
+                "The future runtime answer pipeline is blocked until the dependency previews are ready later.".to_string()
+            }
+        }
+        ScholarChatRuntimeAnswerPipelineGateStatus::NeedsReview => {
+            if !normalized_requests_match {
+                "The future runtime answer pipeline needs review because the dependency previews do not use the same normalized Scholar Chat inputs.".to_string()
+            } else if grounded_answer_execution_plan_preview.status == ScholarChatGroundedAnswerExecutionPlanStatus::NeedsReview {
+                "The future runtime answer pipeline needs review because the grounded-answer execution plan still needs review.".to_string()
+            } else if runtime_diagnostic_result_preview.status == ScholarChatRuntimeDiagnosticResultStatus::NeedsReview {
+                "The future runtime answer pipeline needs review because the runtime diagnostic result still needs review.".to_string()
+            } else {
+                "The future runtime answer pipeline needs review before it can be allowed later.".to_string()
+            }
+        }
+        ScholarChatRuntimeAnswerPipelineGateStatus::ReadyLater => {
+            "The future runtime answer pipeline gate is ready later, but no answer was generated.".to_string()
+        }
+    };
+
+    Ok(ScholarChatRuntimeAnswerPipelineGatePreview {
+        status,
+        grounded_answer_execution_plan_status,
+        grounded_answer_execution_readiness_status,
+        runtime_diagnostic_result_status,
+        runtime_diagnostic_bridge_status,
+        smoke_diagnostic_status,
+        smoke_execution_plan_status,
+        smoke_readiness_status,
+        capability_status,
+        version_probe_status,
+        probe_readiness_status,
+        validation_status,
+        adapter_contract_status,
+        adapter_kind,
+        selected_source_count,
+        normalized_model_family,
+        normalized_model_format,
+        safe_executable_file_name,
+        safe_model_file_name,
+        diagnostic_prompt_char_count,
+        max_output_tokens,
+        timeout_ms,
+        pipeline_gate_reasons,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        gate_only: true,
+        no_smoke_execution: true,
+        no_runtime_inference: true,
+        no_new_process_spawn: true,
         no_llm_call: true,
         no_answer_generated: true,
         no_answer_draft_created: true,
@@ -5756,6 +6173,16 @@ fn main() {
         }
     }
 
+    fn runtime_answer_pipeline_gate_request(
+        grounded_answer_execution_plan_preview_request: ScholarChatGroundedAnswerExecutionPlanPreviewRequest,
+        runtime_diagnostic_result_preview_request: ScholarChatRuntimeDiagnosticResultPreviewRequest,
+    ) -> ScholarChatRuntimeAnswerPipelineGatePreviewRequest {
+        ScholarChatRuntimeAnswerPipelineGatePreviewRequest {
+            grounded_answer_execution_plan_preview_request,
+            runtime_diagnostic_result_preview_request,
+        }
+    }
+
     fn runtime_diagnostic_preview_like_bridge(
         status: LocalRuntimeSmokeDiagnosticStatus,
         stdout_preview: &str,
@@ -6234,17 +6661,40 @@ fn main() {
         assert!(preview.no_audit_write);
     }
 
+    fn assert_runtime_answer_pipeline_gate_boundary_fields(
+        preview: &ScholarChatRuntimeAnswerPipelineGatePreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.gate_only);
+        assert!(preview.no_smoke_execution);
+        assert!(preview.no_runtime_inference);
+        assert!(preview.no_new_process_spawn);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_answer_draft_created);
+        assert!(preview.no_grounded_answer_created);
+        assert!(preview.no_final_answer_created);
+        assert!(preview.no_grounding_applied);
+        assert!(preview.no_evidence_pack_built);
+        assert!(preview.no_persistence);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
     fn assert_runtime_diagnostic_result_deterministic_and_path_free(
         temp: &tempfile::TempDir,
         request: ScholarChatRuntimeDiagnosticResultPreviewRequest,
     ) -> ScholarChatRuntimeDiagnosticResultPreview {
         let before_entries = count_entries_recursively(temp.path());
+        let before_aegis_exists = temp.path().join(".aegis").exists();
         let first = preview_scholar_chat_runtime_diagnostic_result(temp.path(), request.clone()).unwrap();
         let second = preview_scholar_chat_runtime_diagnostic_result(temp.path(), request).unwrap();
         let after_entries = count_entries_recursively(temp.path());
+        let after_aegis_exists = temp.path().join(".aegis").exists();
         assert_eq!(first, second);
         assert_eq!(before_entries, after_entries);
-        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(before_aegis_exists, after_aegis_exists);
         let temp_path = temp.path().to_string_lossy();
         for preview in [&first, &second] {
             let debug = format!("{preview:?}");
@@ -6252,6 +6702,30 @@ fn main() {
             assert!(!debug.contains(temp_path.as_ref()));
             assert!(!json.contains(temp_path.as_ref()));
             assert_runtime_diagnostic_result_boundary_fields(preview);
+        }
+        first
+    }
+
+    fn assert_runtime_answer_pipeline_gate_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatRuntimeAnswerPipelineGatePreviewRequest,
+    ) -> ScholarChatRuntimeAnswerPipelineGatePreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let before_aegis_exists = temp.path().join(".aegis").exists();
+        let first = preview_scholar_chat_runtime_answer_pipeline_gate(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_runtime_answer_pipeline_gate(temp.path(), request).unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        let after_aegis_exists = temp.path().join(".aegis").exists();
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        assert_eq!(before_aegis_exists, after_aegis_exists);
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_runtime_answer_pipeline_gate_boundary_fields(preview);
         }
         first
     }
@@ -9767,6 +10241,401 @@ fn main() {
             .warnings
             .iter()
             .any(|warning| warning.message.contains("metadata mismatch")));
+    }
+
+    #[test]
+    fn scholar_chat_runtime_answer_pipeline_gate_blocks_when_prompt_is_blank() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_runtime_answer_pipeline_gate_deterministic_and_path_free(
+            &temp,
+            runtime_answer_pipeline_gate_request(
+                execution_plan_request(
+                    "   ",
+                    Some("Alpha beta."),
+                    vec!["src_demo".to_string()],
+                    Some("draft-1"),
+                    true,
+                    true,
+                ),
+                runtime_diagnostic_result_request(
+                    runtime_diagnostic_bridge_request(
+                        "   ",
+                        vec!["src_demo".to_string()],
+                        None,
+                        None,
+                        false,
+                        false,
+                        false,
+                        None,
+                        None,
+                        None,
+                    ),
+                    runtime_diagnostic_preview_like_bridge(
+                        LocalRuntimeSmokeDiagnosticStatus::SmokeSucceeded,
+                        "stdout ok",
+                        "stderr ok",
+                    ),
+                ),
+            ),
+        );
+        assert_eq!(preview.status, ScholarChatRuntimeAnswerPipelineGateStatus::Blocked);
+        assert_eq!(preview.selected_source_count, 1);
+        assert_eq!(preview.grounded_answer_execution_plan_status, ScholarChatGroundedAnswerExecutionPlanStatus::Blocked);
+        assert_eq!(preview.runtime_diagnostic_result_status, ScholarChatRuntimeDiagnosticResultStatus::Blocked);
+        assert!(preview
+            .pipeline_gate_reasons
+            .iter()
+            .any(|reason| reason.contains("prompt is nonblank")));
+    }
+
+    #[test]
+    fn scholar_chat_runtime_answer_pipeline_gate_blocks_when_no_sources_are_selected() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_runtime_answer_pipeline_gate_deterministic_and_path_free(
+            &temp,
+            runtime_answer_pipeline_gate_request(
+                execution_plan_request(
+                    "Bridge preview prompt.",
+                    Some("Alpha beta."),
+                    vec![],
+                    Some("draft-1"),
+                    true,
+                    true,
+                ),
+                runtime_diagnostic_result_request(
+                    runtime_diagnostic_bridge_request(
+                        "Bridge preview prompt.",
+                        vec![],
+                        None,
+                        None,
+                        false,
+                        false,
+                        false,
+                        None,
+                        None,
+                        None,
+                    ),
+                    runtime_diagnostic_preview_like_bridge(
+                        LocalRuntimeSmokeDiagnosticStatus::SmokeSucceeded,
+                        "stdout ok",
+                        "stderr ok",
+                    ),
+                ),
+            ),
+        );
+        assert_eq!(preview.status, ScholarChatRuntimeAnswerPipelineGateStatus::Blocked);
+        assert_eq!(preview.selected_source_count, 0);
+        assert!(preview
+            .pipeline_gate_reasons
+            .iter()
+            .any(|reason| reason.contains("at least one Scholar Chat source")));
+        assert!(preview
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("scholar_chat_sources_missing")));
+    }
+
+    #[test]
+    fn scholar_chat_runtime_answer_pipeline_gate_blocks_when_grounded_plan_is_blocked() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, answer_draft_id, _version_id, _claim_count) = build_readable_answer_draft_fixture(&temp);
+        let helper = runtime_diagnostic_bridge_helper_executable(&temp, "runtime_diagnostic_bridge_ready.exe");
+        let model_path = temp.path().join("runtime-diagnostic-bridge-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        prepare_runtime_diagnostic_bridge_spies(&temp);
+        let preview = assert_runtime_answer_pipeline_gate_deterministic_and_path_free(
+            &temp,
+            runtime_answer_pipeline_gate_request(
+                execution_plan_request(
+                    "   ",
+                    Some("The alpha."),
+                    vec![source_id.clone()],
+                    Some(&answer_draft_id),
+                    true,
+                    true,
+                ),
+                runtime_diagnostic_result_request(
+                    runtime_diagnostic_bridge_request(
+                        "   ",
+                        vec![source_id],
+                        Some(helper.to_string_lossy().as_ref()),
+                        Some(model_path.to_string_lossy().as_ref()),
+                        true,
+                        true,
+                        true,
+                        Some("Diagnostic smoke prompt."),
+                        Some(128),
+                        Some(1_500),
+                    ),
+                    runtime_diagnostic_preview_like_bridge(
+                        LocalRuntimeSmokeDiagnosticStatus::SmokeSucceeded,
+                        "stdout ok",
+                        "stderr ok",
+                    ),
+                ),
+            ),
+        );
+        assert_eq!(preview.status, ScholarChatRuntimeAnswerPipelineGateStatus::Blocked);
+        assert_eq!(preview.grounded_answer_execution_plan_status, ScholarChatGroundedAnswerExecutionPlanStatus::Blocked);
+        assert_eq!(preview.runtime_diagnostic_result_status, ScholarChatRuntimeDiagnosticResultStatus::Blocked);
+    }
+
+    #[test]
+    fn scholar_chat_runtime_answer_pipeline_gate_blocks_when_runtime_diagnostic_result_is_blocked() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, answer_draft_id, _version_id, _claim_count) = build_readable_answer_draft_fixture(&temp);
+        let helper = runtime_diagnostic_bridge_helper_executable(&temp, "runtime_diagnostic_bridge_ready.exe");
+        let model_path = temp.path().join("runtime-diagnostic-bridge-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        prepare_runtime_diagnostic_bridge_spies(&temp);
+        let preview = assert_runtime_answer_pipeline_gate_deterministic_and_path_free(
+            &temp,
+            runtime_answer_pipeline_gate_request(
+                execution_plan_request(
+                    "Bridge preview prompt.",
+                    Some("Alpha beta. Alpha beta gamma."),
+                    vec![source_id.clone()],
+                    Some(&answer_draft_id),
+                    true,
+                    true,
+                ),
+                runtime_diagnostic_result_request(
+                    runtime_diagnostic_bridge_request(
+                        "Bridge preview prompt.",
+                        vec![source_id],
+                        Some(helper.to_string_lossy().as_ref()),
+                        Some(model_path.to_string_lossy().as_ref()),
+                        true,
+                        true,
+                        true,
+                        Some("Diagnostic smoke prompt."),
+                        Some(128),
+                        Some(1_500),
+                    ),
+                    runtime_diagnostic_preview_like_bridge(
+                        LocalRuntimeSmokeDiagnosticStatus::Blocked,
+                        "",
+                        "",
+                    ),
+                ),
+            ),
+        );
+        assert_eq!(preview.status, ScholarChatRuntimeAnswerPipelineGateStatus::Blocked);
+        assert_eq!(preview.runtime_diagnostic_result_status, ScholarChatRuntimeDiagnosticResultStatus::Blocked);
+        assert!(preview
+            .pipeline_gate_reasons
+            .iter()
+            .any(|reason| reason.contains("provided smoke diagnostic preview is blocked")));
+    }
+
+    #[test]
+    fn scholar_chat_runtime_answer_pipeline_gate_blocks_when_runtime_diagnostic_result_failed() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, answer_draft_id, _version_id, _claim_count) = build_readable_answer_draft_fixture(&temp);
+        let helper = runtime_diagnostic_bridge_helper_executable(&temp, "runtime_diagnostic_bridge_ready.exe");
+        let model_path = temp.path().join("runtime-diagnostic-bridge-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        prepare_runtime_diagnostic_bridge_spies(&temp);
+        let preview = assert_runtime_answer_pipeline_gate_deterministic_and_path_free(
+            &temp,
+            runtime_answer_pipeline_gate_request(
+                execution_plan_request(
+                    "  alpha grounded evidence  ",
+                    Some("  Alpha beta. Alpha beta gamma.  "),
+                    vec![format!("  {source_id}  ")],
+                    Some(&format!("  {answer_draft_id}  ")),
+                    true,
+                    true,
+                ),
+                runtime_diagnostic_result_request(
+                    runtime_diagnostic_bridge_request(
+                        "  alpha grounded evidence  ",
+                        vec![source_id],
+                        Some(helper.to_string_lossy().as_ref()),
+                        Some(model_path.to_string_lossy().as_ref()),
+                        true,
+                        true,
+                        true,
+                        Some("Diagnostic smoke prompt."),
+                        Some(128),
+                        Some(1_500),
+                    ),
+                    runtime_diagnostic_preview_like_bridge(
+                        LocalRuntimeSmokeDiagnosticStatus::SmokeFailed,
+                        "stdout failed",
+                        "stderr failed",
+                    ),
+                ),
+            ),
+        );
+        assert_eq!(preview.status, ScholarChatRuntimeAnswerPipelineGateStatus::Blocked);
+        assert_eq!(preview.runtime_diagnostic_result_status, ScholarChatRuntimeDiagnosticResultStatus::RuntimeDiagnosticFailed);
+        assert!(preview
+            .pipeline_gate_reasons
+            .iter()
+            .any(|reason| reason.contains("provided smoke diagnostic preview failed")));
+    }
+
+    #[test]
+    fn scholar_chat_runtime_answer_pipeline_gate_needs_review_when_grounded_plan_needs_review() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_id = build_source_with_index(&temp, "alpha beta gamma\nalpha beta delta\n");
+        let helper = runtime_diagnostic_bridge_helper_executable(&temp, "runtime_diagnostic_bridge_ready.exe");
+        let model_path = temp.path().join("runtime-diagnostic-bridge-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        prepare_runtime_diagnostic_bridge_spies(&temp);
+        let preview = assert_runtime_answer_pipeline_gate_deterministic_and_path_free(
+            &temp,
+            runtime_answer_pipeline_gate_request(
+                execution_plan_request(
+                    "alpha grounded evidence",
+                    Some("The alpha."),
+                    vec![source_id.clone()],
+                    Some("draft-1"),
+                    true,
+                    true,
+                ),
+                runtime_diagnostic_result_request(
+                    runtime_diagnostic_bridge_request(
+                        "alpha grounded evidence",
+                        vec![source_id],
+                        Some(helper.to_string_lossy().as_ref()),
+                        Some(model_path.to_string_lossy().as_ref()),
+                        true,
+                        true,
+                        true,
+                        Some("Diagnostic smoke prompt."),
+                        Some(128),
+                        Some(1_500),
+                    ),
+                    runtime_diagnostic_preview_like_bridge(
+                        LocalRuntimeSmokeDiagnosticStatus::SmokeSucceeded,
+                        "stdout ok",
+                        "stderr ok",
+                    ),
+                ),
+            ),
+        );
+        assert_eq!(preview.status, ScholarChatRuntimeAnswerPipelineGateStatus::NeedsReview);
+        assert_eq!(preview.grounded_answer_execution_plan_status, ScholarChatGroundedAnswerExecutionPlanStatus::NeedsReview);
+    }
+
+    #[test]
+    fn scholar_chat_runtime_answer_pipeline_gate_needs_review_when_runtime_diagnostic_result_needs_review() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, answer_draft_id, _version_id, _claim_count) = build_readable_answer_draft_fixture(&temp);
+        let helper = runtime_diagnostic_bridge_helper_executable(&temp, "runtime_diagnostic_bridge_ready.exe");
+        let model_path = temp.path().join("runtime-diagnostic-bridge-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        prepare_runtime_diagnostic_bridge_spies(&temp);
+        let mut diagnostic_preview = runtime_diagnostic_preview_like_bridge(
+            LocalRuntimeSmokeDiagnosticStatus::SmokeSucceeded,
+            "stdout ok",
+            "stderr ok",
+        );
+        diagnostic_preview.normalized_model_format = "ggml".to_string();
+        let preview = assert_runtime_answer_pipeline_gate_deterministic_and_path_free(
+            &temp,
+            runtime_answer_pipeline_gate_request(
+                execution_plan_request(
+                    "  alpha grounded evidence  ",
+                    Some("  Alpha beta. Alpha beta gamma.  "),
+                    vec![format!("  {source_id}  ")],
+                    Some(&format!("  {answer_draft_id}  ")),
+                    true,
+                    true,
+                ),
+                runtime_diagnostic_result_request(
+                    runtime_diagnostic_bridge_request(
+                        "  alpha grounded evidence  ",
+                        vec![source_id],
+                        Some(helper.to_string_lossy().as_ref()),
+                        Some(model_path.to_string_lossy().as_ref()),
+                        true,
+                        true,
+                        true,
+                        Some("Diagnostic smoke prompt."),
+                        Some(128),
+                        Some(1_500),
+                    ),
+                    diagnostic_preview,
+                ),
+            ),
+        );
+        assert_eq!(preview.status, ScholarChatRuntimeAnswerPipelineGateStatus::NeedsReview);
+        assert_eq!(preview.runtime_diagnostic_result_status, ScholarChatRuntimeDiagnosticResultStatus::NeedsReview);
+        assert!(preview
+            .pipeline_gate_reasons
+            .iter()
+            .any(|reason| reason.contains("metadata mismatch")));
+    }
+
+    #[test]
+    fn scholar_chat_runtime_answer_pipeline_gate_is_ready_later_only_when_plan_and_result_are_ready_later() {
+        let temp = tempfile::tempdir().unwrap();
+        let (source_id, answer_draft_id, _version_id, _claim_count) = build_readable_answer_draft_fixture(&temp);
+        let helper = runtime_diagnostic_bridge_helper_executable(&temp, "runtime_diagnostic_bridge_ready.exe");
+        let model_path = temp.path().join("runtime-diagnostic-bridge-model.gguf");
+        fs::write(&model_path, "gguf placeholder").unwrap();
+        prepare_runtime_diagnostic_bridge_spies(&temp);
+        let preview = assert_runtime_answer_pipeline_gate_deterministic_and_path_free(
+            &temp,
+            runtime_answer_pipeline_gate_request(
+                execution_plan_request(
+                    "  alpha grounded evidence  ",
+                    Some("  Alpha beta. Alpha beta gamma.  "),
+                    vec![format!("  {source_id}  ")],
+                    Some(&format!("  {answer_draft_id}  ")),
+                    true,
+                    true,
+                ),
+                runtime_diagnostic_result_request(
+                    runtime_diagnostic_bridge_request(
+                        "  alpha grounded evidence  ",
+                        vec![source_id],
+                        Some(helper.to_string_lossy().as_ref()),
+                        Some(model_path.to_string_lossy().as_ref()),
+                        true,
+                        true,
+                        true,
+                        Some("Diagnostic smoke prompt."),
+                        Some(128),
+                        Some(1_500),
+                    ),
+                    runtime_diagnostic_preview_like_bridge(
+                        LocalRuntimeSmokeDiagnosticStatus::SmokeSucceeded,
+                        "stdout ok",
+                        "stderr ok",
+                    ),
+                ),
+            ),
+        );
+        assert_eq!(preview.status, ScholarChatRuntimeAnswerPipelineGateStatus::ReadyLater);
+        assert_eq!(preview.grounded_answer_execution_plan_status, ScholarChatGroundedAnswerExecutionPlanStatus::PlanReadyLater);
+        assert_eq!(preview.runtime_diagnostic_result_status, ScholarChatRuntimeDiagnosticResultStatus::RuntimeDiagnosticSucceededLater);
+        assert!(preview.next_required_actions.iter().any(|action| action.contains("A future Scholar Chat runtime answer pipeline step can be added later")));
+        assert!(preview.summary.contains("ready later"));
+    }
+
+    #[test]
+    fn scholar_chat_runtime_answer_pipeline_gate_body_does_not_call_execution_functions() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        let start = source
+            .find("pub fn preview_scholar_chat_runtime_answer_pipeline_gate")
+            .unwrap();
+        let end = source[start..]
+            .find("fn runtime_diagnostic_result_metadata_mismatch_fields")
+            .unwrap();
+        let body = &source[start..start + end];
+        assert!(!body.contains("run_llama_runtime_smoke_diagnostic"));
+        assert!(!body.contains("smoke_test_local_runtime_inference"));
+        assert!(!body.contains("run_smoke_inference_probe"));
+        assert!(!body.contains("Command::new"));
+        assert!(!body.contains("build_answer_draft"));
+        assert!(!body.contains("build_grounded_answer"));
+        assert!(!body.contains("build_final_answer"));
+        assert!(!body.contains("build_evidence_pack"));
+        assert!(!body.contains("export_answer_artifacts"));
     }
 
     #[test]
