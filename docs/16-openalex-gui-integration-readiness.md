@@ -6,6 +6,10 @@ This is the GUI integration contract for the OpenAlex metadata lane only. It exp
 
 It is a docs-only readiness contract. It does not add UI, commands, DTOs, provider execution, writes, or any product behavior.
 
+## Phase 114.0 read-only GUI scaffold
+
+Phase 114.0 adds the first read-only OpenAlex metadata GUI scaffold. It surfaces `preview_scholar_chat_scientific_metadata_provider_request` in a developer / advanced panel, keeps execution and cache/write as diagnostics only, and does not add a write button or any automatic follow-up action.
+
 ## Command sequence and panel mapping
 
 Safe command flow:
@@ -147,8 +151,8 @@ Safe command flow:
 
 ## Explicit non-goals
 
-- No frontend implementation.
-- No CSS / layout work.
+- No additional frontend implementation beyond the read-only preview scaffold.
+- No automatic execution or cache/write action.
 - No new Rust command.
 - No DTO changes.
 - No provider expansion.
