@@ -9762,11 +9762,15 @@ pub struct ScholarChatScientificMetadataExecutionBoundaryPreviewRequest {
     pub require_doi: Option<bool>,
     pub year_from: Option<u16>,
     pub year_to: Option<u16>,
+    #[serde(default)]
     pub execution_requested: bool,
+    #[serde(default)]
     pub allow_network: bool,
+    #[serde(default)]
     pub allow_provider_terms_unreviewed: bool,
+    #[serde(default)]
     pub allow_metadata_record_write: bool,
-    pub provider_override: Option<String>,
+    pub provider_override: Option<Vec<String>>,
     pub dry_run_label: Option<String>,
 }
 
@@ -9876,7 +9880,7 @@ pub struct ScholarChatScientificMetadataExecutionBoundaryPreview {
     pub allow_network: bool,
     pub allow_provider_terms_unreviewed: bool,
     pub allow_metadata_record_write: bool,
-    pub normalized_provider_override: Option<String>,
+    pub normalized_provider_override: Option<Vec<String>>,
     pub normalized_dry_run_label: Option<String>,
     pub evidence_pack_plan_status: ScholarChatScientificEvidencePackPlanStatus,
     pub metadata_connector_plan_status: ScholarChatMetadataConnectorPlanStatus,
@@ -10145,11 +10149,8 @@ pub fn preview_scholar_chat_scientific_metadata_execution_boundary(
     let normalized_claim_scope = normalize_scientific_claim_scope(request.claim_scope.clone());
     let (normalized_citation_style, citation_style_warnings) =
         normalize_scientific_citation_style(request.citation_style.clone());
-    let normalized_provider_override = request
-        .provider_override
-        .as_deref()
-        .map(normalize_scientific_tag_text)
-        .filter(|value| !value.is_empty());
+    let normalized_provider_override =
+        normalize_scientific_metadata_provider_ids(request.provider_override.clone());
     let normalized_dry_run_label = request
         .dry_run_label
         .as_deref()
@@ -10200,37 +10201,16 @@ pub fn preview_scholar_chat_scientific_metadata_execution_boundary(
     let mut requested_provider_ids = Vec::new();
     requested_provider_ids.extend(selected_provider_ids_from_metadata.clone());
     requested_provider_ids.extend(selected_provider_ids_from_families.clone());
-    if let Some(provider_override) = normalized_provider_override.clone() {
-        requested_provider_ids.push(provider_override);
-    }
+    requested_provider_ids.extend(normalized_provider_override.clone());
     requested_provider_ids.sort();
     requested_provider_ids.dedup();
 
     let supported_provider_ids = scientific_metadata_supported_providers();
-    let mut selected_provider_ids = if let Some(provider_override) = normalized_provider_override.clone() {
-        if supported_provider_ids
-            .iter()
-            .any(|provider| provider == &provider_override)
-        {
-            vec![provider_override]
-        } else {
-            Vec::new()
-        }
-    } else {
-        let mut selected = requested_provider_ids
-            .iter()
-            .filter(|provider_id| supported_provider_ids.contains(provider_id))
-            .cloned()
-            .collect::<Vec<_>>();
-        selected.sort_by_key(|provider_id| {
-            supported_provider_ids
-                .iter()
-                .position(|candidate| candidate == provider_id)
-                .unwrap_or(usize::MAX)
-        });
-        selected.dedup();
-        selected
-    };
+    let mut selected_provider_ids = requested_provider_ids
+        .iter()
+        .filter(|provider_id| supported_provider_ids.contains(provider_id))
+        .cloned()
+        .collect::<Vec<_>>();
     selected_provider_ids.sort_by_key(|provider_id| {
         supported_provider_ids
             .iter()
@@ -10484,11 +10464,7 @@ pub fn preview_scholar_chat_scientific_metadata_execution_boundary(
             "dry_run_label is preserved only as a preview-only hint.",
         );
     }
-    if normalized_provider_override.is_some()
-        && !supported_provider_ids
-            .iter()
-            .any(|provider_id| Some(provider_id) == normalized_provider_override.as_ref())
-    {
+    if !normalized_provider_override.is_empty() && !unknown_provider_ids.is_empty() {
         push_unique_text(
             &mut warnings,
             "Unknown provider override is preserved only as a preview-only hint.",
@@ -10939,7 +10915,11 @@ pub fn preview_scholar_chat_scientific_metadata_execution_boundary(
         allow_network: request.allow_network,
         allow_provider_terms_unreviewed: request.allow_provider_terms_unreviewed,
         allow_metadata_record_write: request.allow_metadata_record_write,
-        normalized_provider_override,
+        normalized_provider_override: if normalized_provider_override.is_empty() {
+            None
+        } else {
+            Some(normalized_provider_override)
+        },
         normalized_dry_run_label,
         evidence_pack_plan_status,
         metadata_connector_plan_status,
@@ -24869,6 +24849,7 @@ fn main() {
         selected_local_source_ids: Vec<&str>,
         preferred_metadata_sources: Vec<&str>,
         preferred_psychology_source_families: Option<Vec<&str>>,
+        provider_override: Option<Vec<&str>>,
         allow_network: bool,
         allow_provider_terms_unreviewed: bool,
         allow_metadata_record_write: bool,
@@ -24909,7 +24890,12 @@ fn main() {
             allow_network,
             allow_provider_terms_unreviewed,
             allow_metadata_record_write,
-            provider_override: None,
+            provider_override: provider_override.map(|values| {
+                values
+                    .into_iter()
+                    .map(|value| value.to_string())
+                    .collect()
+            }),
             dry_run_label: Some("phase_105".to_string()),
         }
     }
@@ -24977,6 +24963,7 @@ fn main() {
                 vec!["source-a"],
                 vec!["openalex"],
                 None,
+                None,
                 true,
                 true,
                 true,
@@ -24997,6 +24984,19 @@ fn main() {
     }
 
     #[test]
+    fn scholar_chat_scientific_metadata_execution_boundary_uses_default_false_for_missing_boolean_flags() {
+        let request_json = serde_json::json!({
+            "query": "Signalentdeckung und Wahrnehmung"
+        });
+        let request: ScholarChatScientificMetadataExecutionBoundaryPreviewRequest =
+            serde_json::from_value(request_json).unwrap();
+        assert!(!request.execution_requested);
+        assert!(!request.allow_network);
+        assert!(!request.allow_provider_terms_unreviewed);
+        assert!(!request.allow_metadata_record_write);
+    }
+
+    #[test]
     fn scholar_chat_scientific_metadata_execution_boundary_needs_source_family_for_unknown_preference_only() {
         let temp = tempfile::tempdir().unwrap();
         let preview = assert_scientific_metadata_execution_boundary_deterministic_and_path_free(
@@ -25006,6 +25006,7 @@ fn main() {
                 vec!["source-a"],
                 vec!["openalex", "crossref"],
                 Some(vec!["unknown_family"]),
+                None,
                 true,
                 true,
                 true,
@@ -25050,6 +25051,53 @@ fn main() {
     }
 
     #[test]
+    fn scholar_chat_scientific_metadata_execution_boundary_normalizes_multiple_provider_overrides_deterministically() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_scientific_metadata_execution_boundary_deterministic_and_path_free(
+            &temp,
+            scientific_metadata_execution_boundary_preview_request(
+                "Signalentdeckung und Wahrnehmung",
+                vec!["source-a"],
+                vec!["openalex", "crossref"],
+                None,
+                Some(vec!["APA_PsycNet", "crossref", "openalex", "crossref"]),
+                true,
+                true,
+                true,
+            ),
+        );
+
+        assert_eq!(
+            preview.normalized_provider_override,
+            Some(vec![
+                "apa_psycnet".to_string(),
+                "crossref".to_string(),
+                "openalex".to_string(),
+            ])
+        );
+        assert_eq!(
+            preview.provider_selection_plan.requested_provider_ids,
+            vec![
+                "apa_psycnet".to_string(),
+                "crossref".to_string(),
+                "openalex".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.provider_selection_plan.selected_provider_ids,
+            vec![
+                "openalex".to_string(),
+                "crossref".to_string(),
+                "apa_psycnet".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.provider_selection_plan.unknown_provider_ids,
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
     fn scholar_chat_scientific_metadata_execution_boundary_is_ready_later_with_supported_providers_and_boundary_flags() {
         let temp = tempfile::tempdir().unwrap();
         let preview = assert_scientific_metadata_execution_boundary_deterministic_and_path_free(
@@ -25059,6 +25107,7 @@ fn main() {
                 vec!["source-a"],
                 vec!["openalex", "crossref"],
                 None,
+                Some(vec!["APA_PsycNet", "crossref", "openalex", "crossref"]),
                 true,
                 true,
                 true,
@@ -25082,7 +25131,11 @@ fn main() {
         );
         assert_eq!(
             preview.provider_selection_plan.selected_provider_ids,
-            vec!["openalex".to_string(), "crossref".to_string()]
+            vec![
+                "openalex".to_string(),
+                "crossref".to_string(),
+                "apa_psycnet".to_string(),
+            ]
         );
         assert!(!preview.provider_request_plan.will_call_provider);
         assert!(!preview.metadata_write_plan.will_write_metadata_records);
