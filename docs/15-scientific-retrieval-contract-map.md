@@ -19,8 +19,11 @@ User Query
 -> Provider Config Preview
 -> Metadata Query Plan Preview
 -> Provider Request Preview
--> future OpenAlex-only execution gate
--> future metadata result normalization
+-> OpenAlex-only execution slice
+-> normalized OpenAlex metadata result contract
+-> OpenAlex cache/write gate preview
+-> OpenAlex GUI integration readiness contract
+-> future Evidence Pack conversion contract
 -> future Evidence Pack creation
 -> future Literature Review / Final Answer
 ```
