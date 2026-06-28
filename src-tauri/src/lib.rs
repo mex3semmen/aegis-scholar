@@ -87,6 +87,7 @@ use scholar_chat::{
     preview_scholar_chat_scientific_metadata_provider_config as preview_scholar_chat_scientific_metadata_provider_config_impl,
     preview_scholar_chat_scientific_metadata_query_plan as preview_scholar_chat_scientific_metadata_query_plan_impl,
     preview_scholar_chat_scientific_metadata_provider_request as preview_scholar_chat_scientific_metadata_provider_request_impl,
+    run_scholar_chat_openalex_metadata_execution_slice as run_scholar_chat_openalex_metadata_execution_slice_impl,
     preview_scholar_chat_grounded_answer_write_eligibility as preview_scholar_chat_grounded_answer_write_eligibility_impl,
     preview_scholar_chat_request as preview_scholar_chat_request_impl,
     preview_scholar_chat_evidence_plan as preview_scholar_chat_evidence_plan_impl,
@@ -733,6 +734,14 @@ fn preview_scholar_chat_scientific_metadata_provider_request(
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn run_scholar_chat_openalex_metadata_execution_slice(
+    root: String,
+    request: scholar_chat::ScholarChatOpenAlexMetadataExecutionSliceRequest,
+) -> Result<scholar_chat::ScholarChatOpenAlexMetadataExecutionSliceResult, String> {
+    run_scholar_chat_openalex_metadata_execution_slice_impl(root, request).map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -796,6 +805,7 @@ pub fn run() {
             preview_scholar_chat_scientific_metadata_provider_config,
             preview_scholar_chat_scientific_metadata_query_plan,
             preview_scholar_chat_scientific_metadata_provider_request,
+            run_scholar_chat_openalex_metadata_execution_slice,
             preview_scholar_chat_runtime_diagnostic_bridge,
             preview_scholar_chat_runtime_diagnostic_result,
             preview_scholar_chat_runtime_answer_pipeline_gate,
