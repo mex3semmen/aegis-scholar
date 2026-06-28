@@ -84,6 +84,7 @@ use scholar_chat::{
     preview_scholar_chat_scientific_evidence_pack_plan as preview_scholar_chat_scientific_evidence_pack_plan_impl,
     preview_scholar_chat_scientific_paper_literature_review_plan as preview_scholar_chat_scientific_paper_literature_review_plan_impl,
     preview_scholar_chat_scientific_metadata_execution_boundary as preview_scholar_chat_scientific_metadata_execution_boundary_impl,
+    preview_scholar_chat_scientific_metadata_provider_config as preview_scholar_chat_scientific_metadata_provider_config_impl,
     preview_scholar_chat_grounded_answer_write_eligibility as preview_scholar_chat_grounded_answer_write_eligibility_impl,
     preview_scholar_chat_request as preview_scholar_chat_request_impl,
     preview_scholar_chat_evidence_plan as preview_scholar_chat_evidence_plan_impl,
@@ -132,6 +133,8 @@ use scholar_chat::{
     ScholarChatScientificPaperLiteratureReviewPlanRequest,
     ScholarChatScientificMetadataExecutionBoundaryPreview,
     ScholarChatScientificMetadataExecutionBoundaryPreviewRequest,
+    ScholarChatScientificMetadataProviderConfigPreview,
+    ScholarChatScientificMetadataProviderConfigPreviewRequest,
     ScholarChatRequest,
     ScholarChatEvidencePlanResponse,
     ScholarChatPromptPackPreviewResponse,
@@ -697,6 +700,15 @@ fn preview_scholar_chat_scientific_metadata_execution_boundary(
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn preview_scholar_chat_scientific_metadata_provider_config(
+    root: String,
+    request: ScholarChatScientificMetadataProviderConfigPreviewRequest,
+) -> Result<ScholarChatScientificMetadataProviderConfigPreview, String> {
+    preview_scholar_chat_scientific_metadata_provider_config_impl(root, request)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -757,6 +769,7 @@ pub fn run() {
             preview_scholar_chat_scientific_evidence_pack_plan,
             preview_scholar_chat_scientific_paper_literature_review_plan,
             preview_scholar_chat_scientific_metadata_execution_boundary,
+            preview_scholar_chat_scientific_metadata_provider_config,
             preview_scholar_chat_runtime_diagnostic_bridge,
             preview_scholar_chat_runtime_diagnostic_result,
             preview_scholar_chat_runtime_answer_pipeline_gate,
