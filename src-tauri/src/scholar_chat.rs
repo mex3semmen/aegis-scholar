@@ -23356,9 +23356,176 @@ fn main() {
     fn assert_public_declaration_marker_count(source: &str, marker: &str) {
         let count = source
             .lines()
-            .filter(|line| line.trim_start().starts_with(marker))
+            .filter(|line| {
+                let trimmed = line.trim_start();
+                trimmed.starts_with(marker)
+                    && trimmed[marker.len()..]
+                        .chars()
+                        .next()
+                        .map(|next| !next.is_ascii_alphanumeric() && next != '_')
+                        .unwrap_or(true)
+            })
             .count();
         assert_eq!(count, 1, "{marker} should be declared exactly once");
+    }
+
+    #[test]
+    fn scholar_chat_scientific_metadata_execution_boundary_public_dto_declarations_are_declared_once() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        for marker in [
+            "pub enum ScholarChatScientificMetadataExecutionBoundaryStatus",
+            "pub enum ScholarChatScientificMetadataExecutionBoundaryStrategy",
+            "pub enum ScholarChatScientificMetadataExecutionBoundaryStepKind",
+            "pub struct ScholarChatScientificMetadataExecutionBoundaryPreviewRequest",
+            "pub struct ScholarChatScientificMetadataExecutionBoundaryPreview",
+            "pub struct ScholarChatScientificMetadataExecutionBoundaryProviderSelectionPlan",
+            "pub struct ScholarChatScientificMetadataExecutionBoundaryProviderGate",
+            "pub struct ScholarChatScientificMetadataExecutionBoundaryProviderGatePlan",
+            "pub struct ScholarChatScientificMetadataExecutionBoundaryProviderRequestPlan",
+            "pub struct ScholarChatScientificMetadataExecutionBoundaryProviderTermsPlan",
+            "pub struct ScholarChatScientificMetadataExecutionBoundaryMetadataWritePlan",
+            "pub struct ScholarChatScientificMetadataExecutionBoundarySafetyPlan",
+            "pub struct ScholarChatScientificMetadataExecutionBoundaryStep",
+        ] {
+            assert_public_declaration_marker_count(source, marker);
+        }
+    }
+
+    #[test]
+    fn scholar_chat_scientific_metadata_execution_boundary_serde_values_are_snake_case() {
+        let status_cases = [
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked,
+                "\"blocked\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStatus::ExecutionBoundaryReady,
+                "\"execution_boundary_ready\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStatus::ExecutionRequestedButDisabled,
+                "\"execution_requested_but_disabled\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsMetadataConnectorPlan,
+                "\"needs_metadata_connector_plan\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsProviderSelection,
+                "\"needs_provider_selection\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsProviderTermsReview,
+                "\"needs_provider_terms_review\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsNetworkPermission,
+                "\"needs_network_permission\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsWritePermission,
+                "\"needs_write_permission\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsCitationMetadata,
+                "\"needs_citation_metadata\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsEvidenceSources,
+                "\"needs_evidence_sources\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsDisambiguation,
+                "\"needs_disambiguation\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStatus::UnknownConcept,
+                "\"unknown_concept\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsPsychologyScope,
+                "\"needs_psychology_scope\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsSourceFamily,
+                "\"needs_source_family\"",
+            ),
+        ];
+        for (value, expected) in status_cases {
+            assert_eq!(serde_json::to_string(&value).unwrap(), expected);
+        }
+
+        let strategy_cases = [
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStrategy::DryRunOnly,
+                "\"dry_run_only\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStrategy::ProviderPlanOnly,
+                "\"provider_plan_only\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStrategy::Blocked,
+                "\"blocked\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStrategy::ExecutionGatePending,
+                "\"execution_gate_pending\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStrategy::MetadataWriteGatePending,
+                "\"metadata_write_gate_pending\"",
+            ),
+        ];
+        for (value, expected) in strategy_cases {
+            assert_eq!(serde_json::to_string(&value).unwrap(), expected);
+        }
+
+        let step_kind_cases = [
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStepKind::EvidencePackAlignment,
+                "\"evidence_pack_alignment\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStepKind::MetadataConnectorAlignment,
+                "\"metadata_connector_alignment\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStepKind::ProviderSelection,
+                "\"provider_selection\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStepKind::ProviderTermsBoundary,
+                "\"provider_terms_boundary\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStepKind::NetworkPermissionGate,
+                "\"network_permission_gate\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStepKind::ProviderRequestPlanning,
+                "\"provider_request_planning\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStepKind::MetadataWriteGate,
+                "\"metadata_write_gate\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStepKind::SafetyBoundaryCheck,
+                "\"safety_boundary_check\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStepKind::DownstreamEvidencePackAlignment,
+                "\"downstream_evidence_pack_alignment\"",
+            ),
+            (
+                ScholarChatScientificMetadataExecutionBoundaryStepKind::DownstreamLiteratureReviewAlignment,
+                "\"downstream_literature_review_alignment\"",
+            ),
+        ];
+        for (value, expected) in step_kind_cases {
+            assert_eq!(serde_json::to_string(&value).unwrap(), expected);
+        }
     }
 
     #[test]
@@ -24850,6 +25017,7 @@ fn main() {
         preferred_metadata_sources: Vec<&str>,
         preferred_psychology_source_families: Option<Vec<&str>>,
         provider_override: Option<Vec<&str>>,
+        execution_requested: bool,
         allow_network: bool,
         allow_provider_terms_unreviewed: bool,
         allow_metadata_record_write: bool,
@@ -24886,7 +25054,7 @@ fn main() {
             require_doi: None,
             year_from: None,
             year_to: None,
-            execution_requested: false,
+            execution_requested,
             allow_network,
             allow_provider_terms_unreviewed,
             allow_metadata_record_write,
@@ -24964,6 +25132,7 @@ fn main() {
                 vec!["openalex"],
                 None,
                 None,
+                false,
                 true,
                 true,
                 true,
@@ -25007,6 +25176,7 @@ fn main() {
                 vec!["openalex", "crossref"],
                 Some(vec!["unknown_family"]),
                 None,
+                false,
                 true,
                 true,
                 true,
@@ -25060,7 +25230,14 @@ fn main() {
                 vec!["source-a"],
                 vec!["openalex", "crossref"],
                 None,
-                Some(vec!["APA_PsycNet", "crossref", "openalex", "crossref"]),
+                Some(vec![
+                    "APA_PsycNet",
+                    "crossref",
+                    "openalex",
+                    "crossref",
+                    "Unknown_Family",
+                ]),
+                false,
                 true,
                 true,
                 true,
@@ -25073,6 +25250,7 @@ fn main() {
                 "apa_psycnet".to_string(),
                 "crossref".to_string(),
                 "openalex".to_string(),
+                "unknown_family".to_string(),
             ])
         );
         assert_eq!(
@@ -25081,6 +25259,7 @@ fn main() {
                 "apa_psycnet".to_string(),
                 "crossref".to_string(),
                 "openalex".to_string(),
+                "unknown_family".to_string(),
             ]
         );
         assert_eq!(
@@ -25093,8 +25272,12 @@ fn main() {
         );
         assert_eq!(
             preview.provider_selection_plan.unknown_provider_ids,
-            Vec::<String>::new()
+            vec!["unknown_family".to_string()]
         );
+        assert!(preview
+            .warnings
+            .iter()
+            .any(|value| value.contains("Unknown provider override is preserved only as a preview-only hint.")));
     }
 
     #[test]
@@ -25108,6 +25291,7 @@ fn main() {
                 vec!["openalex", "crossref"],
                 None,
                 Some(vec!["APA_PsycNet", "crossref", "openalex", "crossref"]),
+                false,
                 true,
                 true,
                 true,
@@ -25138,14 +25322,58 @@ fn main() {
             ]
         );
         assert!(!preview.provider_request_plan.will_call_provider);
-        assert!(!preview.metadata_write_plan.will_write_metadata_records);
+        assert!(!preview.provider_request_plan.will_authenticate);
+        assert!(!preview.provider_request_plan.will_bypass_paywall);
         assert!(preview
+            .provider_request_plan
+            .planned_query_inputs
+            .iter()
+            .any(|value| value.contains("Signalentdeckung und Wahrnehmung")));
+        assert!(preview
+            .provider_request_plan
+            .planned_result_fields
+            .iter()
+            .any(|value| value == "doi_or_stable_identifier"));
+        assert!(!preview.metadata_write_plan.will_write_metadata_records);
+        assert_eq!(
+            preview.metadata_write_plan.persistence_target,
+            "phase_105_preview_boundary"
+        );
+        assert!(preview
+            .metadata_write_plan
             .summary
-            .contains("ready later and only describes"));
+            .contains("not requested in this dry run"));
+        assert!(preview
+            .safety_boundary_plan
+            .blocked_flags
+            .iter()
+            .any(|value| value == "no_network_call"));
+        assert_eq!(
+            preview
+                .planned_execution_steps
+                .iter()
+                .map(|step| step.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "evidence_pack_alignment",
+                "metadata_connector_alignment",
+                "provider_selection",
+                "provider_terms_boundary",
+                "network_permission_gate",
+                "provider_request_planning",
+                "metadata_write_gate",
+                "safety_boundary_check",
+                "downstream_evidence_pack_alignment",
+                "downstream_literature_review_alignment",
+            ]
+        );
         assert!(preview
             .planned_execution_steps
             .iter()
             .all(|step| step.preview_only));
+        assert!(preview
+            .summary
+            .contains("ready later and only describes"));
     }
 
     #[test]
