@@ -96,6 +96,7 @@ Future execution stages:
 | `preview_scholar_chat_scientific_metadata_query_plan` | Plans query templates, filters, and provider-family partitioning. | Query-plan panel. | GUI-ready preview | No provider execution or writes. |
 | `preview_scholar_chat_scientific_metadata_provider_request` | Plans provider request templates, methods, parameters, headers, and bodies. | Provider request preview panel. | GUI-ready preview | No URL building, no request emission, no provider calls. |
 | `run_scholar_chat_openalex_metadata_execution_slice` | Executes the consent-gated OpenAlex-only metadata execution slice. | OpenAlex execution panel. | Future execution candidate | OpenAlex only; disabled by default; explicit developer/advanced action; no writes by default. |
+| `preview_scholar_chat_openalex_metadata_cache_write_gate` | Plans cache scope, retention, deduplication, and future record/audit write boundaries from normalized OpenAlex execution output. | OpenAlex cache/write gate preview panel. | GUI-ready preview | No cache writes, no record writes, no audit writes. |
 
 ### Runtime diagnostics
 
@@ -226,11 +227,18 @@ The intended next execution path after this documentation phase is:
 - GUI may use the summary and record hints for display, not for automatic Evidence Pack creation
 - Crossref / PubMed / ERIC remain later providers
 - APA PsycNet / PsycINFO remain institutional / manual boundary only
+- Phase 112.0: OpenAlex Metadata Cache/Write Gate Preview
+- previews future write eligibility, deduplication, retention, record-write, and audit boundaries only
+- remains preview-only, in-memory, redacted, and non-writing
+- GUI may show write-readiness diagnostics, but no actual write button is exposed yet
+- no cache files, metadata writes, registry writes, audit writes, artifacts, Evidence Packs, Literature Reviews, citations, retrieval execution, provider expansion, persistence, model/runtime/LLM behavior, or answer generation
+- Crossref / PubMed / ERIC remain later providers
+- APA PsycNet / PsycINFO remain institutional / manual boundary only
 
 Later phases should add:
 
 - OpenAlex guard hardening
-- optional cache / write gate
+- future explicit cache/write execution gate after preview hardening
 - Crossref / PubMed / ERIC as later providers
 - GUI integration using preview contracts
 
