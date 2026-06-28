@@ -22296,7 +22296,7 @@ mod tests {
         LocalRuntimeVersionProbePreviewRequest,
         LocalRuntimeVersionProbeStatus,
     };
-    use std::{cell::Cell, env, fs, path::PathBuf, process::Command};
+    use std::{cell::{Cell, RefCell}, env, fs, path::PathBuf, process::Command};
 
     fn request(prompt: &str) -> ScholarChatRequest {
         ScholarChatRequest {
@@ -31258,6 +31258,7 @@ fn main() {
     #[derive(Debug)]
     struct FakeOpenAlexMetadataExecutionSliceTransport {
         calls: Cell<usize>,
+        last_request: RefCell<Option<OpenAlexMetadataExecutionSliceTransportRequest>>,
         response: Result<
             OpenAlexMetadataExecutionSliceTransportResponse,
             OpenAlexMetadataExecutionSliceTransportError,
@@ -31268,8 +31269,21 @@ fn main() {
         fn success(body: &str) -> Self {
             Self {
                 calls: Cell::new(0),
+                last_request: RefCell::new(None),
                 response: Ok(OpenAlexMetadataExecutionSliceTransportResponse {
                     status_code: 200,
+                    body: body.to_string(),
+                    rate_limit_summary: "limit=1; remaining=1; reset=0".to_string(),
+                }),
+            }
+        }
+
+        fn status(status_code: u16, body: &str) -> Self {
+            Self {
+                calls: Cell::new(0),
+                last_request: RefCell::new(None),
+                response: Ok(OpenAlexMetadataExecutionSliceTransportResponse {
+                    status_code,
                     body: body.to_string(),
                     rate_limit_summary: "limit=1; remaining=1; reset=0".to_string(),
                 }),
@@ -31279,6 +31293,7 @@ fn main() {
         fn request_failed() -> Self {
             Self {
                 calls: Cell::new(0),
+                last_request: RefCell::new(None),
                 response: Err(OpenAlexMetadataExecutionSliceTransportError::RequestFailed),
             }
         }
@@ -31286,12 +31301,17 @@ fn main() {
         fn timeout() -> Self {
             Self {
                 calls: Cell::new(0),
+                last_request: RefCell::new(None),
                 response: Err(OpenAlexMetadataExecutionSliceTransportError::Timeout),
             }
         }
 
         fn calls(&self) -> usize {
             self.calls.get()
+        }
+
+        fn last_request(&self) -> Option<OpenAlexMetadataExecutionSliceTransportRequest> {
+            self.last_request.borrow().clone()
         }
     }
 
@@ -31304,6 +31324,7 @@ fn main() {
             OpenAlexMetadataExecutionSliceTransportError,
         > {
             self.calls.set(self.calls.get() + 1);
+            self.last_request.replace(Some(request.clone()));
             assert_eq!(
                 request.endpoint_label,
                 OPENALEX_METADATA_EXECUTION_SLICE_ENDPOINT_LABEL
@@ -36999,9 +37020,13 @@ fn main() {
             .find("trait OpenAlexMetadataExecutionSliceTransport")
             .unwrap();
         let body = &source[start..start + end];
-        assert!(body.contains(
-            "let provider_request_preview = preview_scholar_chat_scientific_metadata_provider_request("
-        ));
+        assert_eq!(
+            body.matches(
+                "let provider_request_preview = preview_scholar_chat_scientific_metadata_provider_request("
+            )
+            .count(),
+            1
+        );
     }
 
     #[test]
@@ -37022,6 +37047,14 @@ fn main() {
         );
         assert_eq!(
             source
+                .matches(
+                    "run_scholar_chat_openalex_metadata_execution_slice_impl(root, request).map_err(to_user_error)"
+                )
+                .count(),
+            1
+        );
+        assert_eq!(
+            source
                 .matches("run_scholar_chat_openalex_metadata_execution_slice,")
                 .count(),
             1
@@ -37037,6 +37070,93 @@ fn main() {
             .unwrap();
         assert!(provider_request_index < execution_slice_index);
         assert!(execution_slice_index < runtime_bridge_index);
+    }
+
+    #[test]
+    fn scholar_chat_openalex_metadata_execution_slice_dependency_guard_is_minimal_and_explicit() {
+        let cargo_toml = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
+        let reqwest_line = r#"reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }"#;
+        assert_eq!(cargo_toml.matches("reqwest =").count(), 1);
+        assert!(cargo_toml.contains(reqwest_line));
+        for forbidden in ["hyper =", "surf =", "ureq =", "isahc =", "tokio ="] {
+            assert!(!cargo_toml.contains(forbidden), "{forbidden}");
+        }
+    }
+
+    #[test]
+    fn scholar_chat_openalex_metadata_execution_slice_minimal_request_deserializes_with_safe_defaults() {
+        let request: ScholarChatOpenAlexMetadataExecutionSliceRequest =
+            serde_json::from_str(r#"{"query":"Signalentdeckung"}"#).unwrap();
+        assert_eq!(request.query, "Signalentdeckung");
+        assert_eq!(request.mode, None);
+        assert_eq!(request.context_tags, None);
+        assert_eq!(request.preferred_metadata_sources, None);
+        assert_eq!(request.provider_override, None);
+        assert_eq!(request.require_open_access, None);
+        assert_eq!(request.require_doi, None);
+        assert_eq!(request.year_from, None);
+        assert_eq!(request.year_to, None);
+        assert_eq!(request.query_goal, None);
+        assert_eq!(request.max_results, None);
+        assert_eq!(request.cursor, None);
+        assert!(!request.execution_requested);
+        assert!(!request.allow_network);
+        assert!(!request.accept_openalex_terms);
+        assert!(!request.allow_openalex_no_key_usage);
+        assert!(!request.allow_metadata_record_write);
+        assert!(!request.api_key.is_provided());
+
+        let temp = tempfile::tempdir().unwrap();
+        let transport = FakeOpenAlexMetadataExecutionSliceTransport::success(
+            r#"{"results":[{"id":"https://openalex.org/W1","display_name":"Example"}]}"#,
+        );
+        let preview = run_scholar_chat_openalex_metadata_execution_slice_with_transport(
+            temp.path().to_path_buf(),
+            ScholarChatOpenAlexMetadataExecutionSliceRequest {
+                preferred_metadata_sources: Some(vec!["openalex".to_string()]),
+                provider_override: Some(vec!["openalex".to_string()]),
+                execution_requested: true,
+                allow_network: true,
+                accept_openalex_terms: true,
+                allow_openalex_no_key_usage: true,
+                allow_metadata_record_write: false,
+                api_key: ScholarChatOpenAlexMetadataExecutionSliceApiKey(None),
+                ..request
+            },
+            &transport,
+        )
+        .unwrap();
+
+        assert_eq!(preview.status, ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed);
+        assert_eq!(transport.calls(), 1);
+        assert_eq!(
+            transport
+                .last_request()
+                .unwrap()
+                .parameter_keys,
+            vec![
+                "per-page".to_string(),
+                "search".to_string(),
+                "select".to_string(),
+            ]
+        );
+        assert_eq!(
+            transport
+                .last_request()
+                .unwrap()
+                .parameter_pairs
+                .iter()
+                .any(|(key, _)| key == "api_key"),
+            false
+        );
+        assert!(!preview.request_summary.api_key_parameter_used);
+        assert!(preview.request_summary.raw_url_redacted);
+        assert_openalex_metadata_execution_slice_output_is_redacted(
+            &preview,
+            &["AppData", "target", "dist", "models/", "\\models\\", ".aegis"],
+            &["https://api.openalex.org", "openalex.org", "https://doi.org"],
+        );
+        assert!(!temp.path().join(".aegis").exists());
     }
 
     fn openalex_metadata_execution_slice_request(
@@ -37063,6 +37183,31 @@ fn main() {
             api_key: ScholarChatOpenAlexMetadataExecutionSliceApiKey(Some(
                 "secret-openalex-key".to_string(),
             )),
+        }
+    }
+
+    fn openalex_metadata_execution_slice_request_with<F>(
+        query: &str,
+        mutate: F,
+    ) -> ScholarChatOpenAlexMetadataExecutionSliceRequest
+    where
+        F: FnOnce(&mut ScholarChatOpenAlexMetadataExecutionSliceRequest),
+    {
+        let mut request = openalex_metadata_execution_slice_request(query);
+        mutate(&mut request);
+        request
+    }
+
+    fn assert_openalex_metadata_execution_slice_output_is_redacted(
+        preview: &ScholarChatOpenAlexMetadataExecutionSliceResult,
+        forbidden_values: &[&str],
+        forbidden_fragments: &[&str],
+    ) {
+        let debug = format!("{preview:?}");
+        let json = serde_json::to_string_pretty(preview).unwrap();
+        for forbidden in forbidden_values.iter().chain(forbidden_fragments.iter()) {
+            assert!(!debug.contains(forbidden), "{forbidden}");
+            assert!(!json.contains(forbidden), "{forbidden}");
         }
     }
 
@@ -37097,6 +37242,21 @@ fn main() {
         assert!(preview.no_audit_write);
     }
 
+    fn assert_openalex_metadata_execution_slice_blocked_without_transport_call(
+        temp: &tempfile::TempDir,
+        transport: &FakeOpenAlexMetadataExecutionSliceTransport,
+        preview: &ScholarChatOpenAlexMetadataExecutionSliceResult,
+    ) {
+        assert_ne!(
+            preview.status,
+            ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed
+        );
+        assert_eq!(transport.calls(), 0);
+        assert_openalex_metadata_execution_slice_boundary_flags(preview);
+        assert_eq!(count_entries_recursively(temp.path()), 0);
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
     #[test]
     fn scholar_chat_openalex_metadata_execution_slice_blocks_blank_query_without_touching_transport() {
         let temp = tempfile::tempdir().unwrap();
@@ -37112,13 +37272,147 @@ fn main() {
             preview.status,
             ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsQuery
         );
-        assert_eq!(transport.calls(), 0);
-        assert_openalex_metadata_execution_slice_boundary_flags(&preview);
-        let debug = format!("{preview:?}");
-        let json = serde_json::to_string_pretty(&preview).unwrap();
-        assert!(!debug.contains(temp.path().to_string_lossy().as_ref()));
-        assert!(!json.contains(temp.path().to_string_lossy().as_ref()));
-        assert!(!temp.path().join(".aegis").exists());
+        assert_openalex_metadata_execution_slice_blocked_without_transport_call(
+            &temp,
+            &transport,
+            &preview,
+        );
+        assert_openalex_metadata_execution_slice_output_is_redacted(
+            &preview,
+            &[temp.path().to_string_lossy().as_ref()],
+            &["https://api.openalex.org", "openalex.org", "AppData", "target", "dist", "models/", "\\models\\"],
+        );
+    }
+
+    #[test]
+    fn scholar_chat_openalex_metadata_execution_slice_gate_matrix_blocks_without_transport_call() {
+        let cases = [
+            (
+                "blank query",
+                openalex_metadata_execution_slice_request("   "),
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsQuery,
+            ),
+            (
+                "whitespace query",
+                openalex_metadata_execution_slice_request(" \t  "),
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsQuery,
+            ),
+            (
+                "execution consent missing",
+                openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                    request.execution_requested = false;
+                }),
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsExecutionConsent,
+            ),
+            (
+                "network consent missing",
+                openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                    request.allow_network = false;
+                }),
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsNetworkConsent,
+            ),
+            (
+                "terms consent missing",
+                openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                    request.accept_openalex_terms = false;
+                }),
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsOpenAlexTermsAcceptance,
+            ),
+            (
+                "no key and no-key usage disallowed",
+                openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                    request.api_key = ScholarChatOpenAlexMetadataExecutionSliceApiKey(None);
+                    request.allow_openalex_no_key_usage = false;
+                }),
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsOpenAlexKeyOrNoKeyConsent,
+            ),
+            (
+                "metadata write request remains blocked",
+                openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                    request.allow_metadata_record_write = true;
+                }),
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::Blocked,
+            ),
+            (
+                "reverse year range blocks",
+                openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                    request.year_from = Some(2025);
+                    request.year_to = Some(2024);
+                }),
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::Blocked,
+            ),
+            (
+                "crossref-only override blocks",
+                openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                    request.provider_override = Some(vec!["crossref".to_string()]);
+                }),
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection,
+            ),
+            (
+                "pubmed-only override blocks",
+                openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                    request.provider_override = Some(vec!["pubmed".to_string()]);
+                }),
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection,
+            ),
+            (
+                "eric-only override blocks",
+                openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                    request.provider_override = Some(vec!["eric".to_string()]);
+                }),
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection,
+            ),
+            (
+                "apa psycnet-only override blocks",
+                openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                    request.provider_override = Some(vec!["apa_psycnet".to_string()]);
+                }),
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection,
+            ),
+            (
+                "psycinfo-only override blocks",
+                openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                    request.provider_override = Some(vec!["psycinfo".to_string()]);
+                }),
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection,
+            ),
+            (
+                "mixed openalex and unsupported override blocks",
+                openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                    request.provider_override = Some(vec![
+                        "openalex".to_string(),
+                        "crossref".to_string(),
+                    ]);
+                }),
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection,
+            ),
+            (
+                "preferred unsupported metadata source blocks",
+                openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                    request.preferred_metadata_sources = Some(vec!["crossref".to_string()]);
+                }),
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection,
+            ),
+        ];
+
+        for (label, request, expected_status) in cases {
+            let temp = tempfile::tempdir().unwrap();
+            let transport = FakeOpenAlexMetadataExecutionSliceTransport::request_failed();
+            let preview = run_scholar_chat_openalex_metadata_execution_slice_with_transport(
+                temp.path().to_path_buf(),
+                request,
+                &transport,
+            )
+            .unwrap();
+
+            assert_eq!(preview.status, expected_status, "{label}");
+            assert_eq!(transport.calls(), 0, "{label}");
+            assert_openalex_metadata_execution_slice_blocked_without_transport_call(
+                &temp,
+                &transport,
+                &preview,
+            );
+        }
     }
 
     #[test]
@@ -37219,23 +37513,344 @@ fn main() {
         assert!(!record.evidence_pack_created);
         assert!(!record.literature_review_created);
         assert_openalex_metadata_execution_slice_boundary_flags(&preview);
-        let debug = format!("{preview:?}");
-        let json = serde_json::to_string_pretty(&preview).unwrap();
-        for forbidden in [
-            "secret-openalex-key",
-            "https://api.openalex.org",
-            "openalex.org",
-            "https://doi.org/10.1000/example",
-            temp.path().to_string_lossy().as_ref(),
-        ] {
-            assert!(!debug.contains(forbidden));
-            assert!(!json.contains(forbidden));
-        }
+        assert_eq!(transport.calls(), 1);
+        let last_request = transport.last_request().unwrap();
+        assert_eq!(
+            last_request.parameter_keys,
+            vec![
+                "api_key".to_string(),
+                "cursor".to_string(),
+                "filter".to_string(),
+                "per-page".to_string(),
+                "search".to_string(),
+                "select".to_string(),
+            ]
+        );
+        assert!(last_request
+            .parameter_pairs
+            .iter()
+            .any(|(key, value)| key == "api_key" && value == "secret-openalex-key"));
+        assert_openalex_metadata_execution_slice_output_is_redacted(
+            &preview,
+            &[
+                "secret-openalex-key",
+                "https://api.openalex.org",
+                "openalex.org",
+                "https://doi.org/10.1000/example",
+                temp.path().to_string_lossy().as_ref(),
+            ],
+            &["AppData", "target", "dist", "models/", "\\models\\", ".aegis"],
+        );
         assert!(!temp.path().join(".aegis").exists());
     }
 
     #[test]
-    fn scholar_chat_openalex_metadata_execution_slice_reports_provider_error_timeout_and_parse_failures_without_path_leaks() {
+    fn scholar_chat_openalex_metadata_execution_slice_normalizes_missing_fields_and_caps_lists_without_panic() {
+        let temp = tempfile::tempdir().unwrap();
+        let transport = FakeOpenAlexMetadataExecutionSliceTransport::success(
+            r#"{
+                "results": [
+                    {
+                        "id": "https://openalex.org/W1",
+                        "doi": "https://doi.org/10.1000/example",
+                        "display_name": "  Example Work  ",
+                        "open_access": { "is_oa": true },
+                        "primary_location": {
+                            "landing_page_url": "https://example.org/work",
+                            "source": { "display_name": "Example Source" }
+                        },
+                        "authorships": [
+                            { "author": { "display_name": "Ada Lovelace" } },
+                            { "author": { "display_name": "Grace Hopper" } },
+                            { "author": { "display_name": "Katherine Johnson" } },
+                            { "author": { "display_name": "Dorothy Vaughan" } },
+                            { "author": { "display_name": "Annie Easley" } },
+                            { "author": { "display_name": "Hidden Sixth" } }
+                        ],
+                        "concepts": [
+                            { "display_name": "Psychology" },
+                            { "display_name": "Statistics" },
+                            { "display_name": "Methods" },
+                            { "display_name": "Research" },
+                            { "display_name": "Analysis" },
+                            { "display_name": "Overflow" }
+                        ],
+                        "topics": [
+                            { "display_name": "Topic A" },
+                            { "display_name": "Topic B" },
+                            { "display_name": "Topic C" },
+                            { "display_name": "Topic D" },
+                            { "display_name": "Topic E" },
+                            { "display_name": "Topic F" }
+                        ]
+                    },
+                    {
+                        "id": "https://openalex.org/W2",
+                        "display_name": null
+                    }
+                ]
+            }"#,
+        );
+        let preview = run_scholar_chat_openalex_metadata_execution_slice_with_transport(
+            temp.path().to_path_buf(),
+            openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                request.provider_override = Some(vec!["openalex".to_string()]);
+                request.max_results = Some(0);
+                request.cursor = Some("  cursor-123  ".to_string());
+            }),
+            &transport,
+        )
+        .unwrap();
+
+        assert_eq!(preview.status, ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed);
+        assert_eq!(preview.normalized_query, "Signalentdeckung");
+        assert_eq!(preview.normalized_context_tags, vec!["scientific".to_string()]);
+        assert_eq!(preview.normalized_preferred_metadata_sources, vec!["openalex".to_string()]);
+        assert_eq!(
+            preview.normalized_provider_override,
+            Some(vec!["openalex".to_string()])
+        );
+        assert_eq!(preview.max_results, 1);
+        assert_eq!(preview.cursor.as_deref(), Some("cursor-123"));
+        assert_eq!(
+            preview.request_summary.parameter_keys,
+            vec![
+                "api_key".to_string(),
+                "cursor".to_string(),
+                "filter".to_string(),
+                "per-page".to_string(),
+                "search".to_string(),
+                "select".to_string(),
+            ]
+        );
+        assert!(preview.request_summary.url_built);
+        assert!(preview.request_summary.provider_call_attempted);
+        assert!(preview.request_summary.http_client_used);
+        assert!(preview.request_summary.api_key_parameter_used);
+        assert!(preview.request_summary.raw_url_redacted);
+        assert!(preview.response_summary.contains("OpenAlex"));
+        assert_eq!(preview.metadata_records.len(), 2);
+        let first = &preview.metadata_records[0];
+        assert_eq!(first.title, "Example Work");
+        assert_eq!(
+            first.author_names,
+            vec![
+                "Ada Lovelace".to_string(),
+                "Grace Hopper".to_string(),
+                "Katherine Johnson".to_string(),
+                "Dorothy Vaughan".to_string(),
+                "Annie Easley".to_string(),
+            ]
+        );
+        assert_eq!(
+            first.concept_names,
+            vec![
+                "Psychology".to_string(),
+                "Statistics".to_string(),
+                "Methods".to_string(),
+                "Research".to_string(),
+                "Analysis".to_string(),
+            ]
+        );
+        assert_eq!(
+            first.topic_names,
+            vec![
+                "Topic A".to_string(),
+                "Topic B".to_string(),
+                "Topic C".to_string(),
+                "Topic D".to_string(),
+                "Topic E".to_string(),
+            ]
+        );
+        let second = &preview.metadata_records[1];
+        assert_eq!(second.title, "Untitled OpenAlex work");
+        assert!(second.raw_provider_id_redacted);
+        assert!(!second.raw_doi_url_redacted);
+        assert!(!second.persisted);
+        assert!(!second.citation_emitted);
+        assert!(!second.evidence_pack_created);
+        assert!(!second.literature_review_created);
+        assert_eq!(transport.calls(), 1);
+        assert_eq!(
+            transport
+                .last_request()
+                .unwrap()
+                .parameter_pairs
+                .iter()
+                .find(|(key, _)| key == "api_key")
+                .map(|(_, value)| value.clone()),
+            Some("secret-openalex-key".to_string())
+        );
+        assert_openalex_metadata_execution_slice_output_is_redacted(
+            &preview,
+            &[
+                "secret-openalex-key",
+                "https://api.openalex.org",
+                "openalex.org",
+                "https://doi.org/10.1000/example",
+                temp.path().to_string_lossy().as_ref(),
+            ],
+            &["AppData", "target", "dist", "models/", "\\models\\", ".aegis"],
+        );
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_openalex_metadata_execution_slice_normalizes_parameters_and_response_summary_and_redacts_urls() {
+        let temp = tempfile::tempdir().unwrap();
+        let transport = FakeOpenAlexMetadataExecutionSliceTransport::success(
+            r#"{
+                "results": [
+                    {
+                        "id": "https://openalex.org/W1",
+                        "doi": "https://doi.org/10.1000/example",
+                        "display_name": "  Example Work  ",
+                        "open_access": { "is_oa": true },
+                        "primary_location": {
+                            "landing_page_url": "https://example.org/work",
+                            "source": { "display_name": "Example Source" }
+                        },
+                        "authorships": [
+                            { "author": { "display_name": "Ada Lovelace" } },
+                            { "author": { "display_name": "Grace Hopper" } },
+                            { "author": { "display_name": "Katherine Johnson" } },
+                            { "author": { "display_name": "Dorothy Vaughan" } },
+                            { "author": { "display_name": "Annie Easley" } },
+                            { "author": { "display_name": "Hidden Sixth" } }
+                        ],
+                        "concepts": [
+                            { "display_name": "Psychology" },
+                            { "display_name": "Statistics" },
+                            { "display_name": "Methods" },
+                            { "display_name": "Research" },
+                            { "display_name": "Analysis" },
+                            { "display_name": "Overflow" }
+                        ],
+                        "topics": [
+                            { "display_name": "Topic A" },
+                            { "display_name": "Topic B" },
+                            { "display_name": "Topic C" },
+                            { "display_name": "Topic D" },
+                            { "display_name": "Topic E" },
+                            { "display_name": "Topic F" }
+                        ]
+                    },
+                    {
+                        "id": "https://openalex.org/W2",
+                        "display_name": null
+                    }
+                ]
+            }"#,
+        );
+        let preview = run_scholar_chat_openalex_metadata_execution_slice_with_transport(
+            temp.path().to_path_buf(),
+            openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                request.provider_override = Some(vec!["openalex".to_string()]);
+                request.max_results = Some(0);
+                request.cursor = Some("  cursor-123  ".to_string());
+            }),
+            &transport,
+        )
+        .unwrap();
+
+        assert_eq!(preview.status, ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed);
+        assert_eq!(preview.normalized_query, "Signalentdeckung");
+        assert_eq!(preview.normalized_context_tags, vec!["scientific".to_string()]);
+        assert_eq!(preview.normalized_preferred_metadata_sources, vec!["openalex".to_string()]);
+        assert_eq!(
+            preview.normalized_provider_override,
+            Some(vec!["openalex".to_string()])
+        );
+        assert_eq!(
+            preview.normalized_query_goal.as_deref(),
+            Some("scientific metadata planning")
+        );
+        assert_eq!(preview.max_results, 1);
+        assert_eq!(preview.cursor.as_deref(), Some("cursor-123"));
+        assert_eq!(
+            preview.request_summary.parameter_keys,
+            vec![
+                "api_key".to_string(),
+                "cursor".to_string(),
+                "filter".to_string(),
+                "per-page".to_string(),
+                "search".to_string(),
+                "select".to_string(),
+            ]
+        );
+        assert!(preview.request_summary.url_built);
+        assert!(preview.request_summary.provider_call_attempted);
+        assert!(preview.request_summary.http_client_used);
+        assert!(preview.request_summary.api_key_parameter_used);
+        assert!(preview.response_summary.contains("OpenAlex"));
+        assert_eq!(preview.metadata_records.len(), 2);
+        let first = &preview.metadata_records[0];
+        assert_eq!(first.title, "Example Work");
+        assert_eq!(
+            first.author_names,
+            vec![
+                "Ada Lovelace".to_string(),
+                "Grace Hopper".to_string(),
+                "Katherine Johnson".to_string(),
+                "Dorothy Vaughan".to_string(),
+                "Annie Easley".to_string(),
+            ]
+        );
+        assert_eq!(
+            first.concept_names,
+            vec![
+                "Psychology".to_string(),
+                "Statistics".to_string(),
+                "Methods".to_string(),
+                "Research".to_string(),
+                "Analysis".to_string(),
+            ]
+        );
+        assert_eq!(
+            first.topic_names,
+            vec![
+                "Topic A".to_string(),
+                "Topic B".to_string(),
+                "Topic C".to_string(),
+                "Topic D".to_string(),
+                "Topic E".to_string(),
+            ]
+        );
+        let second = &preview.metadata_records[1];
+        assert_eq!(second.title, "Untitled OpenAlex work");
+        assert!(second.raw_provider_id_redacted);
+        assert!(!second.raw_doi_url_redacted);
+        assert!(!second.persisted);
+        assert!(!second.citation_emitted);
+        assert!(!second.evidence_pack_created);
+        assert!(!second.literature_review_created);
+        assert_eq!(transport.calls(), 1);
+        assert_eq!(
+            transport
+                .last_request()
+                .unwrap()
+                .parameter_pairs
+                .iter()
+                .find(|(key, _)| key == "api_key")
+                .map(|(_, value)| value.clone()),
+            Some("secret-openalex-key".to_string())
+        );
+        assert_openalex_metadata_execution_slice_output_is_redacted(
+            &preview,
+            &[
+                "secret-openalex-key",
+                "https://api.openalex.org",
+                "openalex.org",
+                "https://doi.org/10.1000/example",
+                temp.path().to_string_lossy().as_ref(),
+            ],
+            &["AppData", "target", "dist", "models/", "\\models\\", ".aegis"],
+        );
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_openalex_metadata_execution_slice_reports_provider_error_rate_limit_timeout_and_parse_failures_without_path_leaks() {
         let temp = tempfile::tempdir().unwrap();
         let provider_preview = preview_scholar_chat_scientific_metadata_provider_request(
             temp.path(),
@@ -37274,6 +37889,30 @@ fn main() {
         );
         assert_openalex_metadata_execution_slice_boundary_flags(&request_failed);
 
+        let provider_error = run_scholar_chat_openalex_metadata_execution_slice_with_transport(
+            temp.path().to_path_buf(),
+            request.clone(),
+            &FakeOpenAlexMetadataExecutionSliceTransport::status(500, r#"{"results":[]}"#),
+        )
+        .unwrap();
+        assert_eq!(
+            provider_error.status,
+            ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderError
+        );
+        assert_openalex_metadata_execution_slice_boundary_flags(&provider_error);
+
+        let rate_limited = run_scholar_chat_openalex_metadata_execution_slice_with_transport(
+            temp.path().to_path_buf(),
+            request.clone(),
+            &FakeOpenAlexMetadataExecutionSliceTransport::status(429, r#"{"results":[]}"#),
+        )
+        .unwrap();
+        assert_eq!(
+            rate_limited.status,
+            ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderRateLimited
+        );
+        assert_openalex_metadata_execution_slice_boundary_flags(&rate_limited);
+
         let timed_out = run_scholar_chat_openalex_metadata_execution_slice_with_transport(
             temp.path().to_path_buf(),
             request.clone(),
@@ -37298,12 +37937,68 @@ fn main() {
         );
         assert_openalex_metadata_execution_slice_boundary_flags(&parse_failed);
 
-        for preview in [&request_failed, &timed_out, &parse_failed] {
+        for preview in [
+            &request_failed,
+            &provider_error,
+            &rate_limited,
+            &timed_out,
+            &parse_failed,
+        ] {
             let debug = format!("{preview:?}");
             let json = serde_json::to_string_pretty(preview).unwrap();
-            assert!(!debug.contains(temp.path().to_string_lossy().as_ref()));
-            assert!(!json.contains(temp.path().to_string_lossy().as_ref()));
+            for forbidden in [
+                temp.path().to_string_lossy().as_ref(),
+                "https://api.openalex.org",
+                "openalex.org",
+                "secret-openalex-key",
+                "https://doi.org/10.1000/example",
+                "AppData",
+                "target",
+                "dist",
+                "models/",
+                "\\models\\",
+                ".aegis",
+            ] {
+                assert!(!debug.contains(forbidden), "{forbidden}");
+                assert!(!json.contains(forbidden), "{forbidden}");
+            }
             assert!(!temp.path().join(".aegis").exists());
         }
+    }
+
+    #[test]
+    fn scholar_chat_openalex_metadata_execution_slice_offline_fake_transport_and_no_write_invariants_hold() {
+        let temp = tempfile::tempdir().unwrap();
+        let before_entries = count_entries_recursively(temp.path());
+        let transport = FakeOpenAlexMetadataExecutionSliceTransport::success(
+            r#"{"results":[{"id":"https://openalex.org/W1","display_name":"Example"}]}"#,
+        );
+        let preview = run_scholar_chat_openalex_metadata_execution_slice_with_transport(
+            temp.path().to_path_buf(),
+            openalex_metadata_execution_slice_request_with("Signalentdeckung", |request| {
+                request.provider_override = Some(vec!["openalex".to_string()]);
+            }),
+            &transport,
+        )
+        .unwrap();
+
+        assert_eq!(preview.status, ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed);
+        assert_eq!(transport.calls(), 1);
+        assert_eq!(before_entries, count_entries_recursively(temp.path()));
+        assert!(!temp.path().join(".aegis").exists());
+        assert!(!preview.metadata_records.iter().any(|record| record.persisted));
+        assert!(!preview
+            .metadata_records
+            .iter()
+            .any(|record| record.citation_emitted));
+        assert!(!preview
+            .metadata_records
+            .iter()
+            .any(|record| record.evidence_pack_created));
+        assert!(!preview
+            .metadata_records
+            .iter()
+            .any(|record| record.literature_review_created));
+        assert_openalex_metadata_execution_slice_boundary_flags(&preview);
     }
 }
