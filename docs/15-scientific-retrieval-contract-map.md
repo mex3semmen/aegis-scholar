@@ -234,6 +234,12 @@ The intended next execution path after this documentation phase is:
 - no cache files, metadata writes, registry writes, audit writes, artifacts, Evidence Packs, Literature Reviews, citations, retrieval execution, provider expansion, persistence, model/runtime/LLM behavior, or answer generation
 - Crossref / PubMed / ERIC remain later providers
 - APA PsycNet / PsycINFO remain institutional / manual boundary only
+- Phase 112.1: OpenAlex Metadata Cache/Write Gate Preview Guard Hardening
+- confirms GUI diagnostics remain no-op and no actual write button should be exposed
+- confirms policy labels, dedup/readiness planning, redaction, fake-transport-only tests, and no-write/no-registry/no-audit/no-artifact invariants
+- keeps future explicit cache/write execution gate after preview hardening as future work
+- Crossref / PubMed / ERIC remain later providers
+- APA PsycNet / PsycINFO remain institutional / manual boundary only
 
 Later phases should add:
 
