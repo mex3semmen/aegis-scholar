@@ -22817,6 +22817,10 @@ fn main() {
             preview.status,
             ScholarChatScientificPaperLiteratureReviewPlanStatus::Blocked
         );
+        assert_eq!(
+            preview.literature_review_strategy,
+            ScholarChatScientificPaperLiteratureReviewStrategy::Blocked
+        );
         assert!(preview.normalized_query.is_empty());
         assert!(preview
             .blockers
@@ -22825,7 +22829,15 @@ fn main() {
         assert!(preview
             .planned_literature_review_steps
             .iter()
-            .all(|step| !step.active));
+            .all(|step| !step.active && step.preview_only));
+        assert!(preview.no_literature_review_created);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_persistence);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+        assert!(preview.no_llm_call);
     }
 
     #[test]
@@ -22864,6 +22876,14 @@ fn main() {
             ScholarChatScientificPaperLiteratureReviewPlanStatus::LiteratureReviewPlanReady
         );
         assert_eq!(preview.selected_source_count, 0);
+        assert!(preview.no_literature_review_created);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_persistence);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+        assert!(preview.no_llm_call);
         assert!(preview
             .planned_literature_review_steps
             .iter()
@@ -22986,6 +23006,114 @@ fn main() {
             preview.literature_review_strategy,
             ScholarChatScientificPaperLiteratureReviewStrategy::CitationMetadataFirst
         );
+        assert_eq!(preview.normalized_mode, "scientific_paper");
+        assert_eq!(
+            preview.requested_mode,
+            Some("scientific_paper".to_string())
+        );
+        assert_eq!(
+            preview.evidence_pack_plan_status,
+            ScholarChatScientificEvidencePackPlanStatus::EvidencePackPlanReady
+        );
+        assert!(preview.research_question_plan.research_question_present);
+        assert!(!preview
+            .research_question_plan
+            .will_derive_research_question_later);
+        assert_eq!(
+            preview.research_question_plan.required_inputs,
+            vec![
+                "normalized_query".to_string(),
+                "evidence_pack_plan".to_string(),
+                "review_goal".to_string(),
+                "methodology_hints".to_string(),
+                "population_hints".to_string(),
+                "topic_area_hints".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.research_question_plan.planned_outputs,
+            vec![
+                "research_question_later".to_string(),
+                "inclusion_scope_later".to_string(),
+                "review_focus_later".to_string(),
+            ]
+        );
+        assert!(!preview.search_strategy_plan.will_run_search);
+        assert!(!preview.search_strategy_plan.will_call_connectors);
+        assert!(preview
+            .search_strategy_plan
+            .planned_search_inputs
+            .iter()
+            .any(|value| value == "normalized_query"));
+        assert!(preview
+            .search_strategy_plan
+            .planned_source_channels
+            .contains(&"local_source_context".to_string()));
+        assert!(!preview.review_section_plan.will_generate_section_text);
+        assert_eq!(
+            preview.review_section_plan.requested_sections,
+            vec![
+                "background".to_string(),
+                "citation_plan".to_string(),
+                "compliance_notes".to_string(),
+                "findings".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.review_section_plan.unknown_sections,
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            preview.review_section_plan.planned_sections,
+            vec![
+                "background".to_string(),
+                "findings".to_string(),
+                "citation_plan".to_string(),
+                "compliance_notes".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.claim_synthesis_plan.claim_scope,
+            vec!["signal_detection".to_string()]
+        );
+        assert_eq!(
+            preview.claim_synthesis_plan.unknown_claim_scope,
+            vec!["signal_detection".to_string()]
+        );
+        assert_eq!(
+            preview.citation_plan.citation_style,
+            "doi_first"
+        );
+        assert!(!preview.citation_plan.will_emit_citations_now);
+        assert_eq!(
+            preview.citation_plan.required_citation_fields,
+            vec![
+                "title".to_string(),
+                "authors".to_string(),
+                "publication_year".to_string(),
+                "provider_record_id".to_string(),
+                "source_family".to_string(),
+                "doi_or_stable_identifier".to_string(),
+                "access_or_metadata_provider_note_later".to_string(),
+            ]
+        );
+        assert!(preview
+            .quality_review_plan
+            .review_checks
+            .iter()
+            .any(|value| value == "verify_metadata_before_citation"));
+        assert!(preview.compliance_review_plan.no_fulltext_download);
+        assert!(preview.compliance_review_plan.no_scraping);
+        assert!(preview.compliance_review_plan.no_authenticated_library_access);
+        assert!(preview.compliance_review_plan.no_paywall_bypass);
+        assert!(preview.compliance_review_plan.external_metadata_only);
+        assert!(!preview
+            .compliance_review_plan
+            .will_call_external_services);
+        assert!(!preview.compliance_review_plan.will_write_metadata);
+        assert!(!preview
+            .compliance_review_plan
+            .will_create_literature_review);
         assert_eq!(
             preview.selected_source_count,
             preview.selected_local_source_ids.len()
@@ -23036,6 +23164,110 @@ fn main() {
         assert!(preview.next_required_actions.iter().any(|action| {
             action.contains("keep this preview-only and plan the literature review later")
         }));
+        assert!(preview.no_literature_review_created);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_persistence);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+        assert!(preview.no_llm_call);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_paper_literature_review_plan_handles_mode_forcing_and_warning_boundaries() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_scientific_paper_literature_review_plan_deterministic_and_path_free(
+            &temp,
+            scientific_paper_literature_review_plan_request(
+                "Signalentdeckung und Wahrnehmung",
+                Some("course"),
+                Some("Psychology literature review"),
+                Some(vec!["psychology", "  psychology  "]),
+                Some(vec!["source-a"]),
+                Some(vec!["pdf"]),
+                Some(vec!["openalex", "crossref"]),
+                Some(vec![
+                    "apa_psycnet_discovery",
+                    "apa_psycnet_discovery",
+                ]),
+                Some(vec!["methods"]),
+                Some(vec!["students"]),
+                Some(vec!["signal detection"]),
+                Some("review local literature"),
+                Some(vec!["signal detection", "unknown_claim_scope"]),
+                Some("unknown style"),
+                Some("literature review"),
+                Some("What predicts signal detection?"),
+                Some(vec![" background ", "findings", "citation_plan", "compliance_notes", "unknown_section"]),
+                Some(3),
+                Some(true),
+                Some(false),
+                Some(2018),
+                Some(2024),
+            ),
+        );
+
+        assert_eq!(preview.status, ScholarChatScientificPaperLiteratureReviewPlanStatus::LiteratureReviewPlanReady);
+        assert_eq!(preview.normalized_mode, "scientific_paper");
+        assert_eq!(preview.requested_mode, Some("course".to_string()));
+        assert_eq!(
+            preview.literature_review_strategy,
+            ScholarChatScientificPaperLiteratureReviewStrategy::EvidencePackFirst
+        );
+        assert_eq!(preview.normalized_citation_style, "neutral");
+        assert!(preview
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Unknown review section preference 'unknown_section'")));
+        assert!(preview
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("APA/PsycINFO planning boundary only")));
+        assert_eq!(
+            preview.review_section_plan.unknown_sections,
+            vec!["unknown_section".to_string()]
+        );
+        assert_eq!(
+            preview.review_section_plan.planned_sections,
+            vec![
+                "background".to_string(),
+                "findings".to_string(),
+                "citation_plan".to_string(),
+                "compliance_notes".to_string(),
+            ]
+        );
+        assert!(preview
+            .review_section_plan
+            .planned_sections
+            .iter()
+            .all(|section| section != "unknown_section"));
+        assert_eq!(
+            preview.claim_synthesis_plan.unknown_claim_scope,
+            vec![
+                "signal_detection".to_string(),
+                "unknown_claim_scope".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.claim_synthesis_plan.claim_scope,
+            vec!["signal_detection".to_string(), "unknown_claim_scope".to_string()]
+        );
+        assert!(preview
+            .quality_review_plan
+            .required_manual_checks_later
+            .contains(&"institutional_access_review_later_when_required".to_string()));
+        assert!(preview
+            .compliance_review_plan
+            .no_authenticated_library_access);
+        assert!(preview.compliance_review_plan.no_paywall_bypass);
+        assert!(!preview
+            .compliance_review_plan
+            .will_call_external_services);
+        assert!(!preview.compliance_review_plan.will_write_metadata);
+        assert!(!preview
+            .compliance_review_plan
+            .will_create_literature_review);
     }
 
     #[test]
