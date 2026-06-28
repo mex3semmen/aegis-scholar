@@ -177,6 +177,131 @@ type ScholarChatPromptPackPreviewResponse = {
   warnings: string[];
 };
 
+type ScholarChatScientificMetadataQueryPlanStatus =
+  | "blocked"
+  | "query_plan_ready"
+  | "needs_provider_config"
+  | "needs_provider_selection"
+  | "needs_query_goal"
+  | "needs_network_policy_review"
+  | "needs_provider_terms_review"
+  | "needs_institutional_access_review"
+  | "unsupported_provider";
+
+type ScholarChatScientificMetadataProviderRequestStatus =
+  | "blocked"
+  | "needs_provider_config"
+  | "needs_provider_selection"
+  | "needs_query_goal"
+  | "needs_network_policy_review"
+  | "needs_provider_terms_review"
+  | "needs_institutional_access_review"
+  | "unsupported_provider"
+  | "provider_request_ready_later";
+
+type ScholarChatScientificMetadataProviderRequestStrategy =
+  | "blocked"
+  | "provider_policy_review_first"
+  | "public_metadata_request_preview"
+  | "institutional_boundary_request_preview"
+  | "provider_request_preview_only";
+
+type ScholarChatScientificMetadataQueryPlanPreviewRequest = {
+  query: string;
+  mode?: string | null;
+  context_tags?: string[] | null;
+  preferred_metadata_sources?: string[] | null;
+  preferred_psychology_source_families?: string[] | null;
+  provider_override?: string[] | null;
+  query_goal?: string | null;
+  require_open_access?: boolean | null;
+  require_doi?: boolean | null;
+  year_from?: number | null;
+  year_to?: number | null;
+  include_disabled_providers?: boolean;
+  include_institutional_providers?: boolean;
+  include_rate_limit_notes?: boolean;
+  include_attribution_requirements?: boolean;
+  include_query_templates?: boolean;
+  include_filter_plan?: boolean;
+  include_result_field_plan?: boolean;
+  execution_requested?: boolean;
+  allow_network?: boolean;
+  allow_provider_terms_unreviewed?: boolean;
+  allow_metadata_record_write?: boolean;
+};
+
+type ScholarChatScientificMetadataProviderRequestPreviewRequest = {
+  query_plan_preview_request: ScholarChatScientificMetadataQueryPlanPreviewRequest;
+  include_request_templates?: boolean;
+  include_header_plan?: boolean;
+  include_param_plan?: boolean;
+  include_body_plan?: boolean;
+};
+
+type ScholarChatScientificMetadataProviderRequestPreview = {
+  status: ScholarChatScientificMetadataProviderRequestStatus;
+  normalized_query: string;
+  normalized_mode: string | null;
+  normalized_context_tags: string[];
+  normalized_preferred_metadata_sources: string[];
+  normalized_preferred_psychology_source_families: string[];
+  normalized_provider_override: string[] | null;
+  unknown_provider_ids: string[];
+  normalized_query_goal: string | null;
+  include_disabled_providers: boolean;
+  include_institutional_providers: boolean;
+  include_rate_limit_notes: boolean;
+  include_attribution_requirements: boolean;
+  include_query_templates: boolean;
+  include_filter_plan: boolean;
+  include_result_field_plan: boolean;
+  include_request_templates: boolean;
+  include_header_plan: boolean;
+  include_param_plan: boolean;
+  include_body_plan: boolean;
+  execution_requested: boolean;
+  allow_network: boolean;
+  allow_provider_terms_unreviewed: boolean;
+  allow_metadata_record_write: boolean;
+  query_plan_status: ScholarChatScientificMetadataQueryPlanStatus;
+  query_plan_strategy: string;
+  selected_provider_ids: string[];
+  selected_provider_count: number;
+  public_metadata_provider_ids: string[];
+  institutional_boundary_provider_ids: string[];
+  provider_request_strategy: ScholarChatScientificMetadataProviderRequestStrategy;
+  blockers: string[];
+  warnings: string[];
+  next_required_actions: string[];
+  summary: string;
+  preview_only: boolean;
+  metadata_provider_request_preview_only: boolean;
+  dry_run_only: boolean;
+  execution_disabled: boolean;
+  no_url_building: boolean;
+  no_network_call: boolean;
+  no_http_client: boolean;
+  no_api_key_read: boolean;
+  no_environment_read: boolean;
+  no_scraping: boolean;
+  no_connector_call: boolean;
+  no_source_import: boolean;
+  no_metadata_record_write: boolean;
+  no_metadata_persistence: boolean;
+  no_retrieval_execution: boolean;
+  no_model_loading: boolean;
+  no_runtime_inference: boolean;
+  no_llm_call: boolean;
+  no_answer_generated: boolean;
+  no_literature_review_created: boolean;
+  no_evidence_pack_created: boolean;
+  no_artifact_write: boolean;
+  no_persistence: boolean;
+  no_registry_status_change: boolean;
+  no_audit_write: boolean;
+};
+
 type ScholarChatAnswerReadinessStatus =
   | "blocked"
   | "needs_sources"
@@ -1828,6 +1953,12 @@ export default function App() {
   const [scholarChatPromptPackError, setScholarChatPromptPackError] = createSignal<string | null>(null);
   const [scholarChatPromptPackLoading, setScholarChatPromptPackLoading] = createSignal(false);
   const [scholarChatPromptPackHasRun, setScholarChatPromptPackHasRun] = createSignal(false);
+  const [scholarChatScientificMetadataProviderRequestPreview, setScholarChatScientificMetadataProviderRequestPreview] = createSignal<ScholarChatScientificMetadataProviderRequestPreview | null>(null);
+  const [scholarChatScientificMetadataProviderRequestError, setScholarChatScientificMetadataProviderRequestError] = createSignal<string | null>(null);
+  const [scholarChatScientificMetadataProviderRequestValidationError, setScholarChatScientificMetadataProviderRequestValidationError] = createSignal<string | null>(null);
+  const [scholarChatScientificMetadataProviderRequestLoading, setScholarChatScientificMetadataProviderRequestLoading] = createSignal(false);
+  const [scholarChatScientificMetadataProviderRequestHasRun, setScholarChatScientificMetadataProviderRequestHasRun] = createSignal(false);
+  const scientificMetadataProviderRequestPreview = scholarChatScientificMetadataProviderRequestPreview();
   const [scholarChatAnswerReadinessAllowModelExecution, setScholarChatAnswerReadinessAllowModelExecution] = createSignal(false);
   const [scholarChatAnswerReadinessPreview, setScholarChatAnswerReadinessPreview] = createSignal<ScholarChatAnswerReadinessPreview | null>(null);
   const [scholarChatAnswerReadinessError, setScholarChatAnswerReadinessError] = createSignal<string | null>(null);
@@ -2986,6 +3117,71 @@ export default function App() {
       setScholarChatPromptPackError(sanitizeBackendError(err));
     } finally {
       setScholarChatPromptPackLoading(false);
+    }
+  }
+
+  function buildScholarChatScientificMetadataProviderRequestPreviewRequest(
+    trimmedPrompt: string,
+  ): ScholarChatScientificMetadataProviderRequestPreviewRequest {
+    return {
+      query_plan_preview_request: {
+        query: trimmedPrompt,
+        mode: "scientific_paper",
+        context_tags: ["science", "metadata"],
+        preferred_metadata_sources: ["openalex"],
+        provider_override: ["openalex"],
+        query_goal: "OpenAlex metadata preview",
+        require_open_access: false,
+        require_doi: false,
+        year_from: 2018,
+        year_to: 2026,
+        include_disabled_providers: false,
+        include_institutional_providers: false,
+        include_rate_limit_notes: true,
+        include_attribution_requirements: true,
+        include_query_templates: true,
+        include_filter_plan: true,
+        include_result_field_plan: true,
+        execution_requested: false,
+        allow_network: false,
+        allow_provider_terms_unreviewed: false,
+        allow_metadata_record_write: false,
+      },
+      include_request_templates: true,
+      include_header_plan: true,
+      include_param_plan: true,
+      include_body_plan: true,
+    };
+  }
+
+  async function previewScholarChatScientificMetadataProviderRequest() {
+    const trimmedPrompt = scholarChatPrompt().trim();
+    if (!trimmedPrompt) {
+      setScholarChatScientificMetadataProviderRequestPreview(null);
+      setScholarChatScientificMetadataProviderRequestError(null);
+      setScholarChatScientificMetadataProviderRequestValidationError("Prompt is required to preview the OpenAlex metadata provider request.");
+      setScholarChatScientificMetadataProviderRequestHasRun(true);
+      return;
+    }
+    if (scholarChatScientificMetadataProviderRequestLoading()) {
+      return;
+    }
+
+    setScholarChatScientificMetadataProviderRequestHasRun(true);
+    setScholarChatScientificMetadataProviderRequestLoading(true);
+    setScholarChatScientificMetadataProviderRequestError(null);
+    setScholarChatScientificMetadataProviderRequestValidationError(null);
+    setScholarChatScientificMetadataProviderRequestPreview(null);
+    try {
+      const result = await invoke<ScholarChatScientificMetadataProviderRequestPreview>("preview_scholar_chat_scientific_metadata_provider_request", {
+        root: ".",
+        request: buildScholarChatScientificMetadataProviderRequestPreviewRequest(trimmedPrompt),
+      });
+      setScholarChatScientificMetadataProviderRequestPreview(result);
+    } catch (err) {
+      setScholarChatScientificMetadataProviderRequestError(sanitizeBackendError(err));
+    } finally {
+      setScholarChatScientificMetadataProviderRequestLoading(false);
     }
   }
 
@@ -4458,6 +4654,126 @@ export default function App() {
             )
           ) : (
             <p>No Scholar Chat prompt pack preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview">
+          <h3>OpenAlex metadata provider request preview</h3>
+          <p class="muted">
+            Preview only. No writes, no Evidence Pack, no citations, and no answer generation.
+          </p>
+          <p class="muted">
+            Execution requires explicit advanced consent; cache/write is diagnostics-only. This uses the current Scholar Chat prompt as the query preview.
+          </p>
+          <div class="hero-actions">
+            <button onClick={previewScholarChatScientificMetadataProviderRequest} disabled={scholarChatScientificMetadataProviderRequestLoading()}>
+              {scholarChatScientificMetadataProviderRequestLoading() ? "Previewing..." : "Preview OpenAlex metadata provider request"}
+            </button>
+          </div>
+          {scholarChatScientificMetadataProviderRequestValidationError() && <p class="error">{scholarChatScientificMetadataProviderRequestValidationError()}</p>}
+          {scholarChatScientificMetadataProviderRequestError() && <p class="error">{scholarChatScientificMetadataProviderRequestError()}</p>}
+          {scholarChatScientificMetadataProviderRequestLoading() ? (
+            <p>Previewing OpenAlex metadata provider request...</p>
+          ) : scholarChatScientificMetadataProviderRequestHasRun() ? (
+            scientificMetadataProviderRequestPreview ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(scientificMetadataProviderRequestPreview.status) },
+                  { label: "Query plan status", value: formatSnakeCaseLabel(scientificMetadataProviderRequestPreview.query_plan_status) },
+                  { label: "Query plan strategy", value: formatSnakeCaseLabel(scientificMetadataProviderRequestPreview.query_plan_strategy) },
+                  { label: "Provider request strategy", value: formatSnakeCaseLabel(scientificMetadataProviderRequestPreview.provider_request_strategy) },
+                  { label: "Selected providers", value: scientificMetadataProviderRequestPreview.selected_provider_count },
+                  { label: "Execution requested", value: scientificMetadataProviderRequestPreview.execution_requested ? "yes" : "no" },
+                  { label: "Allow network", value: scientificMetadataProviderRequestPreview.allow_network ? "yes" : "no" },
+                  { label: "Allow provider terms unreviewed", value: scientificMetadataProviderRequestPreview.allow_provider_terms_unreviewed ? "yes" : "no" },
+                  { label: "Allow metadata record write", value: scientificMetadataProviderRequestPreview.allow_metadata_record_write ? "yes" : "no" },
+                ])}
+                <p><strong>Query:</strong> {scientificMetadataProviderRequestPreview.normalized_query}</p>
+                <p><strong>Query goal:</strong> {scientificMetadataProviderRequestPreview.normalized_query_goal ?? "none"}</p>
+                <p><strong>Normalized mode:</strong> {scientificMetadataProviderRequestPreview.normalized_mode ?? "none"}</p>
+                <p><strong>Selected provider IDs:</strong> {scientificMetadataProviderRequestPreview.selected_provider_ids.length > 0 ? scientificMetadataProviderRequestPreview.selected_provider_ids.join(", ") : "none"}</p>
+                <p><strong>Public providers:</strong> {scientificMetadataProviderRequestPreview.public_metadata_provider_ids.length > 0 ? scientificMetadataProviderRequestPreview.public_metadata_provider_ids.join(", ") : "none"}</p>
+                <p><strong>Institutional providers:</strong> {scientificMetadataProviderRequestPreview.institutional_boundary_provider_ids.length > 0 ? scientificMetadataProviderRequestPreview.institutional_boundary_provider_ids.join(", ") : "none"}</p>
+                <p><strong>Normalized provider override:</strong> {scientificMetadataProviderRequestPreview.normalized_provider_override && scientificMetadataProviderRequestPreview.normalized_provider_override.length > 0 ? scientificMetadataProviderRequestPreview.normalized_provider_override.join(", ") : "none"}</p>
+                <p class="muted">{scientificMetadataProviderRequestPreview.summary}</p>
+                <div class="contract-meta">
+                  <div><span>Preview only</span><strong>{scientificMetadataProviderRequestPreview.preview_only ? "yes" : "no"}</strong></div>
+                  <div><span>Metadata provider request preview only</span><strong>{scientificMetadataProviderRequestPreview.metadata_provider_request_preview_only ? "yes" : "no"}</strong></div>
+                  <div><span>Dry run only</span><strong>{scientificMetadataProviderRequestPreview.dry_run_only ? "yes" : "no"}</strong></div>
+                  <div><span>Execution disabled</span><strong>{scientificMetadataProviderRequestPreview.execution_disabled ? "yes" : "no"}</strong></div>
+                  <div><span>No network call</span><strong>{scientificMetadataProviderRequestPreview.no_network_call ? "yes" : "no"}</strong></div>
+                  <div><span>No HTTP client</span><strong>{scientificMetadataProviderRequestPreview.no_http_client ? "yes" : "no"}</strong></div>
+                  <div><span>No API key read</span><strong>{scientificMetadataProviderRequestPreview.no_api_key_read ? "yes" : "no"}</strong></div>
+                  <div><span>No environment read</span><strong>{scientificMetadataProviderRequestPreview.no_environment_read ? "yes" : "no"}</strong></div>
+                  <div><span>No scraping</span><strong>{scientificMetadataProviderRequestPreview.no_scraping ? "yes" : "no"}</strong></div>
+                  <div><span>No connector call</span><strong>{scientificMetadataProviderRequestPreview.no_connector_call ? "yes" : "no"}</strong></div>
+                  <div><span>No source import</span><strong>{scientificMetadataProviderRequestPreview.no_source_import ? "yes" : "no"}</strong></div>
+                  <div><span>No metadata write</span><strong>{scientificMetadataProviderRequestPreview.no_metadata_record_write ? "yes" : "no"}</strong></div>
+                  <div><span>No metadata persistence</span><strong>{scientificMetadataProviderRequestPreview.no_metadata_persistence ? "yes" : "no"}</strong></div>
+                  <div><span>No retrieval execution</span><strong>{scientificMetadataProviderRequestPreview.no_retrieval_execution ? "yes" : "no"}</strong></div>
+                  <div><span>No model loading</span><strong>{scientificMetadataProviderRequestPreview.no_model_loading ? "yes" : "no"}</strong></div>
+                  <div><span>No runtime inference</span><strong>{scientificMetadataProviderRequestPreview.no_runtime_inference ? "yes" : "no"}</strong></div>
+                  <div><span>No LLM call</span><strong>{scientificMetadataProviderRequestPreview.no_llm_call ? "yes" : "no"}</strong></div>
+                  <div><span>No answer generated</span><strong>{scientificMetadataProviderRequestPreview.no_answer_generated ? "yes" : "no"}</strong></div>
+                  <div><span>No Literature Review created</span><strong>{scientificMetadataProviderRequestPreview.no_literature_review_created ? "yes" : "no"}</strong></div>
+                  <div><span>No Evidence Pack created</span><strong>{scientificMetadataProviderRequestPreview.no_evidence_pack_created ? "yes" : "no"}</strong></div>
+                  <div><span>No artifact write</span><strong>{scientificMetadataProviderRequestPreview.no_artifact_write ? "yes" : "no"}</strong></div>
+                  <div><span>No registry status change</span><strong>{scientificMetadataProviderRequestPreview.no_registry_status_change ? "yes" : "no"}</strong></div>
+                  <div><span>No audit write</span><strong>{scientificMetadataProviderRequestPreview.no_audit_write ? "yes" : "no"}</strong></div>
+                </div>
+                {scientificMetadataProviderRequestPreview.unknown_provider_ids.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Unknown provider IDs</h4>
+                    <ul>
+                      {scientificMetadataProviderRequestPreview.unknown_provider_ids.map((providerId) => (
+                        <li>{providerId}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No unknown provider IDs.</p>
+                )}
+                {scientificMetadataProviderRequestPreview.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {scientificMetadataProviderRequestPreview.blockers.map((blocker) => (
+                        <li>{blocker}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No provider request blockers.</p>
+                )}
+                {scientificMetadataProviderRequestPreview.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {scientificMetadataProviderRequestPreview.warnings.map((warning) => (
+                        <li>{warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No provider request warnings.</p>
+                )}
+                {scientificMetadataProviderRequestPreview.next_required_actions.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Next required actions</h4>
+                    <ul>
+                      {scientificMetadataProviderRequestPreview.next_required_actions.map((action) => (
+                        <li>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No next required actions.</p>
+                )}
+              </>
+            ) : (
+              <p>No OpenAlex metadata provider request preview loaded yet.</p>
+            )
+          ) : (
+            <p>No OpenAlex metadata provider request preview loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview">

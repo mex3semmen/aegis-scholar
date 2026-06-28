@@ -104,6 +104,7 @@ Future execution stages:
 ### OpenAlex GUI integration readiness
 
 Phase 113.0 adds a docs-only OpenAlex Metadata GUI Integration Readiness Contract. It defines how future GUI panels may safely integrate the existing OpenAlex metadata commands before any frontend wiring, and it keeps the command flow preview-only, consent-gated, redacted, and non-writing. GUI may use the contract before any frontend wiring, but it must not infer permission from preview output or expose an actual write button yet.
+Phase 114.0 adds the first frontend read-only OpenAlex metadata panel scaffold. It uses the existing Scholar Chat prompt as query input, invokes only `preview_scholar_chat_scientific_metadata_provider_request`, and may display provider-request preview results. It does not wire OpenAlex execution or cache/write gate execution, exposes no write button, and does not add Evidence Pack, citation, Literature Review, answer, provider expansion, persistence, model/runtime/LLM, or retrieval execution behavior.
 
 Reference:
 
