@@ -10968,6 +10968,139 @@ pub struct ScholarChatOpenAlexMetadataExecutionSliceResult {
     pub summary: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatOpenAlexMetadataCacheWriteGateStatus {
+    Blocked,
+    PreviewReady,
+    NeedsCachePreviewConsent,
+    WriteRequestedButBlocked,
+    NoRecords,
+    ExecutionBlocked,
+    ExecutionProviderError,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatOpenAlexMetadataCacheWriteGatePreviewRequest {
+    pub execution_request: ScholarChatOpenAlexMetadataExecutionSliceRequest,
+    #[serde(default)]
+    pub allow_cache_preview: bool,
+    #[serde(default)]
+    pub allow_metadata_cache_write: bool,
+    #[serde(default)]
+    pub allow_metadata_record_write: bool,
+    #[serde(default)]
+    pub allow_audit_write: bool,
+    pub target_cache_scope: Option<String>,
+    pub retention_policy: Option<String>,
+    pub deduplication_policy: Option<String>,
+    pub record_key_policy: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatOpenAlexMetadataCacheWriteGate {
+    pub cache_preview_allowed: bool,
+    pub metadata_cache_write_requested: bool,
+    pub metadata_record_write_requested: bool,
+    pub audit_write_requested: bool,
+    pub can_preview_write_plan: bool,
+    pub can_write_cache: bool,
+    pub can_write_records: bool,
+    pub can_write_audit: bool,
+    pub blocked_reasons: Vec<String>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatOpenAlexMetadataDeduplicationPlan {
+    pub primary_key: String,
+    pub secondary_key: String,
+    pub tie_breaker: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatOpenAlexMetadataRetentionPlan {
+    pub target_cache_scope: String,
+    pub retention_policy: String,
+    pub planned_retention_label: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatOpenAlexMetadataAuditBoundary {
+    pub audit_write_requested: bool,
+    pub can_write_audit: bool,
+    pub no_audit_sink_configured: bool,
+    pub no_audit_entry_written: bool,
+    pub future_audit_requirements: Vec<String>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatOpenAlexMetadataRecordWritePreview {
+    pub stable_record_key: String,
+    pub provider_id: String,
+    pub provider_work_key: String,
+    pub doi_normalized: Option<String>,
+    pub title_normalized: String,
+    pub source_label: String,
+    pub evidence_candidate_hint: String,
+    pub is_safe_for_evidence_candidate: bool,
+    pub cache_key_preview: String,
+    pub deduplication_key_preview: String,
+    pub future_write_eligible: bool,
+    pub write_blocked_reasons: Vec<String>,
+    pub would_create_cache_record: bool,
+    pub would_update_existing_record: bool,
+    pub would_write_audit_entry: bool,
+    pub persisted: bool,
+    pub citation_emitted: bool,
+    pub evidence_pack_created: bool,
+    pub literature_review_created: bool,
+    pub artifact_written: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatOpenAlexMetadataCacheWriteGatePreview {
+    pub status: ScholarChatOpenAlexMetadataCacheWriteGateStatus,
+    pub normalized_query: String,
+    pub selected_provider_id: String,
+    pub execution_status: ScholarChatOpenAlexMetadataExecutionSliceStatus,
+    pub execution_attempted: bool,
+    pub provider_call_attempted: bool,
+    pub execution_result_summary: ScholarChatOpenAlexMetadataResultSummary,
+    pub allow_cache_preview: bool,
+    pub allow_metadata_cache_write: bool,
+    pub allow_metadata_record_write: bool,
+    pub allow_audit_write: bool,
+    pub target_cache_scope: String,
+    pub retention_policy: String,
+    pub deduplication_policy: String,
+    pub record_key_policy: String,
+    pub cache_write_gate: ScholarChatOpenAlexMetadataCacheWriteGate,
+    pub deduplication_plan: ScholarChatOpenAlexMetadataDeduplicationPlan,
+    pub retention_plan: ScholarChatOpenAlexMetadataRetentionPlan,
+    pub audit_boundary: ScholarChatOpenAlexMetadataAuditBoundary,
+    pub record_write_previews: Vec<ScholarChatOpenAlexMetadataRecordWritePreview>,
+    pub eligible_record_count: usize,
+    pub ineligible_record_count: usize,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub next_required_actions: Vec<String>,
+    pub no_cache_file_created: bool,
+    pub no_metadata_record_write: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+    pub no_artifact_write: bool,
+    pub no_evidence_pack_created: bool,
+    pub no_literature_review_created: bool,
+    pub no_citation_emission: bool,
+    pub no_persistence: bool,
+    pub summary: String,
+}
+
 fn scientific_metadata_supported_providers() -> Vec<String> {
     vec![
         "openalex".to_string(),
@@ -22629,6 +22762,529 @@ pub fn run_scholar_chat_openalex_metadata_execution_slice(
 ) -> AegisResult<ScholarChatOpenAlexMetadataExecutionSliceResult> {
     let transport = ReqwestOpenAlexMetadataExecutionSliceTransport;
     run_scholar_chat_openalex_metadata_execution_slice_with_transport(root.into(), request, &transport)
+}
+
+fn normalize_openalex_metadata_cache_write_gate_label(
+    value: Option<String>,
+    default: &str,
+) -> (String, bool) {
+    match value {
+        Some(raw) => {
+            let normalized = raw.trim().to_lowercase();
+            if normalized.is_empty() {
+                (default.to_string(), false)
+            } else if normalized
+                .chars()
+                .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '_' | '-' | '.'))
+            {
+                (normalized, false)
+            } else {
+                (default.to_string(), true)
+            }
+        }
+        None => (default.to_string(), false),
+    }
+}
+
+fn openalex_metadata_cache_write_gate_record_sort_key(
+    record: &ScholarChatOpenAlexMetadataExecutionSliceRecord,
+) -> (String, String, String, String) {
+    (
+        record.stable_record_key.clone(),
+        record.doi_normalized.clone().unwrap_or_default(),
+        record.provider_work_key.clone(),
+        record.title_normalized.clone(),
+    )
+}
+
+fn openalex_metadata_cache_write_gate_deduplication_key_preview(
+    record: &ScholarChatOpenAlexMetadataExecutionSliceRecord,
+    record_key_policy: &str,
+) -> String {
+    let doi_fragment = record
+        .doi_normalized
+        .clone()
+        .unwrap_or_else(|| "doi:none".to_string());
+    format!(
+        "record_key_policy={record_key_policy}; stable_record_key={}; doi={doi_fragment}; provider_work_key={}",
+        record.stable_record_key,
+        record.provider_work_key
+    )
+}
+
+fn openalex_metadata_cache_write_gate_record_preview(
+    record: &ScholarChatOpenAlexMetadataExecutionSliceRecord,
+    target_cache_scope: &str,
+    record_key_policy: &str,
+    cache_preview_allowed: bool,
+    allow_metadata_cache_write: bool,
+    allow_metadata_record_write: bool,
+    allow_audit_write: bool,
+    stable_record_seen: bool,
+    doi_seen: bool,
+) -> ScholarChatOpenAlexMetadataRecordWritePreview {
+    let mut write_blocked_reasons = Vec::new();
+    if !cache_preview_allowed {
+        push_unique_text(&mut write_blocked_reasons, "cache_preview_consent_missing");
+    }
+    if allow_metadata_cache_write {
+        push_unique_text(
+            &mut write_blocked_reasons,
+            "metadata_cache_write_requested_but_blocked",
+        );
+    }
+    if allow_metadata_record_write {
+        push_unique_text(
+            &mut write_blocked_reasons,
+            "metadata_record_write_requested_but_blocked",
+        );
+    }
+    if allow_audit_write {
+        push_unique_text(&mut write_blocked_reasons, "audit_write_requested_but_blocked");
+    }
+    if stable_record_seen {
+        push_unique_text(&mut write_blocked_reasons, "duplicate_stable_record_key");
+    }
+    if doi_seen {
+        push_unique_text(&mut write_blocked_reasons, "duplicate_normalized_doi");
+    }
+    if !record.is_safe_for_evidence_candidate {
+        push_unique_text(
+            &mut write_blocked_reasons,
+            "record_not_safe_for_future_evidence_candidate",
+        );
+    }
+    let cache_key_preview = format!("{target_cache_scope}::{}", record.stable_record_key);
+    let deduplication_key_preview = openalex_metadata_cache_write_gate_deduplication_key_preview(
+        record,
+        record_key_policy,
+    );
+    let future_write_eligible = write_blocked_reasons.is_empty();
+    let summary = if future_write_eligible {
+        format!(
+            "OpenAlex record {} is ready later for a future cache/write plan.",
+            record.stable_record_key
+        )
+    } else {
+        format!(
+            "OpenAlex record {} remains blocked for future cache/write planning.",
+            record.stable_record_key
+        )
+    };
+
+    ScholarChatOpenAlexMetadataRecordWritePreview {
+        stable_record_key: record.stable_record_key.clone(),
+        provider_id: record.provider_id.clone(),
+        provider_work_key: record.provider_work_key.clone(),
+        doi_normalized: record.doi_normalized.clone(),
+        title_normalized: record.title_normalized.clone(),
+        source_label: record.source_label.clone(),
+        evidence_candidate_hint: record.evidence_candidate_hint.clone(),
+        is_safe_for_evidence_candidate: record.is_safe_for_evidence_candidate,
+        cache_key_preview,
+        deduplication_key_preview,
+        future_write_eligible,
+        write_blocked_reasons,
+        would_create_cache_record: false,
+        would_update_existing_record: false,
+        would_write_audit_entry: false,
+        persisted: false,
+        citation_emitted: false,
+        evidence_pack_created: false,
+        literature_review_created: false,
+        artifact_written: false,
+        summary,
+    }
+}
+
+fn preview_scholar_chat_openalex_metadata_cache_write_gate_with_transport<
+    T: OpenAlexMetadataExecutionSliceTransport,
+>(
+    root: PathBuf,
+    request: ScholarChatOpenAlexMetadataCacheWriteGatePreviewRequest,
+    transport: &T,
+) -> AegisResult<ScholarChatOpenAlexMetadataCacheWriteGatePreview> {
+    let root = root;
+    let execution_result = run_scholar_chat_openalex_metadata_execution_slice_with_transport(
+        root,
+        request.execution_request.clone(),
+        transport,
+    )?;
+
+    let normalized_query = execution_result.normalized_query.clone();
+    let selected_provider_id = execution_result.selected_provider_id.clone();
+    let execution_status = execution_result.status.clone();
+    let execution_attempted = execution_result.result_summary.execution_attempted;
+    let provider_call_attempted = execution_result.result_summary.provider_call_attempted;
+    let execution_result_summary = execution_result.result_summary.clone();
+    let allow_cache_preview = request.allow_cache_preview;
+    let allow_metadata_cache_write = request.allow_metadata_cache_write;
+    let allow_metadata_record_write = request.allow_metadata_record_write;
+    let allow_audit_write = request.allow_audit_write;
+
+    let (target_cache_scope, target_cache_scope_invalid) =
+        normalize_openalex_metadata_cache_write_gate_label(request.target_cache_scope, "session_preview");
+    let (retention_policy, retention_policy_invalid) =
+        normalize_openalex_metadata_cache_write_gate_label(
+            request.retention_policy,
+            "ephemeral_preview_only",
+        );
+    let (deduplication_policy, deduplication_policy_invalid) =
+        normalize_openalex_metadata_cache_write_gate_label(
+            request.deduplication_policy,
+            "stable_record_key_then_doi",
+        );
+    let (record_key_policy, record_key_policy_invalid) =
+        normalize_openalex_metadata_cache_write_gate_label(
+            request.record_key_policy,
+            "provider_and_work_key",
+        );
+
+    let blockers = execution_result.blockers.clone();
+    let mut warnings = execution_result.warnings.clone();
+    let mut next_required_actions = execution_result.next_required_actions.clone();
+    let mut local_blockers = Vec::new();
+
+    if target_cache_scope_invalid {
+        push_unique_text(
+            &mut local_blockers,
+            "invalid_target_cache_scope: The cache scope must be a safe non-path label.",
+        );
+    }
+    if retention_policy_invalid {
+        push_unique_text(
+            &mut local_blockers,
+            "invalid_retention_policy: The retention policy must be a safe non-path label.",
+        );
+    }
+    if deduplication_policy_invalid {
+        push_unique_text(
+            &mut local_blockers,
+            "invalid_deduplication_policy: The deduplication policy must be a safe non-path label.",
+        );
+    }
+    if record_key_policy_invalid {
+        push_unique_text(
+            &mut local_blockers,
+            "invalid_record_key_policy: The record-key policy must be a safe non-path label.",
+        );
+    }
+
+    let execution_gate_ready = matches!(execution_status, ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed);
+
+    if !allow_cache_preview {
+        push_unique_text(
+            &mut local_blockers,
+            "cache_preview_consent_missing: The cache/write gate preview remains disabled without preview consent.",
+        );
+    }
+
+    let mut record_write_previews = Vec::new();
+    if execution_gate_ready && !execution_result.metadata_records.is_empty() {
+        let mut sorted_records = execution_result.metadata_records.clone();
+        sorted_records.sort_by(|left, right| {
+            openalex_metadata_cache_write_gate_record_sort_key(left).cmp(&openalex_metadata_cache_write_gate_record_sort_key(right))
+        });
+
+        let mut seen_stable_keys = BTreeSet::new();
+        let mut seen_dois = BTreeSet::new();
+        for record in &sorted_records {
+            let stable_record_seen = !seen_stable_keys.insert(record.stable_record_key.clone());
+            let doi_seen = record
+                .doi_normalized
+                .as_ref()
+                .map(|value| !seen_dois.insert(value.clone()))
+                .unwrap_or(false);
+            record_write_previews.push(openalex_metadata_cache_write_gate_record_preview(
+                record,
+                &target_cache_scope,
+                &record_key_policy,
+                allow_cache_preview,
+                allow_metadata_cache_write,
+                allow_metadata_record_write,
+                allow_audit_write,
+                stable_record_seen,
+                doi_seen,
+            ));
+        }
+    }
+
+    let cache_write_gate_summary = ScholarChatOpenAlexMetadataCacheWriteGate {
+        cache_preview_allowed: allow_cache_preview,
+        metadata_cache_write_requested: allow_metadata_cache_write,
+        metadata_record_write_requested: allow_metadata_record_write,
+        audit_write_requested: allow_audit_write,
+        can_preview_write_plan: allow_cache_preview && execution_gate_ready,
+        can_write_cache: false,
+        can_write_records: false,
+        can_write_audit: false,
+        blocked_reasons: local_blockers.clone(),
+        summary: if allow_cache_preview {
+            if execution_gate_ready {
+                "OpenAlex cache/write gate preview can be inspected later, but all write targets remain disabled.".to_string()
+            } else {
+                "OpenAlex cache/write gate preview cannot proceed because the OpenAlex execution slice is not ready later.".to_string()
+            }
+        } else {
+            "OpenAlex cache/write gate preview is disabled until preview consent is granted.".to_string()
+        },
+    };
+
+    let deduplication_plan = ScholarChatOpenAlexMetadataDeduplicationPlan {
+        primary_key: "stable_record_key".to_string(),
+        secondary_key: "doi_normalized".to_string(),
+        tie_breaker: "provider_work_key / title_normalized".to_string(),
+        summary: "Future cache/write planning would prefer stable_record_key, then doi_normalized, then provider_work_key/title_normalized; no lookup is performed.".to_string(),
+    };
+    let retention_plan = ScholarChatOpenAlexMetadataRetentionPlan {
+        target_cache_scope: target_cache_scope.clone(),
+        retention_policy: retention_policy.clone(),
+        planned_retention_label: format!("{target_cache_scope}::{retention_policy}"),
+        summary: "Retention planning stays preview-only and does not assign a cache file path or TTL timestamp.".to_string(),
+    };
+    let audit_boundary = ScholarChatOpenAlexMetadataAuditBoundary {
+        audit_write_requested: allow_audit_write,
+        can_write_audit: false,
+        no_audit_sink_configured: true,
+        no_audit_entry_written: true,
+        future_audit_requirements: vec![
+            "A future audit sink and explicit audit gate would be required later.".to_string(),
+        ],
+        summary: if allow_audit_write {
+            "Audit writes remain blocked in this preview and would need a future audit sink.".to_string()
+        } else {
+            "No audit sink is configured and no audit entry is written in this preview.".to_string()
+        },
+    };
+
+    if target_cache_scope_invalid || retention_policy_invalid || deduplication_policy_invalid || record_key_policy_invalid {
+        push_unique_text(
+            &mut warnings,
+            "One or more cache/write gate policy labels were normalized to safe defaults.",
+        );
+    }
+
+    if !allow_cache_preview {
+        push_unique_text(
+            &mut next_required_actions,
+            "Grant cache preview consent before previewing future cache/write planning.",
+        );
+    }
+
+    if allow_metadata_cache_write || allow_metadata_record_write || allow_audit_write {
+        push_unique_text(
+            &mut local_blockers,
+            "write_requested_but_blocked: Future cache, record, and audit writes remain disabled in this preview.",
+        );
+        push_unique_text(
+            &mut next_required_actions,
+            "Clear any future write requests before treating this preview as ready later.",
+        );
+    }
+
+    if execution_gate_ready && execution_result.metadata_records.is_empty() {
+        push_unique_text(
+            &mut local_blockers,
+            "no_records: The OpenAlex execution slice returned no normalized records to plan for future cache or write eligibility.",
+        );
+        push_unique_text(
+            &mut next_required_actions,
+            "Wait for at least one normalized OpenAlex metadata record before future cache/write planning can be marked ready later.",
+        );
+    }
+
+    let execution_provider_error = matches!(
+        execution_status,
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderError
+            | ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderRateLimited
+            | ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderTimeout
+            | ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderParseError
+    );
+    let execution_blocked = matches!(
+        execution_status,
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::Blocked
+            | ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsQuery
+            | ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsExecutionConsent
+            | ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsNetworkConsent
+            | ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsOpenAlexTermsAcceptance
+            | ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsOpenAlexKeyOrNoKeyConsent
+            | ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsOpenAlexProviderSelection
+            | ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection
+            | ScholarChatOpenAlexMetadataExecutionSliceStatus::RequestPreviewBlocked
+    );
+
+    let status = if target_cache_scope_invalid
+        || retention_policy_invalid
+        || deduplication_policy_invalid
+        || record_key_policy_invalid
+    {
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::Blocked
+    } else if execution_provider_error {
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::ExecutionProviderError
+    } else if execution_blocked {
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::ExecutionBlocked
+    } else if !allow_cache_preview {
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::NeedsCachePreviewConsent
+    } else if allow_metadata_cache_write || allow_metadata_record_write || allow_audit_write {
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::WriteRequestedButBlocked
+    } else if execution_result.metadata_records.is_empty() {
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::NoRecords
+    } else {
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::PreviewReady
+    };
+
+    let execution_result_status_label = openalex_metadata_execution_slice_provider_status_label(&execution_status).to_string();
+
+    let mut blockers = {
+        let mut combined = blockers;
+        combined.extend(local_blockers);
+        combined
+    };
+    let mut warnings = warnings;
+    let mut next_required_actions = next_required_actions;
+
+    match status {
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::Blocked => {
+            push_unique_text(
+                &mut blockers,
+                "blocked: The cache/write gate preview received an invalid safe-label input.",
+            );
+            push_unique_text(
+                &mut next_required_actions,
+                "Replace invalid cache/write gate labels with safe non-path labels and retry the preview.",
+            );
+        }
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::NeedsCachePreviewConsent => {
+            push_unique_text(
+                &mut warnings,
+                "Cache preview consent is missing, so the cache/write gate preview cannot be treated as ready later.",
+            );
+        }
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::WriteRequestedButBlocked => {
+            push_unique_text(
+                &mut warnings,
+                "Requested cache, record, or audit writes remain blocked in this preview-only phase.",
+            );
+        }
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::NoRecords => {
+            push_unique_text(
+                &mut warnings,
+                "The OpenAlex execution slice produced no records to plan for future write eligibility.",
+            );
+        }
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::ExecutionBlocked => {
+            push_unique_text(
+                &mut blockers,
+                "execution_blocked: The OpenAlex execution slice was blocked before normalized records were available.",
+            );
+        }
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::ExecutionProviderError => {
+            push_unique_text(
+                &mut blockers,
+                "execution_provider_error: The OpenAlex execution slice reported a provider error before write planning.",
+            );
+        }
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::PreviewReady => {
+            push_unique_text(
+                &mut next_required_actions,
+                "A future cache/write implementation can use the normalized record contract without changing this preview.",
+            );
+        }
+    }
+
+    let eligible_record_count = record_write_previews
+        .iter()
+        .filter(|preview| preview.future_write_eligible)
+        .count();
+    let ineligible_record_count = record_write_previews.len().saturating_sub(eligible_record_count);
+    let summary = match status {
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::Blocked => {
+            "OpenAlex cache/write gate preview is blocked until safe cache/write labels are provided.".to_string()
+        }
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::NeedsCachePreviewConsent => {
+            "OpenAlex cache/write gate preview needs cache preview consent before future write planning can continue.".to_string()
+        }
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::WriteRequestedButBlocked => {
+            "OpenAlex cache/write gate preview blocks requested writes while keeping the phase preview-only.".to_string()
+        }
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::NoRecords => {
+            "OpenAlex cache/write gate preview found no normalized records to plan for future cache or write eligibility.".to_string()
+        }
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::ExecutionBlocked => {
+            format!(
+                "OpenAlex cache/write gate preview is blocked because the execution slice stayed {}.",
+                execution_result_status_label
+            )
+        }
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::ExecutionProviderError => {
+            format!(
+                "OpenAlex cache/write gate preview could not continue because the execution slice reported {}.",
+                execution_result_status_label
+            )
+        }
+        ScholarChatOpenAlexMetadataCacheWriteGateStatus::PreviewReady => {
+            format!(
+                "OpenAlex cache/write gate preview is ready later for {eligible_record_count} eligible record(s) and {ineligible_record_count} ineligible record(s)."
+            )
+        }
+    };
+
+    Ok(ScholarChatOpenAlexMetadataCacheWriteGatePreview {
+        status,
+        normalized_query,
+        selected_provider_id,
+        execution_status,
+        execution_attempted,
+        provider_call_attempted,
+        execution_result_summary,
+        allow_cache_preview,
+        allow_metadata_cache_write,
+        allow_metadata_record_write,
+        allow_audit_write,
+        target_cache_scope,
+        retention_policy,
+        deduplication_policy,
+        record_key_policy,
+        cache_write_gate: ScholarChatOpenAlexMetadataCacheWriteGate {
+            cache_preview_allowed: allow_cache_preview,
+            metadata_cache_write_requested: allow_metadata_cache_write,
+            metadata_record_write_requested: allow_metadata_record_write,
+            audit_write_requested: allow_audit_write,
+            can_preview_write_plan: allow_cache_preview && execution_gate_ready,
+            can_write_cache: false,
+            can_write_records: false,
+            can_write_audit: false,
+            blocked_reasons: blockers.clone(),
+            summary: cache_write_gate_summary.summary,
+        },
+        deduplication_plan,
+        retention_plan,
+        audit_boundary,
+        record_write_previews,
+        eligible_record_count,
+        ineligible_record_count,
+        blockers,
+        warnings,
+        next_required_actions,
+        no_cache_file_created: true,
+        no_metadata_record_write: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+        no_artifact_write: true,
+        no_evidence_pack_created: true,
+        no_literature_review_created: true,
+        no_citation_emission: true,
+        no_persistence: true,
+        summary,
+    })
+}
+
+pub fn preview_scholar_chat_openalex_metadata_cache_write_gate(
+    root: impl Into<PathBuf>,
+    request: ScholarChatOpenAlexMetadataCacheWriteGatePreviewRequest,
+) -> AegisResult<ScholarChatOpenAlexMetadataCacheWriteGatePreview> {
+    let transport = ReqwestOpenAlexMetadataExecutionSliceTransport;
+    preview_scholar_chat_openalex_metadata_cache_write_gate_with_transport(root.into(), request, &transport)
 }
 
 #[cfg(test)]
@@ -37428,6 +38084,51 @@ fn main() {
     }
 
     #[test]
+    fn scholar_chat_openalex_metadata_cache_write_gate_tauri_wiring_is_present_once() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
+        assert!(
+            source.contains(
+                "preview_scholar_chat_openalex_metadata_cache_write_gate as preview_scholar_chat_openalex_metadata_cache_write_gate_impl"
+            )
+        );
+        assert!(
+            source.contains(
+                "#[tauri::command]\nfn preview_scholar_chat_openalex_metadata_cache_write_gate("
+            )
+        );
+        assert!(
+            source.contains(
+                "preview_scholar_chat_openalex_metadata_cache_write_gate_impl(root, request).map_err(to_user_error)"
+            )
+        );
+        assert_eq!(
+            source
+                .matches(
+                    "preview_scholar_chat_openalex_metadata_cache_write_gate_impl(root, request).map_err(to_user_error)"
+                )
+                .count(),
+            1
+        );
+        assert_eq!(
+            source
+                .matches("preview_scholar_chat_openalex_metadata_cache_write_gate,")
+                .count(),
+            1
+        );
+        let execution_slice_index = source
+            .find("run_scholar_chat_openalex_metadata_execution_slice,")
+            .unwrap();
+        let cache_write_gate_index = source
+            .find("preview_scholar_chat_openalex_metadata_cache_write_gate,")
+            .unwrap();
+        let runtime_bridge_index = source
+            .find("preview_scholar_chat_runtime_diagnostic_bridge,")
+            .unwrap();
+        assert!(execution_slice_index < cache_write_gate_index);
+        assert!(cache_write_gate_index < runtime_bridge_index);
+    }
+
+    #[test]
     fn scholar_chat_openalex_metadata_execution_slice_dependency_guard_is_minimal_and_explicit() {
         let cargo_toml = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
         let reqwest_line = r#"reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }"#;
@@ -37553,6 +38254,28 @@ fn main() {
         request
     }
 
+    fn openalex_metadata_cache_write_gate_request_with<F>(
+        query: &str,
+        mutate: F,
+    ) -> ScholarChatOpenAlexMetadataCacheWriteGatePreviewRequest
+    where
+        F: FnOnce(&mut ScholarChatOpenAlexMetadataCacheWriteGatePreviewRequest),
+    {
+        let mut request = ScholarChatOpenAlexMetadataCacheWriteGatePreviewRequest {
+            execution_request: openalex_metadata_execution_slice_request(query),
+            allow_cache_preview: true,
+            allow_metadata_cache_write: false,
+            allow_metadata_record_write: false,
+            allow_audit_write: false,
+            target_cache_scope: Some("session_preview".to_string()),
+            retention_policy: Some("ephemeral_preview_only".to_string()),
+            deduplication_policy: Some("stable_record_key_then_doi".to_string()),
+            record_key_policy: Some("provider_and_work_key".to_string()),
+        };
+        mutate(&mut request);
+        request
+    }
+
     fn assert_openalex_metadata_execution_slice_output_is_redacted(
         preview: &ScholarChatOpenAlexMetadataExecutionSliceResult,
         forbidden_values: &[&str],
@@ -37561,6 +38284,18 @@ fn main() {
         let debug = format!("{preview:?}");
         let json = serde_json::to_string_pretty(preview).unwrap();
         for forbidden in forbidden_values.iter().chain(forbidden_fragments.iter()) {
+            assert!(!debug.contains(forbidden), "{forbidden}");
+            assert!(!json.contains(forbidden), "{forbidden}");
+        }
+    }
+
+    fn assert_openalex_metadata_cache_write_gate_output_is_path_free(
+        preview: &ScholarChatOpenAlexMetadataCacheWriteGatePreview,
+        forbidden_fragments: &[&str],
+    ) {
+        let debug = format!("{preview:?}");
+        let json = serde_json::to_string_pretty(preview).unwrap();
+        for forbidden in forbidden_fragments {
             assert!(!debug.contains(forbidden), "{forbidden}");
             assert!(!json.contains(forbidden), "{forbidden}");
         }
@@ -38684,6 +39419,152 @@ fn main() {
                 "from_publication_date:2020-01-01",
                 "to_publication_date:2024-12-31",
             ],
+        );
+    }
+
+    #[test]
+    fn scholar_chat_openalex_metadata_cache_write_gate_preview_blocks_invalid_scope_without_path_leakage() {
+        let temp = tempfile::tempdir().unwrap();
+        let before_entries = count_entries_recursively(temp.path());
+        let transport = FakeOpenAlexMetadataExecutionSliceTransport::success(
+            r#"{"results":[{"id":"https://openalex.org/W1","display_name":"Example"}]}"#,
+        );
+        let preview = preview_scholar_chat_openalex_metadata_cache_write_gate_with_transport(
+            temp.path().to_path_buf(),
+            openalex_metadata_cache_write_gate_request_with("Signalentdeckung", |request| {
+                request.target_cache_scope = Some("../cache/scope".to_string());
+            }),
+            &transport,
+        )
+        .unwrap();
+
+        assert_eq!(preview.status, ScholarChatOpenAlexMetadataCacheWriteGateStatus::Blocked);
+        assert_eq!(transport.calls(), 1);
+        assert_eq!(before_entries, count_entries_recursively(temp.path()));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(preview.target_cache_scope, "session_preview");
+        assert_openalex_metadata_cache_write_gate_output_is_path_free(
+            &preview,
+            &["../cache/scope", "cache/scope", ".aegis", "dist", "models/"],
+        );
+    }
+
+    #[test]
+    fn scholar_chat_openalex_metadata_cache_write_gate_preview_requires_consent_and_stays_write_free() {
+        let temp = tempfile::tempdir().unwrap();
+        let before_entries = count_entries_recursively(temp.path());
+        let transport = FakeOpenAlexMetadataExecutionSliceTransport::success(
+            r#"{"results":[{"id":"https://openalex.org/W1","display_name":"Example"}]}"#,
+        );
+        let preview = preview_scholar_chat_openalex_metadata_cache_write_gate_with_transport(
+            temp.path().to_path_buf(),
+            openalex_metadata_cache_write_gate_request_with("Signalentdeckung", |request| {
+                request.allow_cache_preview = false;
+            }),
+            &transport,
+        )
+        .unwrap();
+
+        assert_eq!(
+            preview.status,
+            ScholarChatOpenAlexMetadataCacheWriteGateStatus::NeedsCachePreviewConsent
+        );
+        assert_eq!(transport.calls(), 1);
+        assert_eq!(before_entries, count_entries_recursively(temp.path()));
+        assert!(!temp.path().join(".aegis").exists());
+        assert!(
+            preview
+                .cache_write_gate
+                .blocked_reasons
+                .iter()
+                .any(|value| value.contains("cache_preview_consent_missing"))
+        );
+        assert!(!preview.cache_write_gate.can_write_cache);
+        assert!(!preview.cache_write_gate.can_write_records);
+        assert!(!preview.cache_write_gate.can_write_audit);
+        assert_openalex_metadata_cache_write_gate_output_is_path_free(
+            &preview,
+            &[".aegis", "dist", "models/", "\\models\\", "cache/scope", "../cache/scope"],
+        );
+    }
+
+    #[test]
+    fn scholar_chat_openalex_metadata_cache_write_gate_preview_ready_is_deterministic_and_keeps_write_targets_disabled() {
+        let temp = tempfile::tempdir().unwrap();
+        let transport = FakeOpenAlexMetadataExecutionSliceTransport::success(
+            r#"{
+                "results": [
+                    {
+                        "id": "https://openalex.org/W2",
+                        "doi": "https://doi.org/10.1000/example-2",
+                        "display_name": "Second example",
+                        "publication_year": 2024
+                    },
+                    {
+                        "id": "https://openalex.org/W1",
+                        "doi": "https://doi.org/10.1000/example-1",
+                        "display_name": "First example",
+                        "publication_year": 2023
+                    }
+                ]
+            }"#,
+        );
+        let request = openalex_metadata_cache_write_gate_request_with("Signalentdeckung", |request| {
+            request.allow_cache_preview = true;
+        });
+
+        let preview = preview_scholar_chat_openalex_metadata_cache_write_gate_with_transport(
+            temp.path().to_path_buf(),
+            request.clone(),
+            &transport,
+        )
+        .unwrap();
+        let preview_repeat = preview_scholar_chat_openalex_metadata_cache_write_gate_with_transport(
+            temp.path().to_path_buf(),
+            request,
+            &transport,
+        )
+        .unwrap();
+
+        assert_eq!(preview.status, ScholarChatOpenAlexMetadataCacheWriteGateStatus::PreviewReady);
+        assert_eq!(preview, preview_repeat);
+        assert_eq!(transport.calls(), 2);
+        assert_eq!(preview.eligible_record_count, 2);
+        assert_eq!(preview.ineligible_record_count, 0);
+        assert_eq!(preview.record_write_previews.len(), 2);
+        let stable_keys = preview
+            .record_write_previews
+            .iter()
+            .map(|record| record.stable_record_key.clone())
+            .collect::<Vec<_>>();
+        let mut sorted_keys = stable_keys.clone();
+        sorted_keys.sort();
+        assert_eq!(stable_keys, sorted_keys);
+        assert!(preview.record_write_previews.iter().all(|record| {
+            record.future_write_eligible
+                && !record.would_create_cache_record
+                && !record.would_update_existing_record
+                && !record.would_write_audit_entry
+                && !record.persisted
+                && !record.citation_emitted
+                && !record.evidence_pack_created
+                && !record.literature_review_created
+                && !record.artifact_written
+        }));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(count_entries_recursively(temp.path()), 0);
+        assert!(preview.no_cache_file_created);
+        assert!(preview.no_metadata_record_write);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_literature_review_created);
+        assert!(preview.no_citation_emission);
+        assert!(preview.no_persistence);
+        assert_openalex_metadata_cache_write_gate_output_is_path_free(
+            &preview,
+            &[".aegis", "dist", "models/", "\\models\\"],
         );
     }
 }

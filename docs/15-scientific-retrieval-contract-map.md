@@ -96,6 +96,7 @@ Future execution stages:
 | `preview_scholar_chat_scientific_metadata_query_plan` | Plans query templates, filters, and provider-family partitioning. | Query-plan panel. | GUI-ready preview | No provider execution or writes. |
 | `preview_scholar_chat_scientific_metadata_provider_request` | Plans provider request templates, methods, parameters, headers, and bodies. | Provider request preview panel. | GUI-ready preview | No URL building, no request emission, no provider calls. |
 | `run_scholar_chat_openalex_metadata_execution_slice` | Executes the consent-gated OpenAlex-only metadata execution slice. | OpenAlex execution panel. | Future execution candidate | OpenAlex only; disabled by default; explicit developer/advanced action; no writes by default. |
+| `preview_scholar_chat_openalex_metadata_cache_write_gate` | Plans cache scope, retention, deduplication, and future record/audit write boundaries from normalized OpenAlex execution output. | OpenAlex cache/write gate preview panel. | GUI-ready preview | No cache writes, no record writes, no audit writes. |
 
 ### Runtime diagnostics
 
