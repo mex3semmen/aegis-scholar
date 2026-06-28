@@ -218,6 +218,8 @@ The intended next execution path after this documentation phase is:
 - no Crossref / PubMed / ERIC execution
 - no APA PsycNet / PsycINFO execution
 - GUI treats this as an explicit developer / advanced action until a later product UI phase
+- Phase 110.1: OpenAlex Metadata Execution Slice Guard Hardening
+- confirms the first execution slice remains explicit, OpenAlex-only, offline-tested, redacted, in-memory, and non-writing
 
 Later phases should add:
 
