@@ -227,11 +227,18 @@ The intended next execution path after this documentation phase is:
 - GUI may use the summary and record hints for display, not for automatic Evidence Pack creation
 - Crossref / PubMed / ERIC remain later providers
 - APA PsycNet / PsycINFO remain institutional / manual boundary only
+- Phase 112.0: OpenAlex Metadata Cache/Write Gate Preview
+- previews future write eligibility, deduplication, retention, record-write, and audit boundaries only
+- remains preview-only, in-memory, redacted, and non-writing
+- GUI may show write-readiness diagnostics, but no actual write button is exposed yet
+- no cache files, metadata writes, registry writes, audit writes, artifacts, Evidence Packs, Literature Reviews, citations, retrieval execution, provider expansion, persistence, model/runtime/LLM behavior, or answer generation
+- Crossref / PubMed / ERIC remain later providers
+- APA PsycNet / PsycINFO remain institutional / manual boundary only
 
 Later phases should add:
 
 - OpenAlex guard hardening
-- optional cache / write gate
+- future explicit cache/write execution gate after preview hardening
 - Crossref / PubMed / ERIC as later providers
 - GUI integration using preview contracts
 
