@@ -9697,6 +9697,1306 @@ pub fn preview_scholar_chat_answer_readiness(
     })
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificMetadataExecutionBoundaryStatus {
+    Blocked,
+    ExecutionBoundaryReady,
+    ExecutionRequestedButDisabled,
+    NeedsMetadataConnectorPlan,
+    NeedsProviderSelection,
+    NeedsProviderTermsReview,
+    NeedsNetworkPermission,
+    NeedsWritePermission,
+    NeedsCitationMetadata,
+    NeedsEvidenceSources,
+    NeedsDisambiguation,
+    UnknownConcept,
+    NeedsPsychologyScope,
+    NeedsSourceFamily,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificMetadataExecutionBoundaryStrategy {
+    DryRunOnly,
+    ProviderPlanOnly,
+    Blocked,
+    ExecutionGatePending,
+    MetadataWriteGatePending,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatScientificMetadataExecutionBoundaryStepKind {
+    EvidencePackAlignment,
+    MetadataConnectorAlignment,
+    ProviderSelection,
+    ProviderTermsBoundary,
+    NetworkPermissionGate,
+    ProviderRequestPlanning,
+    MetadataWriteGate,
+    SafetyBoundaryCheck,
+    DownstreamEvidencePackAlignment,
+    DownstreamLiteratureReviewAlignment,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificMetadataExecutionBoundaryPreviewRequest {
+    pub query: String,
+    pub mode: Option<String>,
+    pub course_context: Option<String>,
+    pub context_tags: Option<Vec<String>>,
+    pub selected_local_source_ids: Option<Vec<String>>,
+    pub expected_source_kinds: Option<Vec<String>>,
+    pub preferred_metadata_sources: Option<Vec<String>>,
+    pub preferred_psychology_source_families: Option<Vec<String>>,
+    pub methodology_hints: Option<Vec<String>>,
+    pub population_hints: Option<Vec<String>>,
+    pub topic_area_hints: Option<Vec<String>>,
+    pub evidence_goal: Option<String>,
+    pub claim_scope: Option<Vec<String>>,
+    pub citation_style: Option<String>,
+    pub max_results_per_source: Option<u32>,
+    pub require_open_access: Option<bool>,
+    pub require_doi: Option<bool>,
+    pub year_from: Option<u16>,
+    pub year_to: Option<u16>,
+    pub execution_requested: bool,
+    pub allow_network: bool,
+    pub allow_provider_terms_unreviewed: bool,
+    pub allow_metadata_record_write: bool,
+    pub provider_override: Option<String>,
+    pub dry_run_label: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificMetadataExecutionBoundaryProviderSelectionPlan {
+    pub requested_provider_ids: Vec<String>,
+    pub supported_provider_ids: Vec<String>,
+    pub selected_provider_ids: Vec<String>,
+    pub unknown_provider_ids: Vec<String>,
+    pub needs_provider_selection: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificMetadataExecutionBoundaryProviderGate {
+    pub provider_id: String,
+    pub provider_label: String,
+    pub connector_kind: String,
+    pub selected: bool,
+    pub requires_network_permission: bool,
+    pub requires_terms_review: bool,
+    pub requires_institutional_access_review_later: bool,
+    pub requires_write_permission: bool,
+    pub can_run_now: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificMetadataExecutionBoundaryProviderGatePlan {
+    pub supported_provider_ids: Vec<String>,
+    pub selected_provider_ids: Vec<String>,
+    pub supported_provider_count: usize,
+    pub selected_provider_count: usize,
+    pub provider_gates: Vec<ScholarChatScientificMetadataExecutionBoundaryProviderGate>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificMetadataExecutionBoundaryProviderRequestPlan {
+    pub selected_provider_ids: Vec<String>,
+    pub selected_provider_count: usize,
+    pub planned_query_inputs: Vec<String>,
+    pub planned_filters: Vec<String>,
+    pub planned_result_fields: Vec<String>,
+    pub will_call_provider: bool,
+    pub will_authenticate: bool,
+    pub will_bypass_paywall: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificMetadataExecutionBoundaryProviderTermsPlan {
+    pub selected_provider_ids: Vec<String>,
+    pub selected_provider_count: usize,
+    pub terms_review_required: bool,
+    pub requires_institutional_access_review_later: bool,
+    pub allows_unreviewed_terms: bool,
+    pub can_run_now: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificMetadataExecutionBoundaryMetadataWritePlan {
+    pub metadata_record_write_requested: bool,
+    pub will_write_metadata_records: bool,
+    pub persistence_target: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificMetadataExecutionBoundarySafetyPlan {
+    pub blocked_flags: Vec<String>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificMetadataExecutionBoundaryStep {
+    pub kind: ScholarChatScientificMetadataExecutionBoundaryStepKind,
+    pub id: String,
+    pub label: String,
+    pub description: String,
+    pub planned_inputs: Vec<String>,
+    pub planned_outputs: Vec<String>,
+    pub active: bool,
+    pub preview_only: bool,
+    pub boundary_notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatScientificMetadataExecutionBoundaryPreview {
+    pub status: ScholarChatScientificMetadataExecutionBoundaryStatus,
+    pub normalized_query: String,
+    pub normalized_mode: String,
+    pub normalized_context_tags: Vec<String>,
+    pub selected_local_source_ids: Vec<String>,
+    pub selected_local_source_count: usize,
+    pub normalized_expected_source_kinds: Vec<String>,
+    pub normalized_preferred_metadata_sources: Vec<String>,
+    pub normalized_preferred_psychology_source_families: Vec<String>,
+    pub normalized_methodology_hints: Vec<String>,
+    pub normalized_population_hints: Vec<String>,
+    pub normalized_topic_area_hints: Vec<String>,
+    pub normalized_evidence_goal: Option<String>,
+    pub normalized_claim_scope: Vec<String>,
+    pub normalized_citation_style: String,
+    pub execution_requested: bool,
+    pub allow_network: bool,
+    pub allow_provider_terms_unreviewed: bool,
+    pub allow_metadata_record_write: bool,
+    pub normalized_provider_override: Option<String>,
+    pub normalized_dry_run_label: Option<String>,
+    pub evidence_pack_plan_status: ScholarChatScientificEvidencePackPlanStatus,
+    pub metadata_connector_plan_status: ScholarChatMetadataConnectorPlanStatus,
+    pub psychology_source_connector_status: ScholarChatPsychologySourceConnectorPlanStatus,
+    pub scientific_search_plan_status: ScholarChatScientificSearchPlanStatus,
+    pub query_understanding_status: ScholarChatScientificQueryUnderstandingStatus,
+    pub psychology_scope_status: ScholarChatPsychologyScopeStatus,
+    pub source_family_strategy: ScholarChatPsychologySourceFamilyStrategy,
+    pub evidence_pack_strategy: ScholarChatScientificEvidencePackStrategy,
+    pub provider_selection_plan: ScholarChatScientificMetadataExecutionBoundaryProviderSelectionPlan,
+    pub provider_gate_plan: ScholarChatScientificMetadataExecutionBoundaryProviderGatePlan,
+    pub provider_request_plan: ScholarChatScientificMetadataExecutionBoundaryProviderRequestPlan,
+    pub provider_terms_plan: ScholarChatScientificMetadataExecutionBoundaryProviderTermsPlan,
+    pub metadata_write_plan: ScholarChatScientificMetadataExecutionBoundaryMetadataWritePlan,
+    pub safety_boundary_plan: ScholarChatScientificMetadataExecutionBoundarySafetyPlan,
+    pub planned_execution_steps: Vec<ScholarChatScientificMetadataExecutionBoundaryStep>,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub metadata_execution_boundary_only: bool,
+    pub dry_run_only: bool,
+    pub execution_disabled: bool,
+    pub no_network_call: bool,
+    pub no_web_request: bool,
+    pub no_http_client: bool,
+    pub no_api_key_read: bool,
+    pub no_environment_read: bool,
+    pub no_scraping: bool,
+    pub no_authenticated_library_access: bool,
+    pub no_paywall_bypass: bool,
+    pub no_connector_call: bool,
+    pub no_source_import: bool,
+    pub no_metadata_record_write: bool,
+    pub no_metadata_persistence: bool,
+    pub no_local_file_indexing: bool,
+    pub no_file_read: bool,
+    pub no_pdf_extraction: bool,
+    pub no_ocr: bool,
+    pub no_chunking_run: bool,
+    pub no_embedding_generation: bool,
+    pub no_index_created: bool,
+    pub no_retrieval_execution: bool,
+    pub no_model_loading: bool,
+    pub no_runtime_inference: bool,
+    pub no_llm_call: bool,
+    pub no_answer_generated: bool,
+    pub no_literature_review_created: bool,
+    pub no_evidence_pack_created: bool,
+    pub no_artifact_write: bool,
+    pub no_persistence: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
+fn scientific_metadata_supported_providers() -> Vec<String> {
+    vec![
+        "openalex".to_string(),
+        "crossref".to_string(),
+        "pubmed".to_string(),
+        "eric".to_string(),
+        "apa_psycnet".to_string(),
+        "psycinfo".to_string(),
+    ]
+}
+
+fn scientific_metadata_provider_label(provider_id: &str) -> &'static str {
+    match provider_id {
+        "openalex" => "OpenAlex",
+        "crossref" => "Crossref",
+        "pubmed" => "PubMed",
+        "eric" => "ERIC",
+        "apa_psycnet" => "APA PsycNet",
+        "psycinfo" => "PsycINFO",
+        _ => "Unknown Scientific Metadata Provider",
+    }
+}
+
+fn scientific_metadata_provider_connector_kind(provider_id: &str) -> &'static str {
+    match provider_id {
+        "openalex" => "open_metadata",
+        "crossref" => "doi_metadata",
+        "pubmed" => "biomedical_metadata",
+        "eric" => "education_metadata",
+        "apa_psycnet" | "psycinfo" => "subscription_discovery_boundary",
+        _ => "unknown_connector_kind",
+    }
+}
+
+fn scientific_metadata_provider_path_role(provider_id: &str) -> &'static str {
+    match provider_id {
+        "openalex" | "crossref" => "open_metadata",
+        "pubmed" => "biomedical_metadata",
+        "eric" => "education_metadata",
+        "apa_psycnet" | "psycinfo" => "subscription_discovery_boundary",
+        _ => "unknown_provider_path_role",
+    }
+}
+
+fn scientific_metadata_provider_access_notes(provider_id: &str) -> Vec<String> {
+    match provider_id {
+        "openalex" | "crossref" | "pubmed" | "eric" => vec![
+            "preview-only".to_string(),
+            "no network call now".to_string(),
+            "no web request now".to_string(),
+            "no connector call now".to_string(),
+            "no metadata write now".to_string(),
+        ],
+        "apa_psycnet" | "psycinfo" => vec![
+            "preview-only".to_string(),
+            "no automated authenticated scraping".to_string(),
+            "no paywall bypass".to_string(),
+            "manual or institutional access review required later".to_string(),
+        ],
+        _ => vec!["preview-only".to_string()],
+    }
+}
+
+fn scientific_metadata_provider_supported_result_fields(provider_id: &str) -> Vec<String> {
+    match provider_id {
+        "openalex" | "crossref" => vec![
+            "title".to_string(),
+            "authors".to_string(),
+            "publication_year".to_string(),
+            "doi_or_stable_identifier".to_string(),
+            "provider_record_id".to_string(),
+            "source_family".to_string(),
+            "abstract_or_metadata_summary_later".to_string(),
+            "provider_access_note_later".to_string(),
+        ],
+        "pubmed" | "eric" | "apa_psycnet" | "psycinfo" => vec![
+            "title".to_string(),
+            "authors".to_string(),
+            "publication_year".to_string(),
+            "doi_or_stable_identifier".to_string(),
+            "provider_record_id".to_string(),
+            "source_family".to_string(),
+            "abstract_or_metadata_summary_later".to_string(),
+            "provider_access_note_later".to_string(),
+        ],
+        _ => vec!["unknown_result_field".to_string()],
+    }
+}
+
+fn scientific_metadata_provider_supports_citation_metadata(provider_id: &str) -> bool {
+    matches!(
+        provider_id,
+        "openalex" | "crossref" | "apa_psycnet" | "psycinfo"
+    )
+}
+
+fn scientific_metadata_provider_ids_for_psychology_source_family(family_id: &str) -> Vec<String> {
+    match family_id {
+        "openalex_psychology" => vec!["openalex".to_string()],
+        "crossref_psychology" => vec!["crossref".to_string()],
+        "pubmed_psychology" => vec!["pubmed".to_string()],
+        "eric_psychology" => vec!["eric".to_string()],
+        "apa_psycnet_discovery" => vec![
+            "apa_psycnet".to_string(),
+            "psycinfo".to_string(),
+        ],
+        "local_course_literature" => Vec::new(),
+        _ => Vec::new(),
+    }
+}
+
+fn normalize_scientific_metadata_provider_ids(providers: Option<Vec<String>>) -> Vec<String> {
+    let mut normalized = providers
+        .unwrap_or_default()
+        .into_iter()
+        .map(|value| normalize_scientific_tag_text(&value))
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+    normalized
+}
+
+fn scientific_metadata_execution_boundary_step_notes() -> Vec<String> {
+    vec![
+        "preview-only".to_string(),
+        "no network call".to_string(),
+        "no web request".to_string(),
+        "no HTTP client".to_string(),
+        "no API key read".to_string(),
+        "no environment read".to_string(),
+        "no scraping".to_string(),
+        "no authenticated library access".to_string(),
+        "no paywall bypass".to_string(),
+        "no connector call".to_string(),
+        "no source import".to_string(),
+        "no metadata record write".to_string(),
+        "no metadata persistence".to_string(),
+        "no local file indexing".to_string(),
+        "no file read".to_string(),
+        "no PDF extraction".to_string(),
+        "no OCR".to_string(),
+        "no chunking".to_string(),
+        "no embedding generation".to_string(),
+        "no index created".to_string(),
+        "no retrieval execution".to_string(),
+        "no model loading".to_string(),
+        "no runtime inference".to_string(),
+        "no LLM call".to_string(),
+        "no answer generated".to_string(),
+        "no literature review created".to_string(),
+        "no Evidence Pack created".to_string(),
+        "no artifact write".to_string(),
+        "no persistence".to_string(),
+        "no registry status change".to_string(),
+        "no audit write".to_string(),
+    ]
+}
+
+fn scientific_metadata_execution_boundary_step(
+    kind: ScholarChatScientificMetadataExecutionBoundaryStepKind,
+    id: &str,
+    label: &str,
+    description: &str,
+    planned_inputs: Vec<String>,
+    planned_outputs: Vec<String>,
+    active: bool,
+) -> ScholarChatScientificMetadataExecutionBoundaryStep {
+    ScholarChatScientificMetadataExecutionBoundaryStep {
+        kind,
+        id: id.to_string(),
+        label: label.to_string(),
+        description: description.to_string(),
+        planned_inputs,
+        planned_outputs,
+        active,
+        preview_only: true,
+        boundary_notes: scientific_metadata_execution_boundary_step_notes(),
+    }
+}
+
+pub fn preview_scholar_chat_scientific_metadata_execution_boundary(
+    root: impl Into<PathBuf>,
+    request: ScholarChatScientificMetadataExecutionBoundaryPreviewRequest,
+) -> AegisResult<ScholarChatScientificMetadataExecutionBoundaryPreview> {
+    let root = root.into();
+    let normalized_query = normalize_scientific_topic_text(&request.query);
+    let normalized_mode = normalize_scientific_mode(request.mode.clone());
+    let normalized_context_tags = normalize_scientific_context_tags(request.context_tags.clone());
+    let selected_local_source_ids = normalize_scientific_selected_local_source_ids(
+        request.selected_local_source_ids.clone(),
+    );
+    let normalized_expected_source_kinds =
+        normalize_scientific_expected_source_kinds(request.expected_source_kinds.clone());
+    let normalized_preferred_metadata_sources =
+        normalize_scientific_metadata_provider_ids(request.preferred_metadata_sources.clone());
+    let normalized_preferred_psychology_source_families =
+        normalize_psychology_connector_values(request.preferred_psychology_source_families.clone());
+    let normalized_methodology_hints =
+        normalize_psychology_connector_values(request.methodology_hints.clone());
+    let normalized_population_hints =
+        normalize_psychology_connector_values(request.population_hints.clone());
+    let normalized_topic_area_hints =
+        normalize_psychology_connector_values(request.topic_area_hints.clone());
+    let normalized_evidence_goal = request
+        .evidence_goal
+        .as_deref()
+        .map(normalize_scientific_topic_text)
+        .filter(|value| !value.is_empty());
+    let normalized_claim_scope = normalize_scientific_claim_scope(request.claim_scope.clone());
+    let (normalized_citation_style, citation_style_warnings) =
+        normalize_scientific_citation_style(request.citation_style.clone());
+    let normalized_provider_override = request
+        .provider_override
+        .as_deref()
+        .map(normalize_scientific_tag_text)
+        .filter(|value| !value.is_empty());
+    let normalized_dry_run_label = request
+        .dry_run_label
+        .as_deref()
+        .map(normalize_scientific_topic_text)
+        .filter(|value| !value.is_empty());
+
+    let evidence_pack_preview = preview_scholar_chat_scientific_evidence_pack_plan(
+        &root,
+        ScholarChatScientificEvidencePackPlanRequest {
+            query: normalized_query.clone(),
+            mode: Some(normalized_mode.clone()),
+            course_context: request.course_context.clone(),
+            context_tags: Some(normalized_context_tags.clone()),
+            selected_local_source_ids: Some(selected_local_source_ids.clone()),
+            expected_source_kinds: Some(normalized_expected_source_kinds.clone()),
+            preferred_metadata_sources: Some(normalized_preferred_metadata_sources.clone()),
+            preferred_psychology_source_families: Some(
+                normalized_preferred_psychology_source_families.clone(),
+            ),
+            methodology_hints: Some(normalized_methodology_hints.clone()),
+            population_hints: Some(normalized_population_hints.clone()),
+            topic_area_hints: Some(normalized_topic_area_hints.clone()),
+            evidence_goal: normalized_evidence_goal.clone(),
+            claim_scope: Some(normalized_claim_scope.clone()),
+            citation_style: Some(normalized_citation_style.clone()),
+            max_results_per_source: request.max_results_per_source,
+            require_open_access: request.require_open_access,
+            require_doi: request.require_doi,
+            year_from: request.year_from,
+            year_to: request.year_to,
+        },
+    )?;
+
+    let evidence_pack_plan_status = evidence_pack_preview.status.clone();
+    let metadata_connector_plan_status = evidence_pack_preview.metadata_connector_plan_status.clone();
+    let psychology_source_connector_status =
+        evidence_pack_preview.psychology_source_connector_status.clone();
+    let scientific_search_plan_status = evidence_pack_preview.scientific_search_plan_status.clone();
+    let query_understanding_status = evidence_pack_preview.query_understanding_status.clone();
+    let psychology_scope_status = evidence_pack_preview.psychology_scope_status.clone();
+    let source_family_strategy = evidence_pack_preview.source_family_strategy.clone();
+    let evidence_pack_strategy = evidence_pack_preview.evidence_pack_strategy.clone();
+    let selected_provider_ids_from_metadata = normalized_preferred_metadata_sources.clone();
+    let selected_provider_ids_from_families = normalized_preferred_psychology_source_families
+        .iter()
+        .flat_map(|family_id| scientific_metadata_provider_ids_for_psychology_source_family(family_id))
+        .collect::<Vec<_>>();
+    let mut requested_provider_ids = Vec::new();
+    requested_provider_ids.extend(selected_provider_ids_from_metadata.clone());
+    requested_provider_ids.extend(selected_provider_ids_from_families.clone());
+    if let Some(provider_override) = normalized_provider_override.clone() {
+        requested_provider_ids.push(provider_override);
+    }
+    requested_provider_ids.sort();
+    requested_provider_ids.dedup();
+
+    let supported_provider_ids = scientific_metadata_supported_providers();
+    let mut selected_provider_ids = if let Some(provider_override) = normalized_provider_override.clone() {
+        if supported_provider_ids
+            .iter()
+            .any(|provider| provider == &provider_override)
+        {
+            vec![provider_override]
+        } else {
+            Vec::new()
+        }
+    } else {
+        let mut selected = requested_provider_ids
+            .iter()
+            .filter(|provider_id| supported_provider_ids.contains(provider_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        selected.sort_by_key(|provider_id| {
+            supported_provider_ids
+                .iter()
+                .position(|candidate| candidate == provider_id)
+                .unwrap_or(usize::MAX)
+        });
+        selected.dedup();
+        selected
+    };
+    selected_provider_ids.sort_by_key(|provider_id| {
+        supported_provider_ids
+            .iter()
+            .position(|candidate| candidate == provider_id)
+            .unwrap_or(usize::MAX)
+    });
+    selected_provider_ids.dedup();
+
+    let unknown_provider_ids = requested_provider_ids
+        .iter()
+        .filter(|provider_id| !supported_provider_ids.contains(provider_id))
+        .cloned()
+        .collect::<Vec<_>>();
+    let selected_provider_count = selected_provider_ids.len();
+    let supported_provider_count = supported_provider_ids.len();
+    let selected_local_source_count = selected_local_source_ids.len();
+    let provider_count = selected_provider_count;
+    let provider_terms_review_required = provider_count > 0;
+    let requires_institutional_access_review_later = selected_provider_ids
+        .iter()
+        .any(|provider| matches!(provider.as_str(), "apa_psycnet" | "psycinfo"));
+    let provider_selection_plan = ScholarChatScientificMetadataExecutionBoundaryProviderSelectionPlan {
+        requested_provider_ids: requested_provider_ids.clone(),
+        supported_provider_ids: supported_provider_ids.clone(),
+        selected_provider_ids: selected_provider_ids.clone(),
+        unknown_provider_ids: unknown_provider_ids.clone(),
+        needs_provider_selection: provider_count == 0
+            && (selected_local_source_count > 0 || !requested_provider_ids.is_empty()),
+        summary: if requested_provider_ids.is_empty() {
+            "Provider selection stays preview-only and defaults later from the scientific evidence pack preview."
+                .to_string()
+        } else if provider_count == 0 {
+            "No supported metadata provider remains after normalization; choose a supported provider later."
+                .to_string()
+        } else if unknown_provider_ids.is_empty() {
+            "Metadata provider preferences were normalized and selected later without connector calls."
+                .to_string()
+        } else {
+            "Supported metadata providers are selected later while unknown provider hints remain preview-only."
+                .to_string()
+        },
+    };
+
+    let provider_gates = supported_provider_ids
+        .iter()
+        .map(|provider_id| {
+            let path_role = scientific_metadata_provider_path_role(provider_id);
+            let access_notes = scientific_metadata_provider_access_notes(provider_id);
+            ScholarChatScientificMetadataExecutionBoundaryProviderGate {
+                provider_id: provider_id.clone(),
+                provider_label: scientific_metadata_provider_label(provider_id).to_string(),
+                connector_kind: scientific_metadata_provider_connector_kind(provider_id)
+                    .to_string(),
+                selected: selected_provider_ids
+                    .iter()
+                    .any(|selected_provider| selected_provider == provider_id),
+                requires_network_permission: true,
+                requires_terms_review: true,
+                requires_institutional_access_review_later: matches!(
+                    provider_id.as_str(),
+                    "apa_psycnet" | "psycinfo"
+                ),
+                requires_write_permission: true,
+                can_run_now: false,
+                summary: if matches!(provider_id.as_str(), "apa_psycnet" | "psycinfo") {
+                    format!(
+                        "{} remains preview-only with path role {path_role}; {}; later manual or institutional access review is required.",
+                        scientific_metadata_provider_label(provider_id),
+                        access_notes.join(", ")
+                    )
+                } else {
+                    format!(
+                        "{} remains preview-only with path role {path_role} and does not call a connector or write metadata now; {}.",
+                        scientific_metadata_provider_label(provider_id),
+                        access_notes.join(", ")
+                    )
+                },
+            }
+        })
+        .collect::<Vec<_>>();
+    let provider_gate_plan = ScholarChatScientificMetadataExecutionBoundaryProviderGatePlan {
+        supported_provider_ids: supported_provider_ids.clone(),
+        selected_provider_ids: selected_provider_ids.clone(),
+        supported_provider_count,
+        selected_provider_count,
+        provider_gates,
+        summary: "Every supported metadata provider remains preview-only; no connector calls, authentication, or metadata writes occur now."
+            .to_string(),
+    };
+
+    let mut planned_query_inputs = vec![
+        normalized_query.clone(),
+        request.course_context.clone().unwrap_or_default(),
+    ];
+    if let Some(concept) = evidence_pack_preview.recognized_concept.as_ref() {
+        planned_query_inputs.push(format!("recognized_concept={concept}"));
+    }
+    if let Some(topic) = evidence_pack_preview.inferred_topic.as_ref() {
+        planned_query_inputs.push(format!("inferred_topic={topic}"));
+    }
+    if !normalized_context_tags.is_empty() {
+        planned_query_inputs.push(format!("context_tags={}", normalized_context_tags.join(", ")));
+    }
+    if !normalized_methodology_hints.is_empty() {
+        planned_query_inputs.push(format!("methodology_hints={}", normalized_methodology_hints.join(", ")));
+    }
+    if !normalized_population_hints.is_empty() {
+        planned_query_inputs.push(format!("population_hints={}", normalized_population_hints.join(", ")));
+    }
+    if !normalized_topic_area_hints.is_empty() {
+        planned_query_inputs.push(format!("topic_area_hints={}", normalized_topic_area_hints.join(", ")));
+    }
+    if !selected_local_source_ids.is_empty() {
+        planned_query_inputs.push(format!("local_source_ids={}", selected_local_source_ids.join(", ")));
+    }
+    planned_query_inputs.sort();
+    planned_query_inputs.dedup();
+
+    let mut planned_filters = Vec::new();
+    if let Some(year_from) = request.year_from {
+        planned_filters.push(format!("year_from={year_from}"));
+    }
+    if let Some(year_to) = request.year_to {
+        planned_filters.push(format!("year_to={year_to}"));
+    }
+    if request.require_open_access.unwrap_or(false) {
+        planned_filters.push("require_open_access=true".to_string());
+    }
+    if request.require_doi.unwrap_or(false) {
+        planned_filters.push("require_doi=true".to_string());
+    }
+    planned_filters.sort();
+    planned_filters.dedup();
+
+    let planned_result_fields = supported_provider_ids
+        .iter()
+        .flat_map(|provider_id| scientific_metadata_provider_supported_result_fields(provider_id))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    let provider_request_plan = ScholarChatScientificMetadataExecutionBoundaryProviderRequestPlan {
+        selected_provider_ids: selected_provider_ids.clone(),
+        selected_provider_count,
+        planned_query_inputs: planned_query_inputs.clone(),
+        planned_filters: planned_filters.clone(),
+        planned_result_fields: if planned_result_fields.is_empty() {
+            vec![
+                "title".to_string(),
+                "authors".to_string(),
+                "publication_year".to_string(),
+                "doi_or_stable_identifier".to_string(),
+                "provider_record_id".to_string(),
+                "source_family".to_string(),
+                "abstract_or_metadata_summary_later".to_string(),
+                "provider_access_note_later".to_string(),
+            ]
+        } else {
+            planned_result_fields.clone()
+        },
+        will_call_provider: false,
+        will_authenticate: false,
+        will_bypass_paywall: false,
+        summary: if selected_provider_count == 0 {
+            "Provider request planning stays preview-only until supported providers are selected."
+                .to_string()
+        } else {
+            "Provider request planning stays preview-only and only outlines later query shaping and result-field expectations."
+                .to_string()
+        },
+    };
+
+    let provider_terms_plan = ScholarChatScientificMetadataExecutionBoundaryProviderTermsPlan {
+        selected_provider_ids: selected_provider_ids.clone(),
+        selected_provider_count,
+        terms_review_required: provider_terms_review_required,
+        requires_institutional_access_review_later,
+        allows_unreviewed_terms: request.allow_provider_terms_unreviewed,
+        can_run_now: false,
+        summary: if requires_institutional_access_review_later {
+            "Provider terms remain preview-only, no automated authenticated scraping or paywall bypass is attempted, and later manual or institutional access review is required."
+                .to_string()
+        } else if provider_terms_review_required && !request.allow_provider_terms_unreviewed {
+            "Provider terms remain preview-only and require later review before any future execution."
+                .to_string()
+        } else {
+            "Provider terms remain preview-only and only record later review boundaries."
+                .to_string()
+        },
+    };
+
+    let metadata_write_plan = ScholarChatScientificMetadataExecutionBoundaryMetadataWritePlan {
+        metadata_record_write_requested: request.execution_requested,
+        will_write_metadata_records: false,
+        persistence_target: "phase_105_preview_boundary".to_string(),
+        summary: if request.execution_requested {
+            "Metadata record write is requested for the future plan, but this preview never writes metadata records."
+                .to_string()
+        } else {
+            "Metadata record write stays preview-only and is not requested in this dry run."
+                .to_string()
+        },
+    };
+
+    let safety_blocked_flags = vec![
+        "no_network_call".to_string(),
+        "no_web_request".to_string(),
+        "no_http_client".to_string(),
+        "no_api_key_read".to_string(),
+        "no_environment_read".to_string(),
+        "no_scraping".to_string(),
+        "no_authenticated_library_access".to_string(),
+        "no_paywall_bypass".to_string(),
+        "no_connector_call".to_string(),
+        "no_source_import".to_string(),
+        "no_metadata_record_write".to_string(),
+        "no_metadata_persistence".to_string(),
+        "no_local_file_indexing".to_string(),
+        "no_file_read".to_string(),
+        "no_pdf_extraction".to_string(),
+        "no_ocr".to_string(),
+        "no_chunking_run".to_string(),
+        "no_embedding_generation".to_string(),
+        "no_index_created".to_string(),
+        "no_retrieval_execution".to_string(),
+        "no_model_loading".to_string(),
+        "no_runtime_inference".to_string(),
+        "no_llm_call".to_string(),
+        "no_answer_generated".to_string(),
+        "no_literature_review_created".to_string(),
+        "no_evidence_pack_created".to_string(),
+        "no_artifact_write".to_string(),
+        "no_persistence".to_string(),
+        "no_registry_status_change".to_string(),
+        "no_audit_write".to_string(),
+    ];
+    let safety_boundary_plan = ScholarChatScientificMetadataExecutionBoundarySafetyPlan {
+        blocked_flags: safety_blocked_flags.clone(),
+        summary: "All execution boundaries remain blocked in this preview-only scientific metadata planner."
+            .to_string(),
+    };
+
+    let mut warnings = evidence_pack_preview.warnings.clone();
+    warnings.extend(citation_style_warnings.clone());
+    warnings.sort();
+    warnings.dedup();
+
+    if !normalized_dry_run_label.is_none() {
+        push_unique_text(
+            &mut warnings,
+            "dry_run_label is preserved only as a preview-only hint.",
+        );
+    }
+    if normalized_provider_override.is_some()
+        && !supported_provider_ids
+            .iter()
+            .any(|provider_id| Some(provider_id) == normalized_provider_override.as_ref())
+    {
+        push_unique_text(
+            &mut warnings,
+            "Unknown provider override is preserved only as a preview-only hint.",
+        );
+    }
+    if requires_institutional_access_review_later {
+        push_unique_text(
+            &mut warnings,
+            "APA PsycNet / PsycINFO remains a planning boundary only; no automated authenticated scraping or paywall bypass is attempted, and later manual or institutional access review is required.",
+        );
+    }
+    if provider_count > 0 {
+        push_unique_text(
+            &mut warnings,
+            "Provider planning is preview-only and never calls a connector, loads models, or performs retrieval execution.",
+        );
+    }
+
+    let status = if normalized_query.is_empty() {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked
+    } else if matches!(
+        evidence_pack_plan_status,
+        ScholarChatScientificEvidencePackPlanStatus::Blocked
+    ) {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked
+    } else if matches!(
+        evidence_pack_plan_status,
+        ScholarChatScientificEvidencePackPlanStatus::NeedsDisambiguation
+    ) {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsDisambiguation
+    } else if matches!(
+        evidence_pack_plan_status,
+        ScholarChatScientificEvidencePackPlanStatus::UnknownConcept
+    ) {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::UnknownConcept
+    } else if matches!(
+        evidence_pack_plan_status,
+        ScholarChatScientificEvidencePackPlanStatus::NeedsPsychologyScope
+    ) {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsPsychologyScope
+    } else if matches!(
+        evidence_pack_plan_status,
+        ScholarChatScientificEvidencePackPlanStatus::NeedsSourceFamily
+    ) {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsSourceFamily
+    } else if matches!(
+        evidence_pack_plan_status,
+        ScholarChatScientificEvidencePackPlanStatus::NeedsEvidenceSources
+    ) {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsEvidenceSources
+    } else if matches!(
+        evidence_pack_plan_status,
+        ScholarChatScientificEvidencePackPlanStatus::NeedsCitationMetadata
+    ) {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsCitationMetadata
+    } else if matches!(
+        metadata_connector_plan_status,
+        ScholarChatMetadataConnectorPlanStatus::NeedsMetadataSource
+    ) {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsMetadataConnectorPlan
+    } else if selected_provider_count == 0 {
+        if selected_local_source_count == 0 && requested_provider_ids.is_empty() {
+            ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsEvidenceSources
+        } else {
+            ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsProviderSelection
+        }
+    } else if !request.allow_provider_terms_unreviewed {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsProviderTermsReview
+    } else if !request.allow_network {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsNetworkPermission
+    } else if (request.require_doi.unwrap_or(false)
+        || normalized_citation_style == "doi_first")
+        && !selected_provider_ids
+            .iter()
+            .any(|provider_id| scientific_metadata_provider_supports_citation_metadata(provider_id))
+    {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsCitationMetadata
+    } else if !request.allow_metadata_record_write {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsWritePermission
+    } else if request.execution_requested {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::ExecutionRequestedButDisabled
+    } else {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::ExecutionBoundaryReady
+    };
+
+    let execution_strategy = match status {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked => {
+            ScholarChatScientificMetadataExecutionBoundaryStrategy::Blocked
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsMetadataConnectorPlan
+        | ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsProviderSelection
+        | ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsDisambiguation
+        | ScholarChatScientificMetadataExecutionBoundaryStatus::UnknownConcept
+        | ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsPsychologyScope
+        | ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsSourceFamily
+        | ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsEvidenceSources => {
+            ScholarChatScientificMetadataExecutionBoundaryStrategy::ProviderPlanOnly
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsProviderTermsReview
+        | ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsNetworkPermission => {
+            ScholarChatScientificMetadataExecutionBoundaryStrategy::ExecutionGatePending
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsCitationMetadata
+        | ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsWritePermission => {
+            ScholarChatScientificMetadataExecutionBoundaryStrategy::MetadataWriteGatePending
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::ExecutionBoundaryReady => {
+            ScholarChatScientificMetadataExecutionBoundaryStrategy::DryRunOnly
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::ExecutionRequestedButDisabled => {
+            ScholarChatScientificMetadataExecutionBoundaryStrategy::ExecutionGatePending
+        }
+    };
+
+    let mut next_required_actions = evidence_pack_preview.next_required_actions.clone();
+    if normalized_query.is_empty() {
+        push_unique_text(
+            &mut next_required_actions,
+            "Provide a scientific query before metadata connector planning can continue.",
+        );
+    }
+    if matches!(
+        status,
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsMetadataConnectorPlan
+    ) {
+        push_unique_text(
+            &mut next_required_actions,
+            "Select a supported metadata connector source before future execution can be planned.",
+        );
+    }
+    if matches!(
+        status,
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsProviderSelection
+    ) {
+        push_unique_text(
+            &mut next_required_actions,
+            "Choose one or more supported metadata providers before future execution can be planned.",
+        );
+    }
+    if matches!(
+        status,
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsProviderTermsReview
+    ) {
+        push_unique_text(
+            &mut next_required_actions,
+            "Review provider terms before any future execution can be allowed.",
+        );
+    }
+    if matches!(
+        status,
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsNetworkPermission
+    ) {
+        push_unique_text(
+            &mut next_required_actions,
+            "Allow network access before future execution can be planned.",
+        );
+    }
+    if matches!(
+        status,
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsWritePermission
+    ) {
+        push_unique_text(
+            &mut next_required_actions,
+            "Allow metadata record writes before future execution can be planned.",
+        );
+    }
+    if matches!(
+        status,
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsCitationMetadata
+    ) {
+        push_unique_text(
+            &mut next_required_actions,
+            "Select citation metadata capable providers or loosen citation requirements before future execution can be planned.",
+        );
+    }
+    if matches!(
+        status,
+        ScholarChatScientificMetadataExecutionBoundaryStatus::ExecutionRequestedButDisabled
+    ) {
+        push_unique_text(
+            &mut next_required_actions,
+            "Keep this preview-only; the requested execution remains disabled in this phase.",
+        );
+    }
+    if selected_provider_count > 0 {
+        push_unique_text(
+            &mut next_required_actions,
+            "Keep provider planning preview-only until a later implementation phase.",
+        );
+    }
+
+    let planned_execution_steps = vec![
+        scientific_metadata_execution_boundary_step(
+            ScholarChatScientificMetadataExecutionBoundaryStepKind::EvidencePackAlignment,
+            "evidence_pack_alignment",
+            "Evidence pack alignment",
+            "Align metadata connector planning with the existing Scientific Evidence Pack Preview only.",
+            vec![
+                format!("{:?}", evidence_pack_plan_status),
+                format!("{:?}", evidence_pack_strategy),
+            ],
+            vec!["evidence_pack_alignment_preview".to_string()],
+            !matches!(status, ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked),
+        ),
+        scientific_metadata_execution_boundary_step(
+            ScholarChatScientificMetadataExecutionBoundaryStepKind::MetadataConnectorAlignment,
+            "metadata_connector_alignment",
+            "Metadata connector alignment",
+            "Align metadata connector execution planning with the existing metadata connector preview only.",
+            vec![
+                format!("{:?}", metadata_connector_plan_status),
+                format!("{:?}", psychology_source_connector_status),
+                format!("{:?}", scientific_search_plan_status),
+                format!("{:?}", query_understanding_status),
+            ],
+            vec!["metadata_connector_alignment_preview".to_string()],
+            !matches!(status, ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked),
+        ),
+        scientific_metadata_execution_boundary_step(
+            ScholarChatScientificMetadataExecutionBoundaryStepKind::ProviderSelection,
+            "provider_selection",
+            "Provider selection",
+            "Select supported metadata providers later without any connector call.",
+            vec![
+                requested_provider_ids.join(", "),
+                supported_provider_ids.join(", "),
+                selected_provider_ids.join(", "),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec!["provider_selection_preview".to_string()],
+            !matches!(status, ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked),
+        ),
+        scientific_metadata_execution_boundary_step(
+            ScholarChatScientificMetadataExecutionBoundaryStepKind::ProviderTermsBoundary,
+            "provider_terms_boundary",
+            "Provider terms boundary",
+            "Review provider terms and institutional access boundaries later without automated access.",
+            vec![
+                format!("allow_provider_terms_unreviewed={}", request.allow_provider_terms_unreviewed),
+                selected_provider_ids.join(", "),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec!["provider_terms_boundary_preview".to_string()],
+            !matches!(status, ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked),
+        ),
+        scientific_metadata_execution_boundary_step(
+            ScholarChatScientificMetadataExecutionBoundaryStepKind::NetworkPermissionGate,
+            "network_permission_gate",
+            "Network permission gate",
+            "Require network permission later before any future connector execution could be attempted.",
+            vec![format!("allow_network={}", request.allow_network)],
+            vec!["network_permission_gate_preview".to_string()],
+            !matches!(status, ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked),
+        ),
+        scientific_metadata_execution_boundary_step(
+            ScholarChatScientificMetadataExecutionBoundaryStepKind::ProviderRequestPlanning,
+            "provider_request_planning",
+            "Provider request planning",
+            "Plan later provider request inputs, filters, and result fields without calling any provider.",
+            vec![
+                planned_query_inputs.join(", "),
+                planned_filters.join(", "),
+                normalized_citation_style.clone(),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec![
+                "title".to_string(),
+                "authors".to_string(),
+                "publication_year".to_string(),
+                "doi_or_stable_identifier".to_string(),
+                "provider_record_id".to_string(),
+                "source_family".to_string(),
+                "abstract_or_metadata_summary_later".to_string(),
+                "provider_access_note_later".to_string(),
+            ],
+            !matches!(status, ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked),
+        ),
+        scientific_metadata_execution_boundary_step(
+            ScholarChatScientificMetadataExecutionBoundaryStepKind::MetadataWriteGate,
+            "metadata_write_gate",
+            "Metadata write gate",
+            "Gate future metadata record writes without writing anything now.",
+            vec![
+                format!("metadata_record_write_requested={}", request.execution_requested),
+                format!("allow_metadata_record_write={}", request.allow_metadata_record_write),
+                "phase_105_preview_boundary".to_string(),
+            ],
+            vec!["metadata_write_gate_preview".to_string()],
+            !matches!(status, ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked),
+        ),
+        scientific_metadata_execution_boundary_step(
+            ScholarChatScientificMetadataExecutionBoundaryStepKind::SafetyBoundaryCheck,
+            "safety_boundary_check",
+            "Safety boundary check",
+            "Confirm that all requested execution boundaries remain blocked now.",
+            safety_blocked_flags.clone(),
+            vec!["safety_boundary_preview".to_string()],
+            !matches!(status, ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked),
+        ),
+        scientific_metadata_execution_boundary_step(
+            ScholarChatScientificMetadataExecutionBoundaryStepKind::DownstreamEvidencePackAlignment,
+            "downstream_evidence_pack_alignment",
+            "Downstream Evidence Pack alignment",
+            "Plan later Evidence Pack alignment only; no Evidence Pack is created now.",
+            vec![
+                format!("{:?}", evidence_pack_plan_status),
+                normalized_citation_style.clone(),
+                selected_provider_ids.join(", "),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec!["downstream_evidence_pack_alignment_preview".to_string()],
+            !matches!(status, ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked),
+        ),
+        scientific_metadata_execution_boundary_step(
+            ScholarChatScientificMetadataExecutionBoundaryStepKind::DownstreamLiteratureReviewAlignment,
+            "downstream_literature_review_alignment",
+            "Downstream literature review alignment",
+            "Plan later scientific paper literature review alignment only; no literature review is created now.",
+            vec![
+                format!("{:?}", evidence_pack_plan_status),
+                format!("{:?}", source_family_strategy),
+                normalized_dry_run_label.clone().unwrap_or_default(),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            vec!["downstream_literature_review_alignment_preview".to_string()],
+            !matches!(status, ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked),
+        ),
+    ];
+
+    let mut blocker_messages = evidence_pack_preview.blockers.clone();
+    let mut warning_messages = warnings.clone();
+    if selected_provider_count == 0 && requested_provider_ids.is_empty() && selected_local_source_count == 0 {
+        push_unique_text(
+            &mut blocker_messages,
+            "evidence_sources_missing",
+        );
+    }
+    if !normalized_query.is_empty()
+        && matches!(
+            evidence_pack_plan_status,
+            ScholarChatScientificEvidencePackPlanStatus::EvidencePackPlanReady
+        )
+        && provider_count == 0
+    {
+        push_unique_text(
+            &mut warning_messages,
+            "No supported metadata provider remains after normalization.",
+        );
+    }
+    if matches!(
+        status,
+        ScholarChatScientificMetadataExecutionBoundaryStatus::ExecutionRequestedButDisabled
+    ) {
+        push_unique_text(
+            &mut warning_messages,
+            "Execution was requested but this phase stays preview-only and disabled.",
+        );
+    }
+
+    let summary = match status {
+        ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked => {
+            "Scientific metadata execution boundary preview is blocked until the query and upstream scientific planning become available."
+                .to_string()
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::ExecutionBoundaryReady => {
+            format!(
+                "Scientific metadata execution boundary preview is ready later and only describes {:?} planning.",
+                execution_strategy
+            )
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::ExecutionRequestedButDisabled => {
+            "Scientific metadata execution boundary preview is ready later, but execution remains disabled in preview-only mode."
+                .to_string()
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsMetadataConnectorPlan => {
+            "Scientific metadata execution boundary preview needs a metadata connector plan before later planning can continue."
+                .to_string()
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsProviderSelection => {
+            "Scientific metadata execution boundary preview needs supported provider selection before later planning can continue."
+                .to_string()
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsProviderTermsReview => {
+            "Scientific metadata execution boundary preview needs provider terms review before later planning can continue."
+                .to_string()
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsNetworkPermission => {
+            "Scientific metadata execution boundary preview needs network permission before later planning can continue."
+                .to_string()
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsWritePermission => {
+            "Scientific metadata execution boundary preview needs metadata write permission before later planning can continue."
+                .to_string()
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsCitationMetadata => {
+            "Scientific metadata execution boundary preview needs citation metadata before later planning can continue."
+                .to_string()
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsEvidenceSources => {
+            "Scientific metadata execution boundary preview needs local sources or supported providers before later planning can continue."
+                .to_string()
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsDisambiguation => {
+            "Scientific metadata execution boundary preview needs query disambiguation before later planning can continue."
+                .to_string()
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::UnknownConcept => {
+            "Scientific metadata execution boundary preview found an unknown concept and can only outline later planning steps."
+                .to_string()
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsPsychologyScope => {
+            "Scientific metadata execution boundary preview needs psychology scope before later planning can continue."
+                .to_string()
+        }
+        ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsSourceFamily => {
+            "Scientific metadata execution boundary preview needs a supported psychology source family before later planning can continue."
+                .to_string()
+        }
+    };
+
+    Ok(ScholarChatScientificMetadataExecutionBoundaryPreview {
+        status,
+        normalized_query,
+        normalized_mode,
+        normalized_context_tags,
+        selected_local_source_ids,
+        selected_local_source_count,
+        normalized_expected_source_kinds,
+        normalized_preferred_metadata_sources,
+        normalized_preferred_psychology_source_families,
+        normalized_methodology_hints,
+        normalized_population_hints,
+        normalized_topic_area_hints,
+        normalized_evidence_goal,
+        normalized_claim_scope,
+        normalized_citation_style,
+        execution_requested: request.execution_requested,
+        allow_network: request.allow_network,
+        allow_provider_terms_unreviewed: request.allow_provider_terms_unreviewed,
+        allow_metadata_record_write: request.allow_metadata_record_write,
+        normalized_provider_override,
+        normalized_dry_run_label,
+        evidence_pack_plan_status,
+        metadata_connector_plan_status,
+        psychology_source_connector_status,
+        scientific_search_plan_status,
+        query_understanding_status,
+        psychology_scope_status,
+        source_family_strategy,
+        evidence_pack_strategy,
+        provider_selection_plan,
+        provider_gate_plan,
+        provider_request_plan,
+        provider_terms_plan,
+        metadata_write_plan,
+        safety_boundary_plan,
+        planned_execution_steps,
+        blockers: blocker_messages,
+        warnings: warning_messages,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        metadata_execution_boundary_only: true,
+        dry_run_only: true,
+        execution_disabled: true,
+        no_network_call: true,
+        no_web_request: true,
+        no_http_client: true,
+        no_api_key_read: true,
+        no_environment_read: true,
+        no_scraping: true,
+        no_authenticated_library_access: true,
+        no_paywall_bypass: true,
+        no_connector_call: true,
+        no_source_import: true,
+        no_metadata_record_write: true,
+        no_metadata_persistence: true,
+        no_local_file_indexing: true,
+        no_file_read: true,
+        no_pdf_extraction: true,
+        no_ocr: true,
+        no_chunking_run: true,
+        no_embedding_generation: true,
+        no_index_created: true,
+        no_retrieval_execution: true,
+        no_model_loading: true,
+        no_runtime_inference: true,
+        no_llm_call: true,
+        no_answer_generated: true,
+        no_literature_review_created: true,
+        no_evidence_pack_created: true,
+        no_artifact_write: true,
+        no_persistence: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+    })
+}
+
 pub fn preview_scholar_chat_draft_inference(
     root: impl Into<PathBuf>,
     request: ScholarChatDraftInferenceRequest,
@@ -16709,6 +18009,71 @@ fn main() {
         first
     }
 
+    fn assert_scientific_metadata_execution_boundary_boundary_fields(
+        preview: &ScholarChatScientificMetadataExecutionBoundaryPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.metadata_execution_boundary_only);
+        assert!(preview.dry_run_only);
+        assert!(preview.execution_disabled);
+        assert!(preview.no_network_call);
+        assert!(preview.no_web_request);
+        assert!(preview.no_http_client);
+        assert!(preview.no_api_key_read);
+        assert!(preview.no_environment_read);
+        assert!(preview.no_scraping);
+        assert!(preview.no_authenticated_library_access);
+        assert!(preview.no_paywall_bypass);
+        assert!(preview.no_connector_call);
+        assert!(preview.no_source_import);
+        assert!(preview.no_metadata_record_write);
+        assert!(preview.no_metadata_persistence);
+        assert!(preview.no_local_file_indexing);
+        assert!(preview.no_file_read);
+        assert!(preview.no_pdf_extraction);
+        assert!(preview.no_ocr);
+        assert!(preview.no_chunking_run);
+        assert!(preview.no_embedding_generation);
+        assert!(preview.no_index_created);
+        assert!(preview.no_retrieval_execution);
+        assert!(preview.no_model_loading);
+        assert!(preview.no_runtime_inference);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_literature_review_created);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_persistence);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
+    fn assert_scientific_metadata_execution_boundary_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatScientificMetadataExecutionBoundaryPreviewRequest,
+    ) -> ScholarChatScientificMetadataExecutionBoundaryPreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let first =
+            preview_scholar_chat_scientific_metadata_execution_boundary(temp.path(), request.clone())
+                .unwrap();
+        let second =
+            preview_scholar_chat_scientific_metadata_execution_boundary(temp.path(), request)
+                .unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        assert!(!temp.path().join(".aegis").exists());
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_scientific_metadata_execution_boundary_boundary_fields(preview);
+        }
+        first
+    }
+
     fn assert_scientific_discipline_registry_boundary_fields(
         preview: &ScholarChatScientificDisciplineRegistryPreview,
     ) {
@@ -23345,7 +24710,7 @@ fn main() {
         let imports_end = source[imports_start..].find("};").unwrap() + imports_start + 2;
         let imports = &source[imports_start..imports_end];
 
-        let expected: [(&str, &str, &str, &str); 10] = [
+        let expected: [(&str, &str, &str, &str); 11] = [
             (
                 "preview_scholar_chat_scientific_discipline_registry",
                 "ScholarChatScientificDisciplineRegistryPreviewRequest",
@@ -23406,6 +24771,12 @@ fn main() {
                 "ScholarChatScientificPaperLiteratureReviewPlanPreview",
                 "preview_scholar_chat_scientific_paper_literature_review_plan_impl(root, request)",
             ),
+            (
+                "preview_scholar_chat_scientific_metadata_execution_boundary",
+                "ScholarChatScientificMetadataExecutionBoundaryPreviewRequest",
+                "ScholarChatScientificMetadataExecutionBoundaryPreview",
+                "preview_scholar_chat_scientific_metadata_execution_boundary_impl(root, request)",
+            ),
         ];
 
         let mut previous_position = None;
@@ -23448,6 +24819,14 @@ fn main() {
             scientific_evidence_pack_position < scientific_paper_literature_review_position,
             "scientific paper literature review preview should follow scientific evidence pack preview"
         );
+        let scientific_metadata_execution_boundary_position = handler
+            .find("preview_scholar_chat_scientific_metadata_execution_boundary")
+            .unwrap();
+        assert!(
+            scientific_paper_literature_review_position
+                < scientific_metadata_execution_boundary_position,
+            "scientific metadata execution boundary preview should follow scientific paper literature review preview"
+        );
         for runtime_command in [
             "preview_scholar_chat_runtime_answer_pipeline_gate",
             "preview_scholar_chat_runtime_diagnostic_bridge",
@@ -23482,6 +24861,238 @@ fn main() {
         assert!(handler.contains("preview_scholar_chat_psychology_source_connector_plan"));
         assert!(handler.contains("preview_scholar_chat_scientific_evidence_pack_plan"));
         assert!(handler.contains("preview_scholar_chat_scientific_paper_literature_review_plan"));
+        assert!(handler.contains("preview_scholar_chat_scientific_metadata_execution_boundary"));
+    }
+
+    fn scientific_metadata_execution_boundary_preview_request(
+        query: &str,
+        selected_local_source_ids: Vec<&str>,
+        preferred_metadata_sources: Vec<&str>,
+        preferred_psychology_source_families: Option<Vec<&str>>,
+        allow_network: bool,
+        allow_provider_terms_unreviewed: bool,
+        allow_metadata_record_write: bool,
+    ) -> ScholarChatScientificMetadataExecutionBoundaryPreviewRequest {
+        ScholarChatScientificMetadataExecutionBoundaryPreviewRequest {
+            query: query.to_string(),
+            mode: Some("scientific_paper".to_string()),
+            course_context: Some("Psychology source connector preview".to_string()),
+            context_tags: Some(vec!["science".to_string(), "metadata".to_string()]),
+            selected_local_source_ids: Some(
+                selected_local_source_ids
+                    .into_iter()
+                    .map(|value| value.to_string())
+                    .collect(),
+            ),
+            expected_source_kinds: Some(vec!["paper".to_string()]),
+            preferred_metadata_sources: Some(
+                preferred_metadata_sources
+                    .into_iter()
+                    .map(|value| value.to_string())
+                    .collect(),
+            ),
+            preferred_psychology_source_families: preferred_psychology_source_families.map(
+                |families| families.into_iter().map(|value| value.to_string()).collect(),
+            ),
+            methodology_hints: Some(vec!["planning".to_string()]),
+            population_hints: None,
+            topic_area_hints: Some(vec!["psychology".to_string()]),
+            evidence_goal: Some("metadata planning".to_string()),
+            claim_scope: Some(vec!["review".to_string()]),
+            citation_style: None,
+            max_results_per_source: Some(20),
+            require_open_access: None,
+            require_doi: None,
+            year_from: None,
+            year_to: None,
+            execution_requested: false,
+            allow_network,
+            allow_provider_terms_unreviewed,
+            allow_metadata_record_write,
+            provider_override: None,
+            dry_run_label: Some("phase_105".to_string()),
+        }
+    }
+
+    #[test]
+    fn scholar_chat_scientific_metadata_execution_boundary_body_composes_scientific_evidence_pack_preview_and_forbids_execution_calls() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        let start = source
+            .find("pub fn preview_scholar_chat_scientific_metadata_execution_boundary")
+            .unwrap();
+        let end = source[start..]
+            .find("pub fn preview_scholar_chat_draft_inference")
+            .unwrap();
+        let body = &source[start..start + end];
+        assert_eq!(
+            body.matches("preview_scholar_chat_scientific_evidence_pack_plan").count(),
+            1
+        );
+        for forbidden_call in [
+            "preview_scholar_chat_metadata_connector_plan",
+            "preview_scholar_chat_psychology_source_connector_plan",
+            "preview_scholar_chat_scientific_search_plan",
+            "preview_scholar_chat_local_literature_index",
+            "preview_scholar_chat_course_literature_registry",
+            "preview_scholar_chat_answer_readiness",
+            "preview_scholar_chat_draft_inference",
+            "preview_scholar_chat_grounded_answer",
+            "run_llama_runtime_smoke_diagnostic",
+            "smoke_test_local_runtime_inference",
+            "Command::new",
+            "reqwest::",
+            "ureq::",
+            "std::fs",
+            "fs::",
+            "std::env",
+            "env::",
+            "http://",
+            "https://",
+            "CorpusAuthority::",
+            "SourceRegistry::",
+            "RetrievalService::new",
+            "extract_source",
+            "chunk_source",
+            "build_retrieval_index",
+            "build_answer_draft",
+            "build_grounded_answer",
+            "build_final_answer",
+            "build_evidence_pack",
+            "export_answer_artifacts",
+        ] {
+            assert!(
+                !body.contains(forbidden_call),
+                "scientific metadata execution boundary preview body should not contain {forbidden_call}"
+            );
+        }
+    }
+
+    #[test]
+    fn scholar_chat_scientific_metadata_execution_boundary_rejects_blank_query_and_keeps_boundary_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_scientific_metadata_execution_boundary_deterministic_and_path_free(
+            &temp,
+            scientific_metadata_execution_boundary_preview_request(
+                "   ",
+                vec!["source-a"],
+                vec!["openalex"],
+                None,
+                true,
+                true,
+                true,
+            ),
+        );
+
+        assert_eq!(
+            preview.status,
+            ScholarChatScientificMetadataExecutionBoundaryStatus::Blocked
+        );
+        assert!(preview.blockers.iter().any(|value| value == "query_missing"));
+        assert!(
+            preview
+                .next_required_actions
+                .iter()
+                .any(|value| value.contains("Provide a scientific query"))
+        );
+    }
+
+    #[test]
+    fn scholar_chat_scientific_metadata_execution_boundary_needs_source_family_for_unknown_preference_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_scientific_metadata_execution_boundary_deterministic_and_path_free(
+            &temp,
+            scientific_metadata_execution_boundary_preview_request(
+                "Signalentdeckung und Wahrnehmung",
+                vec!["source-a"],
+                vec!["openalex", "crossref"],
+                Some(vec!["unknown_family"]),
+                true,
+                true,
+                true,
+            ),
+        );
+
+        assert_eq!(
+            preview.status,
+            ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsSourceFamily
+        );
+        assert!(preview
+            .provider_selection_plan
+            .supported_provider_ids
+            .contains(&"openalex".to_string()));
+        assert!(preview
+            .provider_selection_plan
+            .supported_provider_ids
+            .contains(&"crossref".to_string()));
+        assert!(preview
+            .provider_selection_plan
+            .supported_provider_ids
+            .contains(&"pubmed".to_string()));
+        assert!(preview
+            .provider_selection_plan
+            .supported_provider_ids
+            .contains(&"eric".to_string()));
+        assert!(preview
+            .provider_selection_plan
+            .supported_provider_ids
+            .contains(&"apa_psycnet".to_string()));
+        assert!(preview
+            .provider_selection_plan
+            .supported_provider_ids
+            .contains(&"psycinfo".to_string()));
+        assert_eq!(
+            preview.provider_selection_plan.selected_provider_ids,
+            vec!["openalex".to_string(), "crossref".to_string()]
+        );
+        assert!(!preview
+            .provider_selection_plan
+            .needs_provider_selection);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_metadata_execution_boundary_is_ready_later_with_supported_providers_and_boundary_flags() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_scientific_metadata_execution_boundary_deterministic_and_path_free(
+            &temp,
+            scientific_metadata_execution_boundary_preview_request(
+                "Signalentdeckung und Wahrnehmung",
+                vec!["source-a"],
+                vec!["openalex", "crossref"],
+                None,
+                true,
+                true,
+                true,
+            ),
+        );
+
+        assert_eq!(
+            preview.status,
+            ScholarChatScientificMetadataExecutionBoundaryStatus::ExecutionBoundaryReady
+        );
+        assert_eq!(
+            preview.provider_selection_plan.supported_provider_ids,
+            vec![
+                "openalex".to_string(),
+                "crossref".to_string(),
+                "pubmed".to_string(),
+                "eric".to_string(),
+                "apa_psycnet".to_string(),
+                "psycinfo".to_string(),
+            ]
+        );
+        assert_eq!(
+            preview.provider_selection_plan.selected_provider_ids,
+            vec!["openalex".to_string(), "crossref".to_string()]
+        );
+        assert!(!preview.provider_request_plan.will_call_provider);
+        assert!(!preview.metadata_write_plan.will_write_metadata_records);
+        assert!(preview
+            .summary
+            .contains("ready later and only describes"));
+        assert!(preview
+            .planned_execution_steps
+            .iter()
+            .all(|step| step.preview_only));
     }
 
     #[test]
