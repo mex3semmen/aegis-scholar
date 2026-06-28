@@ -302,6 +302,16 @@ type ScholarChatScientificMetadataProviderRequestPreview = {
   no_audit_write: boolean;
 };
 
+const OPENALEX_READONLY_PANEL_BOUNDARY_CHECKLIST = [
+  { label: "Provider request preview command", value: "wired" },
+  { label: "OpenAlex execution command", value: "not wired" },
+  { label: "Cache/write gate command", value: "not wired" },
+  { label: "Write button", value: "absent" },
+  { label: "Automatic downstream actions", value: "absent" },
+  { label: "Network allowed", value: "false" },
+  { label: "Metadata writes allowed", value: "false" },
+] as const;
+
 type ScholarChatAnswerReadinessStatus =
   | "blocked"
   | "needs_sources"
@@ -3173,6 +3183,8 @@ export default function App() {
     setScholarChatScientificMetadataProviderRequestValidationError(null);
     setScholarChatScientificMetadataProviderRequestPreview(null);
     try {
+      // Phase 114.1 keeps only the read-only provider request preview wired here.
+      // OpenAlex execution and cache/write gate remain intentionally unwired from this panel.
       const result = await invoke<ScholarChatScientificMetadataProviderRequestPreview>("preview_scholar_chat_scientific_metadata_provider_request", {
         root: ".",
         request: buildScholarChatScientificMetadataProviderRequestPreviewRequest(trimmedPrompt),
@@ -4659,10 +4671,10 @@ export default function App() {
         <div class="artifact-overview">
           <h3>OpenAlex metadata provider request preview</h3>
           <p class="muted">
-            Preview only. No writes, no Evidence Pack, no citations, and no answer generation.
+            Read-only preview. Only provider request preview is wired. No OpenAlex execution. No cache/write gate execution. No write button. No Evidence Pack, citations, Literature Review, or answer generation. No network call from this preview.
           </p>
           <p class="muted">
-            Execution requires explicit advanced consent; cache/write is diagnostics-only. This uses the current Scholar Chat prompt as the query preview.
+            Execution requires explicit advanced consent; cache/write remains diagnostics-only. This uses the current Scholar Chat prompt as the query preview.
           </p>
           <div class="hero-actions">
             <button onClick={previewScholarChatScientificMetadataProviderRequest} disabled={scholarChatScientificMetadataProviderRequestLoading()}>
@@ -4695,6 +4707,7 @@ export default function App() {
                 <p><strong>Institutional providers:</strong> {scientificMetadataProviderRequestPreview.institutional_boundary_provider_ids.length > 0 ? scientificMetadataProviderRequestPreview.institutional_boundary_provider_ids.join(", ") : "none"}</p>
                 <p><strong>Normalized provider override:</strong> {scientificMetadataProviderRequestPreview.normalized_provider_override && scientificMetadataProviderRequestPreview.normalized_provider_override.length > 0 ? scientificMetadataProviderRequestPreview.normalized_provider_override.join(", ") : "none"}</p>
                 <p class="muted">{scientificMetadataProviderRequestPreview.summary}</p>
+                {renderMetricGrid([...OPENALEX_READONLY_PANEL_BOUNDARY_CHECKLIST])}
                 <div class="contract-meta">
                   <div><span>Preview only</span><strong>{scientificMetadataProviderRequestPreview.preview_only ? "yes" : "no"}</strong></div>
                   <div><span>Metadata provider request preview only</span><strong>{scientificMetadataProviderRequestPreview.metadata_provider_request_preview_only ? "yes" : "no"}</strong></div>
