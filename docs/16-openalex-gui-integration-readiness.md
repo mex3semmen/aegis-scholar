@@ -10,6 +10,10 @@ It is a docs-only readiness contract. It does not add UI, commands, DTOs, provid
 
 Phase 114.0 adds the first read-only OpenAlex metadata GUI scaffold. It surfaces `preview_scholar_chat_scientific_metadata_provider_request` in a developer / advanced panel, keeps execution and cache/write as diagnostics only, and does not add a write button or any automatic follow-up action.
 
+## Phase 114.1 guard hardening
+
+Phase 114.1 keeps the panel read-only and makes the boundary copy/checklist more explicit. It keeps only provider request preview wired, leaves execution and cache/write unwired, and adds no backend, dependency, or product behavior.
+
 ## Command sequence and panel mapping
 
 Safe command flow:
