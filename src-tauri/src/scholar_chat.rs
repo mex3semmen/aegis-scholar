@@ -38126,6 +38126,8 @@ fn main() {
             .unwrap();
         assert!(execution_slice_index < cache_write_gate_index);
         assert!(cache_write_gate_index < runtime_bridge_index);
+        assert!(!source.contains("run_scholar_chat_openalex_metadata_cache_write("));
+        assert!(!source.contains("write_scholar_chat_openalex_metadata_cache("));
     }
 
     #[test]
@@ -38299,6 +38301,24 @@ fn main() {
             assert!(!debug.contains(forbidden), "{forbidden}");
             assert!(!json.contains(forbidden), "{forbidden}");
         }
+    }
+
+    fn assert_openalex_metadata_cache_write_gate_no_op_flags(
+        preview: &ScholarChatOpenAlexMetadataCacheWriteGatePreview,
+    ) {
+        assert!(!preview.cache_write_gate.can_write_cache);
+        assert!(!preview.cache_write_gate.can_write_records);
+        assert!(!preview.cache_write_gate.can_write_audit);
+        assert!(!preview.audit_boundary.can_write_audit);
+        assert!(preview.no_cache_file_created);
+        assert!(preview.no_metadata_record_write);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_literature_review_created);
+        assert!(preview.no_citation_emission);
+        assert!(preview.no_persistence);
     }
 
     fn assert_openalex_metadata_execution_slice_record_contract(
@@ -39565,6 +39585,293 @@ fn main() {
         assert_openalex_metadata_cache_write_gate_output_is_path_free(
             &preview,
             &[".aegis", "dist", "models/", "\\models\\"],
+        );
+    }
+
+    #[test]
+    fn scholar_chat_openalex_metadata_cache_write_gate_preview_serializes_safe_defaults_and_no_op_flags() {
+        let mut request: ScholarChatOpenAlexMetadataCacheWriteGatePreviewRequest =
+            serde_json::from_str(r#"{"execution_request":{"query":"Signalentdeckung"}}"#).unwrap();
+        assert!(!request.allow_cache_preview);
+        assert!(!request.allow_metadata_cache_write);
+        assert!(!request.allow_metadata_record_write);
+        assert!(!request.allow_audit_write);
+        assert_eq!(request.target_cache_scope, None);
+        assert_eq!(request.retention_policy, None);
+        assert_eq!(request.deduplication_policy, None);
+        assert_eq!(request.record_key_policy, None);
+        assert!(!request.execution_request.execution_requested);
+        assert!(!request.execution_request.allow_network);
+        assert!(!request.execution_request.accept_openalex_terms);
+        assert!(!request.execution_request.allow_openalex_no_key_usage);
+        assert!(!request.execution_request.allow_metadata_record_write);
+        assert!(!request.execution_request.api_key.is_provided());
+        request.execution_request.query_goal = Some("cache write gate planning".to_string());
+        request.execution_request.execution_requested = true;
+        request.execution_request.allow_network = true;
+        request.execution_request.accept_openalex_terms = true;
+        request.execution_request.allow_openalex_no_key_usage = true;
+        request.execution_request.provider_override = Some(vec!["openalex".to_string()]);
+        let transport = FakeOpenAlexMetadataExecutionSliceTransport::success(
+            r#"{"results":[{"id":"https://openalex.org/W1","display_name":"Example"}]}"#,
+        );
+        let temp = tempfile::tempdir().unwrap();
+        let before_entries = count_entries_recursively(temp.path());
+        let preview = preview_scholar_chat_openalex_metadata_cache_write_gate_with_transport(
+            temp.path().to_path_buf(),
+            request,
+            &transport,
+        )
+        .unwrap();
+
+        assert_eq!(
+            serde_json::to_string(&ScholarChatOpenAlexMetadataCacheWriteGateStatus::NeedsCachePreviewConsent).unwrap(),
+            r#""needs_cache_preview_consent""#
+        );
+        assert_eq!(
+            preview.status,
+            ScholarChatOpenAlexMetadataCacheWriteGateStatus::NeedsCachePreviewConsent
+        );
+        assert_eq!(transport.calls(), 1);
+        assert_eq!(before_entries, count_entries_recursively(temp.path()));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_eq!(preview.target_cache_scope, "session_preview");
+        assert_eq!(preview.retention_policy, "ephemeral_preview_only");
+        assert_eq!(preview.deduplication_policy, "stable_record_key_then_doi");
+        assert_eq!(preview.record_key_policy, "provider_and_work_key");
+        assert!(preview
+            .record_write_previews
+            .iter()
+            .all(|record| !record.future_write_eligible));
+        assert!(preview
+            .cache_write_gate
+            .blocked_reasons
+            .iter()
+            .any(|value| value.contains("cache_preview_consent_missing")));
+        assert_openalex_metadata_cache_write_gate_no_op_flags(&preview);
+        assert_openalex_metadata_cache_write_gate_output_is_path_free(
+            &preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                ".aegis",
+                "\\models\\",
+                "/models/",
+                "\\dist\\",
+                "/dist/",
+                "AppData",
+                "https://api.openalex.org",
+                "openalex.org",
+                "https://doi.org",
+            ],
+        );
+    }
+
+    #[test]
+    fn scholar_chat_openalex_metadata_cache_write_gate_preview_rejects_path_like_labels_and_normalizes_deterministically() {
+        let temp = tempfile::tempdir().unwrap();
+        let before_entries = count_entries_recursively(temp.path());
+        let transport = FakeOpenAlexMetadataExecutionSliceTransport::success(
+            r#"{"results":[{"id":"https://openalex.org/W1","display_name":"Example"}]}"#,
+        );
+        let normalized_preview = preview_scholar_chat_openalex_metadata_cache_write_gate_with_transport(
+            temp.path().to_path_buf(),
+            openalex_metadata_cache_write_gate_request_with("Signalentdeckung", |request| {
+                request.allow_cache_preview = true;
+                request.target_cache_scope = Some("  SESSION_PREVIEW  ".to_string());
+                request.retention_policy = Some("  EPHEMERAL_PREVIEW_ONLY  ".to_string());
+                request.deduplication_policy = Some("  STABLE_RECORD_KEY_THEN_DOI  ".to_string());
+                request.record_key_policy = Some("  PROVIDER_AND_WORK_KEY  ".to_string());
+            }),
+            &transport,
+        )
+        .unwrap();
+
+        assert_eq!(
+            normalized_preview.status,
+            ScholarChatOpenAlexMetadataCacheWriteGateStatus::PreviewReady
+        );
+        assert_eq!(normalized_preview.target_cache_scope, "session_preview");
+        assert_eq!(normalized_preview.retention_policy, "ephemeral_preview_only");
+        assert_eq!(normalized_preview.deduplication_policy, "stable_record_key_then_doi");
+        assert_eq!(normalized_preview.record_key_policy, "provider_and_work_key");
+        assert_openalex_metadata_cache_write_gate_no_op_flags(&normalized_preview);
+
+        let blocked_preview = preview_scholar_chat_openalex_metadata_cache_write_gate_with_transport(
+            temp.path().to_path_buf(),
+            openalex_metadata_cache_write_gate_request_with("Signalentdeckung", |request| {
+                request.target_cache_scope = Some("../cache/scope".to_string());
+                request.retention_policy = Some("C:\\cache\\retention".to_string());
+                request.deduplication_policy = Some("..\\dedupe".to_string());
+                request.record_key_policy = Some("/var/tmp/provider".to_string());
+            }),
+            &transport,
+        )
+        .unwrap();
+
+        assert_eq!(blocked_preview.status, ScholarChatOpenAlexMetadataCacheWriteGateStatus::Blocked);
+        assert_eq!(blocked_preview.target_cache_scope, "session_preview");
+        assert_eq!(blocked_preview.retention_policy, "ephemeral_preview_only");
+        assert_eq!(blocked_preview.deduplication_policy, "stable_record_key_then_doi");
+        assert_eq!(blocked_preview.record_key_policy, "provider_and_work_key");
+        assert!(blocked_preview
+            .blockers
+            .iter()
+            .any(|value| value.contains("invalid_target_cache_scope")));
+        assert!(blocked_preview
+            .blockers
+            .iter()
+            .any(|value| value.contains("invalid_retention_policy")));
+        assert!(blocked_preview
+            .blockers
+            .iter()
+            .any(|value| value.contains("invalid_deduplication_policy")));
+        assert!(blocked_preview
+            .blockers
+            .iter()
+            .any(|value| value.contains("invalid_record_key_policy")));
+        assert_openalex_metadata_cache_write_gate_no_op_flags(&blocked_preview);
+        assert_eq!(before_entries, count_entries_recursively(temp.path()));
+        assert!(!temp.path().join(".aegis").exists());
+        assert_openalex_metadata_cache_write_gate_output_is_path_free(
+            &normalized_preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                ".aegis",
+                "AppData",
+                "https://api.openalex.org",
+                "openalex.org",
+                "https://doi.org",
+            ],
+        );
+        assert_openalex_metadata_cache_write_gate_output_is_path_free(
+            &blocked_preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                "../cache/scope",
+                "C:\\cache\\retention",
+                "..\\dedupe",
+                "/var/tmp/provider",
+                ".aegis",
+                "AppData",
+                "https://api.openalex.org",
+                "openalex.org",
+                "https://doi.org",
+            ],
+        );
+        assert_eq!(transport.calls(), 2);
+    }
+
+    #[test]
+    fn scholar_chat_openalex_metadata_cache_write_gate_preview_rejects_non_openalex_provider_overrides_without_transport_call() {
+        let temp = tempfile::tempdir().unwrap();
+        let before_entries = count_entries_recursively(temp.path());
+        for provider_id in ["crossref", "pubmed", "eric", "apa_psycnet", "psycinfo"] {
+            let transport = FakeOpenAlexMetadataExecutionSliceTransport::success(
+                r#"{"results":[{"id":"https://openalex.org/W1","display_name":"Example"}]}"#,
+            );
+            let preview = preview_scholar_chat_openalex_metadata_cache_write_gate_with_transport(
+                temp.path().to_path_buf(),
+                openalex_metadata_cache_write_gate_request_with("Signalentdeckung", |request| {
+                    request.allow_cache_preview = true;
+                    request.execution_request.provider_override = Some(vec![provider_id.to_string()]);
+                }),
+                &transport,
+            )
+            .unwrap();
+
+            assert_eq!(
+                preview.status,
+                ScholarChatOpenAlexMetadataCacheWriteGateStatus::ExecutionBlocked,
+                "{provider_id}"
+            );
+            assert_eq!(
+                preview.execution_status,
+                ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection
+            );
+            assert_eq!(transport.calls(), 0, "{provider_id}");
+            assert_eq!(before_entries, count_entries_recursively(temp.path()), "{provider_id}");
+            assert!(!temp.path().join(".aegis").exists());
+            assert!(preview.record_write_previews.is_empty(), "{provider_id}");
+            assert_openalex_metadata_cache_write_gate_no_op_flags(&preview);
+            assert_openalex_metadata_cache_write_gate_output_is_path_free(
+                &preview,
+                &[temp.path().to_string_lossy().as_ref(), ".aegis", "AppData"],
+            );
+        }
+    }
+
+    #[test]
+    fn scholar_chat_openalex_metadata_cache_write_gate_preview_sorts_records_and_marks_duplicate_keys_deterministically() {
+        let temp = tempfile::tempdir().unwrap();
+        let transport = FakeOpenAlexMetadataExecutionSliceTransport::success(
+            r#"{
+                "results": [
+                    {
+                        "id": "https://openalex.org/W1",
+                        "doi": "https://doi.org/10.1000/example-1",
+                        "display_name": "First example",
+                        "publication_year": 2024
+                    },
+                    {
+                        "id": "https://openalex.org/W1",
+                        "doi": "https://doi.org/10.1000/example-1",
+                        "display_name": "First example",
+                        "publication_year": 2024
+                    },
+                    {
+                        "id": "https://openalex.org/W2",
+                        "doi": "https://doi.org/10.1000/example-2",
+                        "display_name": "Second example",
+                        "publication_year": 2023
+                    }
+                ]
+            }"#,
+        );
+        let preview = preview_scholar_chat_openalex_metadata_cache_write_gate_with_transport(
+            temp.path().to_path_buf(),
+            openalex_metadata_cache_write_gate_request_with("Signalentdeckung", |request| {
+                request.allow_cache_preview = true;
+            }),
+            &transport,
+        )
+        .unwrap();
+
+        assert_eq!(preview.status, ScholarChatOpenAlexMetadataCacheWriteGateStatus::PreviewReady);
+        assert_eq!(transport.calls(), 1);
+        assert_eq!(preview.record_write_previews.len(), 3);
+        let stable_keys = preview
+            .record_write_previews
+            .iter()
+            .map(|record| record.stable_record_key.clone())
+            .collect::<Vec<_>>();
+        let mut sorted_keys = stable_keys.clone();
+        sorted_keys.sort();
+        assert_eq!(stable_keys, sorted_keys);
+        assert!(preview
+            .record_write_previews
+            .iter()
+            .any(|record| record.write_blocked_reasons.iter().any(|value| value == "duplicate_stable_record_key")));
+        assert!(preview
+            .record_write_previews
+            .iter()
+            .any(|record| record.write_blocked_reasons.iter().any(|value| value == "duplicate_normalized_doi")));
+        assert!(preview
+            .record_write_previews
+            .iter()
+            .any(|record| !record.future_write_eligible));
+        assert_eq!(count_entries_recursively(temp.path()), 0);
+        assert!(!temp.path().join(".aegis").exists());
+        assert_openalex_metadata_cache_write_gate_no_op_flags(&preview);
+        assert_openalex_metadata_cache_write_gate_output_is_path_free(
+            &preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                ".aegis",
+                "AppData",
+                "https://api.openalex.org",
+                "openalex.org",
+                "https://doi.org",
+            ],
         );
     }
 }
