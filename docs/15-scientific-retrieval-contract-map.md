@@ -19,8 +19,11 @@ User Query
 -> Provider Config Preview
 -> Metadata Query Plan Preview
 -> Provider Request Preview
--> future OpenAlex-only execution gate
--> future metadata result normalization
+-> OpenAlex-only execution slice
+-> normalized OpenAlex metadata result contract
+-> OpenAlex cache/write gate preview
+-> OpenAlex GUI integration readiness contract
+-> future Evidence Pack conversion contract
 -> future Evidence Pack creation
 -> future Literature Review / Final Answer
 ```
@@ -97,6 +100,14 @@ Future execution stages:
 | `preview_scholar_chat_scientific_metadata_provider_request` | Plans provider request templates, methods, parameters, headers, and bodies. | Provider request preview panel. | GUI-ready preview | No URL building, no request emission, no provider calls. |
 | `run_scholar_chat_openalex_metadata_execution_slice` | Executes the consent-gated OpenAlex-only metadata execution slice. | OpenAlex execution panel. | Future execution candidate | OpenAlex only; disabled by default; explicit developer/advanced action; no writes by default. |
 | `preview_scholar_chat_openalex_metadata_cache_write_gate` | Plans cache scope, retention, deduplication, and future record/audit write boundaries from normalized OpenAlex execution output. | OpenAlex cache/write gate preview panel. | GUI-ready preview | No cache writes, no record writes, no audit writes. |
+
+### OpenAlex GUI integration readiness
+
+Phase 113.0 adds a docs-only OpenAlex Metadata GUI Integration Readiness Contract. It defines how future GUI panels may safely integrate the existing OpenAlex metadata commands before any frontend wiring, and it keeps the command flow preview-only, consent-gated, redacted, and non-writing. GUI may use the contract before any frontend wiring, but it must not infer permission from preview output or expose an actual write button yet.
+
+Reference:
+
+- [docs/16-openalex-gui-integration-readiness.md](16-openalex-gui-integration-readiness.md)
 
 ### Runtime diagnostics
 
