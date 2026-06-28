@@ -10829,22 +10829,69 @@ pub struct ScholarChatOpenAlexMetadataExecutionSliceRequestSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatOpenAlexMetadataResultSummary {
+    pub provider_id: String,
+    pub provider_label: String,
+    pub provider_status_code: Option<u16>,
+    pub provider_status_label: String,
+    pub query: String,
+    pub result_count: usize,
+    pub requested_max_results: u8,
+    pub returned_record_count: usize,
+    pub has_more_results: bool,
+    pub cursor_available: bool,
+    pub next_cursor_present: bool,
+    pub applied_filters: Vec<String>,
+    pub open_access_filter_applied: bool,
+    pub doi_filter_applied: bool,
+    pub year_filter_applied: bool,
+    pub warning_count: usize,
+    pub blocker_count: usize,
+    pub error_count: usize,
+    pub execution_attempted: bool,
+    pub provider_call_attempted: bool,
+    pub in_memory_only: bool,
+    pub persisted: bool,
+    pub citation_emitted: bool,
+    pub evidence_pack_created: bool,
+    pub literature_review_created: bool,
+    pub artifact_written: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ScholarChatOpenAlexMetadataExecutionSliceRecord {
     pub provider_id: String,
     pub source_record_kind: String,
     pub openalex_work_key: String,
+    pub stable_record_key: String,
+    pub provider_work_key: String,
     pub doi: Option<String>,
+    pub doi_normalized: Option<String>,
     pub title: String,
+    pub title_normalized: String,
     pub publication_year: Option<u16>,
+    pub publication_year_label: Option<String>,
     pub work_type: Option<String>,
     pub cited_by_count: usize,
     pub is_open_access: bool,
     pub open_access_status: Option<String>,
     pub primary_source_name: Option<String>,
+    pub source_label: String,
     pub landing_page_available: bool,
     pub author_names: Vec<String>,
+    pub author_display: String,
     pub concept_names: Vec<String>,
+    pub concept_display: String,
     pub topic_names: Vec<String>,
+    pub topic_display: String,
+    pub evidence_candidate_hint: String,
+    pub source_kind_label: String,
+    pub quality_signal_summary: String,
+    pub has_doi: bool,
+    pub has_open_access_signal: bool,
+    pub has_landing_page_signal: bool,
+    pub is_safe_for_evidence_candidate: bool,
     pub raw_provider_id_redacted: bool,
     pub raw_doi_url_redacted: bool,
     pub normalized_from_provider_response: bool,
@@ -10879,6 +10926,7 @@ pub struct ScholarChatOpenAlexMetadataExecutionSliceResult {
     pub provider_request_preview_strategy: ScholarChatScientificMetadataProviderRequestStrategy,
     pub execution_gate: ScholarChatOpenAlexMetadataExecutionSliceGate,
     pub request_summary: ScholarChatOpenAlexMetadataExecutionSliceRequestSummary,
+    pub result_summary: ScholarChatOpenAlexMetadataResultSummary,
     pub parameter_keys: Vec<String>,
     pub filter_summary: String,
     pub response_summary: String,
@@ -21364,6 +21412,7 @@ fn openalex_metadata_execution_slice_result(
     provider_request_preview_strategy: ScholarChatScientificMetadataProviderRequestStrategy,
     execution_gate: ScholarChatOpenAlexMetadataExecutionSliceGate,
     request_summary: ScholarChatOpenAlexMetadataExecutionSliceRequestSummary,
+    result_summary: ScholarChatOpenAlexMetadataResultSummary,
     parameter_keys: Vec<String>,
     filter_summary: String,
     response_summary: String,
@@ -21401,6 +21450,7 @@ fn openalex_metadata_execution_slice_result(
         provider_request_preview_strategy,
         execution_gate,
         request_summary,
+        result_summary,
         parameter_keys,
         filter_summary,
         response_summary,
@@ -21615,6 +21665,221 @@ fn openalex_metadata_execution_slice_filter_summary(
     }
 }
 
+fn openalex_metadata_execution_slice_applied_filters(
+    require_open_access: Option<bool>,
+    require_doi: Option<bool>,
+    year_from: Option<u16>,
+    year_to: Option<u16>,
+) -> Vec<String> {
+    openalex_metadata_execution_slice_filter_parts(
+        require_open_access,
+        require_doi,
+        year_from,
+        year_to,
+    )
+}
+
+fn openalex_metadata_execution_slice_status_label(
+    status: &ScholarChatOpenAlexMetadataExecutionSliceStatus,
+) -> &'static str {
+    match status {
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::Blocked => "blocked",
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsQuery => "needs_query",
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsExecutionConsent => {
+            "needs_execution_consent"
+        }
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsNetworkConsent => {
+            "needs_network_consent"
+        }
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsOpenAlexTermsAcceptance => {
+            "needs_openalex_terms_acceptance"
+        }
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsOpenAlexKeyOrNoKeyConsent => {
+            "needs_openalex_key_or_no_key_consent"
+        }
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsOpenAlexProviderSelection => {
+            "needs_openalex_provider_selection"
+        }
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection => {
+            "unsupported_provider_selection"
+        }
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::RequestPreviewBlocked => {
+            "request_preview_blocked"
+        }
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed => "executed",
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderError => "provider_error",
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderRateLimited => {
+            "provider_rate_limited"
+        }
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderTimeout => "provider_timeout",
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderParseError => {
+            "provider_parse_error"
+        }
+    }
+}
+
+fn openalex_metadata_execution_slice_provider_status_label(
+    status: &ScholarChatOpenAlexMetadataExecutionSliceStatus,
+) -> &'static str {
+    match status {
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed => "executed",
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderError => "provider_error",
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderRateLimited => {
+            "provider_rate_limited"
+        }
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderTimeout => "provider_timeout",
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderParseError => {
+            "provider_parse_error"
+        }
+        ScholarChatOpenAlexMetadataExecutionSliceStatus::Blocked
+        | ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsQuery
+        | ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsExecutionConsent
+        | ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsNetworkConsent
+        | ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsOpenAlexTermsAcceptance
+        | ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsOpenAlexKeyOrNoKeyConsent
+        | ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsOpenAlexProviderSelection
+        | ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection
+        | ScholarChatOpenAlexMetadataExecutionSliceStatus::RequestPreviewBlocked => "blocked",
+    }
+}
+
+fn openalex_metadata_execution_slice_safe_slug(value: &str) -> String {
+    let mut slug = String::new();
+    let mut last_was_separator = false;
+    for ch in value.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+            last_was_separator = false;
+        } else if !last_was_separator {
+            if !slug.is_empty() {
+                slug.push('-');
+            }
+            last_was_separator = true;
+        }
+    }
+    while slug.ends_with('-') {
+        slug.pop();
+    }
+    if slug.is_empty() {
+        "untitled".to_string()
+    } else {
+        slug
+    }
+}
+
+fn openalex_metadata_execution_slice_record_key(
+    provider_id: &str,
+    provider_work_key: &str,
+    doi_normalized: &Option<String>,
+    title_normalized: &str,
+) -> String {
+    if !provider_work_key.is_empty() {
+        format!("{provider_id}:{provider_work_key}")
+    } else if let Some(doi) = doi_normalized {
+        format!("{provider_id}:doi:{}", openalex_metadata_execution_slice_safe_slug(doi))
+    } else if !title_normalized.trim().is_empty() {
+        format!(
+            "{provider_id}:title:{}",
+            openalex_metadata_execution_slice_safe_slug(title_normalized)
+        )
+    } else {
+        format!("{provider_id}:untitled")
+    }
+}
+
+fn openalex_metadata_execution_slice_quality_signal_summary(
+    doi_normalized: &Option<String>,
+    is_open_access: bool,
+    landing_page_available: bool,
+    publication_year: Option<u16>,
+    cited_by_count: usize,
+) -> String {
+    format!(
+        "doi={}; open_access={is_open_access}; landing_page={landing_page_available}; year={}; cited_by_count={cited_by_count}",
+        doi_normalized.is_some(),
+        publication_year
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "unknown".to_string())
+    )
+}
+
+fn openalex_metadata_execution_slice_candidate_hint(
+    title: &str,
+    doi_normalized: &Option<String>,
+    landing_page_available: bool,
+) -> String {
+    if title.trim().is_empty() || title == "Untitled OpenAlex work" {
+        "needs_title_review".to_string()
+    } else if doi_normalized.is_some() || landing_page_available {
+        "metadata_only_candidate".to_string()
+    } else {
+        "needs_doi_or_source_review".to_string()
+    }
+}
+
+fn openalex_metadata_execution_slice_result_summary(
+    status: &ScholarChatOpenAlexMetadataExecutionSliceStatus,
+    query: &str,
+    requested_max_results: u8,
+    returned_record_count: usize,
+    applied_filters: Vec<String>,
+    open_access_filter_applied: bool,
+    doi_filter_applied: bool,
+    year_filter_applied: bool,
+    blocker_count: usize,
+    warning_count: usize,
+    error_count: usize,
+    execution_attempted: bool,
+    provider_call_attempted: bool,
+    provider_status_code: Option<u16>,
+    persisted: bool,
+    citation_emitted: bool,
+    evidence_pack_created: bool,
+    literature_review_created: bool,
+    artifact_written: bool,
+) -> ScholarChatOpenAlexMetadataResultSummary {
+    let result_count = returned_record_count;
+    ScholarChatOpenAlexMetadataResultSummary {
+        provider_id: OPENALEX_METADATA_EXECUTION_SLICE_PROVIDER_ID.to_string(),
+        provider_label: OPENALEX_METADATA_EXECUTION_SLICE_PROVIDER_LABEL.to_string(),
+        provider_status_code,
+        provider_status_label: openalex_metadata_execution_slice_provider_status_label(status).to_string(),
+        query: query.to_string(),
+        result_count,
+        requested_max_results,
+        returned_record_count,
+        has_more_results: false,
+        cursor_available: false,
+        next_cursor_present: false,
+        applied_filters,
+        open_access_filter_applied,
+        doi_filter_applied,
+        year_filter_applied,
+        warning_count,
+        blocker_count,
+        error_count,
+        execution_attempted,
+        provider_call_attempted,
+        in_memory_only: true,
+        persisted,
+        citation_emitted,
+        evidence_pack_created,
+        literature_review_created,
+        artifact_written,
+        summary: if matches!(status, ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed) {
+            format!(
+                "OpenAlex metadata execution slice normalized {returned_record_count} work record(s) in memory only."
+            )
+        } else {
+            format!(
+                "OpenAlex metadata execution slice preview for \"{}\" stayed {} in memory only.",
+                compact_text_preview(query, 60),
+                openalex_metadata_execution_slice_status_label(status)
+            )
+        },
+    }
+}
+
 fn normalize_openalex_work_key(raw_id: &str) -> String {
     let trimmed = raw_id.trim();
     if trimmed.is_empty() {
@@ -21738,7 +22003,9 @@ fn openalex_metadata_execution_slice_record(
     let (doi, raw_doi_url_redacted) = normalize_openalex_doi(&raw_doi);
     let title = openalex_metadata_execution_slice_string(result, &["display_name", "title"])
         .unwrap_or_else(|| "Untitled OpenAlex work".to_string());
+    let title_normalized = title.trim().to_string();
     let publication_year = openalex_metadata_execution_slice_u16(result, &["publication_year"]);
+    let publication_year_label = publication_year.map(|year| year.to_string());
     let work_type = openalex_metadata_execution_slice_string(result, &["type"]);
     let cited_by_count = openalex_metadata_execution_slice_usize(result, &["cited_by_count"]);
     let open_access = result.get("open_access").unwrap_or(result);
@@ -21764,22 +22031,83 @@ fn openalex_metadata_execution_slice_record(
     let author_names = openalex_metadata_execution_slice_list(result, &["authorships"], 5);
     let concept_names = openalex_metadata_execution_slice_list(result, &["concepts"], 5);
     let topic_names = openalex_metadata_execution_slice_list(result, &["topics"], 5);
+    let doi_normalized = doi.clone();
+    let stable_record_key = openalex_metadata_execution_slice_record_key(
+        &provider_id,
+        &openalex_work_key,
+        &doi_normalized,
+        &title_normalized,
+    );
+    let source_label = primary_source_name
+        .clone()
+        .unwrap_or_else(|| OPENALEX_METADATA_EXECUTION_SLICE_PROVIDER_LABEL.to_string());
+    let author_display = if author_names.is_empty() {
+        "no authors reported".to_string()
+    } else {
+        author_names.join("; ")
+    };
+    let concept_display = if concept_names.is_empty() {
+        "no concepts reported".to_string()
+    } else {
+        concept_names.join("; ")
+    };
+    let topic_display = if topic_names.is_empty() {
+        "no topics reported".to_string()
+    } else {
+        topic_names.join("; ")
+    };
+    let evidence_candidate_hint = openalex_metadata_execution_slice_candidate_hint(
+        &title_normalized,
+        &doi_normalized,
+        landing_page_available,
+    );
+    let source_kind_label = "OpenAlex work".to_string();
+    let quality_signal_summary = openalex_metadata_execution_slice_quality_signal_summary(
+        &doi_normalized,
+        is_open_access,
+        landing_page_available,
+        publication_year,
+        cited_by_count,
+    );
+    let has_doi = doi_normalized.is_some();
+    let has_open_access_signal = is_open_access || open_access_status.is_some();
+    let has_landing_page_signal = landing_page_available;
+    let is_safe_for_evidence_candidate = matches!(
+        evidence_candidate_hint.as_str(),
+        "metadata_only_candidate"
+    );
     ScholarChatOpenAlexMetadataExecutionSliceRecord {
         provider_id,
         source_record_kind: "work".to_string(),
-        openalex_work_key,
+        openalex_work_key: openalex_work_key.clone(),
+        stable_record_key,
+        provider_work_key: openalex_work_key.clone(),
         doi,
+        doi_normalized,
         title: title.clone(),
+        title_normalized,
         publication_year,
+        publication_year_label,
         work_type,
         cited_by_count,
         is_open_access,
         open_access_status,
         primary_source_name,
+        source_label,
         landing_page_available,
         author_names: author_names.clone(),
+        author_display,
         concept_names: concept_names.clone(),
+        concept_display,
         topic_names,
+        topic_display,
+        evidence_candidate_hint,
+        source_kind_label,
+        quality_signal_summary,
+        has_doi,
+        has_open_access_signal,
+        has_landing_page_signal,
+        is_safe_for_evidence_candidate,
         raw_provider_id_redacted: !raw_provider_id.is_empty(),
         raw_doi_url_redacted,
         normalized_from_provider_response: true,
@@ -22229,6 +22557,32 @@ fn run_scholar_chat_openalex_metadata_execution_slice_with_transport<T: OpenAlex
             "Reverse year ranges are blocked before any OpenAlex request can be attempted.",
         );
     }
+    let result_summary = openalex_metadata_execution_slice_result_summary(
+        &status,
+        &normalized_query,
+        max_results,
+        metadata_records.len(),
+        openalex_metadata_execution_slice_applied_filters(
+            request.require_open_access,
+            request.require_doi,
+            request.year_from,
+            request.year_to,
+        ),
+        request.require_open_access == Some(true),
+        request.require_doi == Some(true),
+        request.year_from.is_some() || request.year_to.is_some(),
+        blockers.len(),
+        warnings.len(),
+        errors.len(),
+        request_summary.provider_call_attempted,
+        request_summary.provider_call_attempted,
+        provider_status_code,
+        false,
+        false,
+        false,
+        false,
+        false,
+    );
 
     Ok(openalex_metadata_execution_slice_result(
         status,
@@ -22253,6 +22607,7 @@ fn run_scholar_chat_openalex_metadata_execution_slice_with_transport<T: OpenAlex
         provider_request_preview.provider_request_strategy.clone(),
         execution_gate,
         request_summary,
+        result_summary,
         parameter_keys,
         filter_summary,
         response_summary,
@@ -37211,6 +37566,98 @@ fn main() {
         }
     }
 
+    fn assert_openalex_metadata_execution_slice_record_contract(
+        record: &ScholarChatOpenAlexMetadataExecutionSliceRecord,
+        expected_key: &str,
+        expected_hint: &str,
+        expected_candidate_safe: bool,
+    ) {
+        assert_eq!(record.stable_record_key, expected_key);
+        assert!(!record.stable_record_key.contains("http://"));
+        assert!(!record.stable_record_key.contains("https://"));
+        assert_eq!(record.provider_work_key, record.openalex_work_key);
+        assert!(!record.provider_work_key.trim().is_empty());
+        assert!(!record.provider_work_key.contains("http://"));
+        assert!(!record.provider_work_key.contains("https://"));
+        assert!(!record.title_normalized.trim().is_empty());
+        assert_eq!(record.evidence_candidate_hint, expected_hint);
+        assert_eq!(record.is_safe_for_evidence_candidate, expected_candidate_safe);
+        assert!(!record.quality_signal_summary.is_empty());
+        assert!(!record.source_kind_label.is_empty());
+        assert!(!record.source_label.is_empty());
+        assert!(!record.author_display.is_empty());
+        assert!(!record.concept_display.is_empty());
+        assert!(!record.topic_display.is_empty());
+        assert!(!record.title_normalized.is_empty());
+        assert!(record.has_doi == record.doi_normalized.is_some());
+        assert!(record.has_open_access_signal == (record.is_open_access || record.open_access_status.is_some()));
+        assert_eq!(record.has_landing_page_signal, record.landing_page_available);
+        assert!(!record.persisted);
+        assert!(!record.citation_emitted);
+        assert!(!record.evidence_pack_created);
+        assert!(!record.literature_review_created);
+        assert!(!record.raw_provider_id_redacted || !record.provider_work_key.is_empty());
+    }
+
+    fn assert_openalex_metadata_execution_slice_result_summary_contract(
+        preview: &ScholarChatOpenAlexMetadataExecutionSliceResult,
+        expected_applied_filters: &[&str],
+    ) {
+        assert_eq!(preview.result_summary.provider_id, OPENALEX_METADATA_EXECUTION_SLICE_PROVIDER_ID);
+        assert_eq!(preview.result_summary.provider_label, OPENALEX_METADATA_EXECUTION_SLICE_PROVIDER_LABEL);
+        assert_eq!(
+            preview.result_summary.provider_status_label,
+            openalex_metadata_execution_slice_provider_status_label(&preview.status)
+        );
+        assert_eq!(preview.result_summary.provider_status_code, preview.provider_status_code);
+        assert_eq!(preview.result_summary.query, preview.normalized_query);
+        assert_eq!(preview.result_summary.result_count, preview.metadata_records.len());
+        assert_eq!(
+            preview.result_summary.returned_record_count,
+            preview.metadata_records.len()
+        );
+        assert_eq!(preview.result_summary.requested_max_results, preview.max_results);
+        assert!(!preview.result_summary.has_more_results);
+        assert!(!preview.result_summary.cursor_available);
+        assert!(!preview.result_summary.next_cursor_present);
+        assert_eq!(
+            preview.result_summary.applied_filters,
+            expected_applied_filters
+                .iter()
+                .map(|value| value.to_string())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            preview.result_summary.open_access_filter_applied,
+            expected_applied_filters
+                .iter()
+                .any(|value| value.contains("open_access"))
+        );
+        assert_eq!(
+            preview.result_summary.doi_filter_applied,
+            expected_applied_filters.iter().any(|value| value.contains("doi"))
+        );
+        assert_eq!(
+            preview.result_summary.year_filter_applied,
+            expected_applied_filters
+                .iter()
+                .any(|value| value.contains("publication_date") || value.contains("year"))
+        );
+        assert_eq!(preview.result_summary.execution_attempted, preview.request_summary.provider_call_attempted);
+        assert_eq!(preview.result_summary.provider_call_attempted, preview.request_summary.provider_call_attempted);
+        assert!(preview.result_summary.in_memory_only);
+        assert!(!preview.result_summary.persisted);
+        assert!(!preview.result_summary.citation_emitted);
+        assert!(!preview.result_summary.evidence_pack_created);
+        assert!(!preview.result_summary.literature_review_created);
+        assert!(!preview.result_summary.artifact_written);
+        assert!(!preview.result_summary.summary.is_empty());
+        assert!(preview
+            .result_summary
+            .summary
+            .contains("OpenAlex metadata execution slice"));
+    }
+
     fn assert_openalex_metadata_execution_slice_boundary_flags(
         preview: &ScholarChatOpenAlexMetadataExecutionSliceResult,
     ) {
@@ -37277,6 +37724,15 @@ fn main() {
             &transport,
             &preview,
         );
+        assert_openalex_metadata_execution_slice_result_summary_contract(
+            &preview,
+            &[
+                "open_access.is_oa:true",
+                "doi:*",
+                "from_publication_date:2020-01-01",
+                "to_publication_date:2024-12-31",
+            ],
+        );
         assert_openalex_metadata_execution_slice_output_is_redacted(
             &preview,
             &[temp.path().to_string_lossy().as_ref()],
@@ -37291,11 +37747,23 @@ fn main() {
                 "blank query",
                 openalex_metadata_execution_slice_request("   "),
                 ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsQuery,
+                &[
+                    "open_access.is_oa:true",
+                    "doi:*",
+                    "from_publication_date:2020-01-01",
+                    "to_publication_date:2024-12-31",
+                ][..],
             ),
             (
                 "whitespace query",
                 openalex_metadata_execution_slice_request(" \t  "),
                 ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsQuery,
+                &[
+                    "open_access.is_oa:true",
+                    "doi:*",
+                    "from_publication_date:2020-01-01",
+                    "to_publication_date:2024-12-31",
+                ][..],
             ),
             (
                 "execution consent missing",
@@ -37303,6 +37771,12 @@ fn main() {
                     request.execution_requested = false;
                 }),
                 ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsExecutionConsent,
+                &[
+                    "open_access.is_oa:true",
+                    "doi:*",
+                    "from_publication_date:2020-01-01",
+                    "to_publication_date:2024-12-31",
+                ][..],
             ),
             (
                 "network consent missing",
@@ -37310,6 +37784,12 @@ fn main() {
                     request.allow_network = false;
                 }),
                 ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsNetworkConsent,
+                &[
+                    "open_access.is_oa:true",
+                    "doi:*",
+                    "from_publication_date:2020-01-01",
+                    "to_publication_date:2024-12-31",
+                ][..],
             ),
             (
                 "terms consent missing",
@@ -37317,6 +37797,12 @@ fn main() {
                     request.accept_openalex_terms = false;
                 }),
                 ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsOpenAlexTermsAcceptance,
+                &[
+                    "open_access.is_oa:true",
+                    "doi:*",
+                    "from_publication_date:2020-01-01",
+                    "to_publication_date:2024-12-31",
+                ][..],
             ),
             (
                 "no key and no-key usage disallowed",
@@ -37325,6 +37811,12 @@ fn main() {
                     request.allow_openalex_no_key_usage = false;
                 }),
                 ScholarChatOpenAlexMetadataExecutionSliceStatus::NeedsOpenAlexKeyOrNoKeyConsent,
+                &[
+                    "open_access.is_oa:true",
+                    "doi:*",
+                    "from_publication_date:2020-01-01",
+                    "to_publication_date:2024-12-31",
+                ][..],
             ),
             (
                 "metadata write request remains blocked",
@@ -37332,6 +37824,12 @@ fn main() {
                     request.allow_metadata_record_write = true;
                 }),
                 ScholarChatOpenAlexMetadataExecutionSliceStatus::Blocked,
+                &[
+                    "open_access.is_oa:true",
+                    "doi:*",
+                    "from_publication_date:2020-01-01",
+                    "to_publication_date:2024-12-31",
+                ][..],
             ),
             (
                 "reverse year range blocks",
@@ -37340,6 +37838,12 @@ fn main() {
                     request.year_to = Some(2024);
                 }),
                 ScholarChatOpenAlexMetadataExecutionSliceStatus::Blocked,
+                &[
+                    "open_access.is_oa:true",
+                    "doi:*",
+                    "from_publication_date:2025-01-01",
+                    "to_publication_date:2024-12-31",
+                ][..],
             ),
             (
                 "crossref-only override blocks",
@@ -37347,6 +37851,12 @@ fn main() {
                     request.provider_override = Some(vec!["crossref".to_string()]);
                 }),
                 ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection,
+                &[
+                    "open_access.is_oa:true",
+                    "doi:*",
+                    "from_publication_date:2020-01-01",
+                    "to_publication_date:2024-12-31",
+                ][..],
             ),
             (
                 "pubmed-only override blocks",
@@ -37354,6 +37864,12 @@ fn main() {
                     request.provider_override = Some(vec!["pubmed".to_string()]);
                 }),
                 ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection,
+                &[
+                    "open_access.is_oa:true",
+                    "doi:*",
+                    "from_publication_date:2020-01-01",
+                    "to_publication_date:2024-12-31",
+                ][..],
             ),
             (
                 "eric-only override blocks",
@@ -37361,6 +37877,12 @@ fn main() {
                     request.provider_override = Some(vec!["eric".to_string()]);
                 }),
                 ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection,
+                &[
+                    "open_access.is_oa:true",
+                    "doi:*",
+                    "from_publication_date:2020-01-01",
+                    "to_publication_date:2024-12-31",
+                ][..],
             ),
             (
                 "apa psycnet-only override blocks",
@@ -37368,6 +37890,12 @@ fn main() {
                     request.provider_override = Some(vec!["apa_psycnet".to_string()]);
                 }),
                 ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection,
+                &[
+                    "open_access.is_oa:true",
+                    "doi:*",
+                    "from_publication_date:2020-01-01",
+                    "to_publication_date:2024-12-31",
+                ][..],
             ),
             (
                 "psycinfo-only override blocks",
@@ -37375,6 +37903,12 @@ fn main() {
                     request.provider_override = Some(vec!["psycinfo".to_string()]);
                 }),
                 ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection,
+                &[
+                    "open_access.is_oa:true",
+                    "doi:*",
+                    "from_publication_date:2020-01-01",
+                    "to_publication_date:2024-12-31",
+                ][..],
             ),
             (
                 "mixed openalex and unsupported override blocks",
@@ -37385,6 +37919,12 @@ fn main() {
                     ]);
                 }),
                 ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection,
+                &[
+                    "open_access.is_oa:true",
+                    "doi:*",
+                    "from_publication_date:2020-01-01",
+                    "to_publication_date:2024-12-31",
+                ][..],
             ),
             (
                 "preferred unsupported metadata source blocks",
@@ -37392,10 +37932,16 @@ fn main() {
                     request.preferred_metadata_sources = Some(vec!["crossref".to_string()]);
                 }),
                 ScholarChatOpenAlexMetadataExecutionSliceStatus::UnsupportedProviderSelection,
+                &[
+                    "open_access.is_oa:true",
+                    "doi:*",
+                    "from_publication_date:2020-01-01",
+                    "to_publication_date:2024-12-31",
+                ][..],
             ),
         ];
 
-        for (label, request, expected_status) in cases {
+        for (label, request, expected_status, expected_applied_filters) in cases {
             let temp = tempfile::tempdir().unwrap();
             let transport = FakeOpenAlexMetadataExecutionSliceTransport::request_failed();
             let preview = run_scholar_chat_openalex_metadata_execution_slice_with_transport(
@@ -37411,6 +37957,9 @@ fn main() {
                 &temp,
                 &transport,
                 &preview,
+            );
+            assert_openalex_metadata_execution_slice_result_summary_contract(
+                &preview, expected_applied_filters,
             );
         }
     }
@@ -37487,24 +38036,56 @@ fn main() {
             ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed
         );
         assert_eq!(transport.calls(), 1);
+        assert_eq!(preview.result_summary.result_count, 1);
+        assert_openalex_metadata_execution_slice_result_summary_contract(
+            &preview,
+            &[
+                "open_access.is_oa:true",
+                "doi:*",
+                "from_publication_date:2020-01-01",
+                "to_publication_date:2024-12-31",
+            ],
+        );
         assert_eq!(preview.result_count, 1);
         assert_eq!(preview.metadata_records.len(), 1);
         let record = &preview.metadata_records[0];
         assert_eq!(record.provider_id, "openalex");
         assert_eq!(record.source_record_kind, "work");
         assert_eq!(record.openalex_work_key, "W1234567890");
+        assert_openalex_metadata_execution_slice_record_contract(
+            record,
+            "openalex:W1234567890",
+            "metadata_only_candidate",
+            true,
+        );
+        assert_eq!(record.stable_record_key, "openalex:W1234567890");
+        assert_eq!(record.provider_work_key, "W1234567890");
         assert_eq!(record.doi.as_deref(), Some("10.1000/example"));
+        assert_eq!(record.doi_normalized.as_deref(), Some("10.1000/example"));
         assert_eq!(record.title, "Example OpenAlex Work");
+        assert_eq!(record.title_normalized, "Example OpenAlex Work");
         assert_eq!(record.publication_year, Some(2024));
+        assert_eq!(record.publication_year_label.as_deref(), Some("2024"));
         assert_eq!(record.work_type.as_deref(), Some("journal-article"));
         assert_eq!(record.cited_by_count, 12);
         assert!(record.is_open_access);
         assert_eq!(record.open_access_status.as_deref(), Some("gold"));
         assert_eq!(record.primary_source_name.as_deref(), Some("Example Journal"));
+        assert_eq!(record.source_label, "Example Journal");
         assert!(!record.landing_page_available);
         assert_eq!(record.author_names, vec!["Ada Lovelace".to_string()]);
+        assert_eq!(record.author_display, "Ada Lovelace");
         assert_eq!(record.concept_names, vec!["Psychology".to_string()]);
+        assert_eq!(record.concept_display, "Psychology");
         assert_eq!(record.topic_names, vec!["Scientific metadata".to_string()]);
+        assert_eq!(record.topic_display, "Scientific metadata");
+        assert_eq!(record.source_kind_label, "OpenAlex work");
+        assert_eq!(record.evidence_candidate_hint, "metadata_only_candidate");
+        assert!(record.is_safe_for_evidence_candidate);
+        assert!(record.has_doi);
+        assert!(record.has_open_access_signal);
+        assert!(!record.has_landing_page_signal);
+        assert!(record.quality_signal_summary.contains("doi=true"));
         assert!(record.raw_provider_id_redacted);
         assert!(record.raw_doi_url_redacted);
         assert!(record.normalized_from_provider_response);
@@ -37610,6 +38191,10 @@ fn main() {
             preview.normalized_provider_override,
             Some(vec!["openalex".to_string()])
         );
+        assert_eq!(
+            preview.normalized_query_goal.as_deref(),
+            Some("scientific metadata planning")
+        );
         assert_eq!(preview.max_results, 1);
         assert_eq!(preview.cursor.as_deref(), Some("cursor-123"));
         assert_eq!(
@@ -37629,9 +38214,37 @@ fn main() {
         assert!(preview.request_summary.api_key_parameter_used);
         assert!(preview.request_summary.raw_url_redacted);
         assert!(preview.response_summary.contains("OpenAlex"));
+        assert_openalex_metadata_execution_slice_result_summary_contract(
+            &preview,
+            &[
+                "open_access.is_oa:true",
+                "doi:*",
+                "from_publication_date:2020-01-01",
+                "to_publication_date:2024-12-31",
+            ],
+        );
         assert_eq!(preview.metadata_records.len(), 2);
         let first = &preview.metadata_records[0];
         assert_eq!(first.title, "Example Work");
+        assert_openalex_metadata_execution_slice_record_contract(
+            first,
+            "openalex:W1",
+            "metadata_only_candidate",
+            true,
+        );
+        assert_eq!(first.provider_work_key, "W1");
+        assert_eq!(first.doi_normalized.as_deref(), Some("10.1000/example"));
+        assert_eq!(first.title_normalized, "Example Work");
+        assert_eq!(first.publication_year_label, None);
+        assert_eq!(first.source_label, "Example Source");
+        assert_eq!(first.author_display, "Ada Lovelace; Grace Hopper; Katherine Johnson; Dorothy Vaughan; Annie Easley");
+        assert_eq!(first.concept_display, "Psychology; Statistics; Methods; Research; Analysis");
+        assert_eq!(first.topic_display, "Topic A; Topic B; Topic C; Topic D; Topic E");
+        assert_eq!(first.evidence_candidate_hint, "metadata_only_candidate");
+        assert!(first.is_safe_for_evidence_candidate);
+        assert!(first.has_doi);
+        assert!(first.has_open_access_signal);
+        assert!(first.has_landing_page_signal);
         assert_eq!(
             first.author_names,
             vec![
@@ -37664,6 +38277,24 @@ fn main() {
         );
         let second = &preview.metadata_records[1];
         assert_eq!(second.title, "Untitled OpenAlex work");
+        assert_openalex_metadata_execution_slice_record_contract(
+            second,
+            "openalex:W2",
+            "needs_title_review",
+            false,
+        );
+        assert_eq!(second.provider_work_key, "W2");
+        assert_eq!(second.doi_normalized, None);
+        assert_eq!(second.title_normalized, "Untitled OpenAlex work");
+        assert_eq!(second.publication_year_label, None);
+        assert_eq!(second.source_label, "OpenAlex");
+        assert_eq!(second.author_display, "no authors reported");
+        assert_eq!(second.concept_display, "no concepts reported");
+        assert_eq!(second.topic_display, "no topics reported");
+        assert!(!second.has_doi);
+        assert!(!second.has_open_access_signal);
+        assert!(!second.has_landing_page_signal);
+        assert_eq!(second.evidence_candidate_hint, "needs_title_review");
         assert!(second.raw_provider_id_redacted);
         assert!(!second.raw_doi_url_redacted);
         assert!(!second.persisted);
@@ -37888,6 +38519,15 @@ fn main() {
             ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderError
         );
         assert_openalex_metadata_execution_slice_boundary_flags(&request_failed);
+        assert_openalex_metadata_execution_slice_result_summary_contract(
+            &request_failed,
+            &[
+                "open_access.is_oa:true",
+                "doi:*",
+                "from_publication_date:2020-01-01",
+                "to_publication_date:2024-12-31",
+            ],
+        );
 
         let provider_error = run_scholar_chat_openalex_metadata_execution_slice_with_transport(
             temp.path().to_path_buf(),
@@ -37900,6 +38540,15 @@ fn main() {
             ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderError
         );
         assert_openalex_metadata_execution_slice_boundary_flags(&provider_error);
+        assert_openalex_metadata_execution_slice_result_summary_contract(
+            &provider_error,
+            &[
+                "open_access.is_oa:true",
+                "doi:*",
+                "from_publication_date:2020-01-01",
+                "to_publication_date:2024-12-31",
+            ],
+        );
 
         let rate_limited = run_scholar_chat_openalex_metadata_execution_slice_with_transport(
             temp.path().to_path_buf(),
@@ -37912,6 +38561,15 @@ fn main() {
             ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderRateLimited
         );
         assert_openalex_metadata_execution_slice_boundary_flags(&rate_limited);
+        assert_openalex_metadata_execution_slice_result_summary_contract(
+            &rate_limited,
+            &[
+                "open_access.is_oa:true",
+                "doi:*",
+                "from_publication_date:2020-01-01",
+                "to_publication_date:2024-12-31",
+            ],
+        );
 
         let timed_out = run_scholar_chat_openalex_metadata_execution_slice_with_transport(
             temp.path().to_path_buf(),
@@ -37924,6 +38582,15 @@ fn main() {
             ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderTimeout
         );
         assert_openalex_metadata_execution_slice_boundary_flags(&timed_out);
+        assert_openalex_metadata_execution_slice_result_summary_contract(
+            &timed_out,
+            &[
+                "open_access.is_oa:true",
+                "doi:*",
+                "from_publication_date:2020-01-01",
+                "to_publication_date:2024-12-31",
+            ],
+        );
 
         let parse_failed = run_scholar_chat_openalex_metadata_execution_slice_with_transport(
             temp.path().to_path_buf(),
@@ -37936,6 +38603,15 @@ fn main() {
             ScholarChatOpenAlexMetadataExecutionSliceStatus::ProviderParseError
         );
         assert_openalex_metadata_execution_slice_boundary_flags(&parse_failed);
+        assert_openalex_metadata_execution_slice_result_summary_contract(
+            &parse_failed,
+            &[
+                "open_access.is_oa:true",
+                "doi:*",
+                "from_publication_date:2020-01-01",
+                "to_publication_date:2024-12-31",
+            ],
+        );
 
         for preview in [
             &request_failed,
@@ -38000,5 +38676,14 @@ fn main() {
             .iter()
             .any(|record| record.literature_review_created));
         assert_openalex_metadata_execution_slice_boundary_flags(&preview);
+        assert_openalex_metadata_execution_slice_result_summary_contract(
+            &preview,
+            &[
+                "open_access.is_oa:true",
+                "doi:*",
+                "from_publication_date:2020-01-01",
+                "to_publication_date:2024-12-31",
+            ],
+        );
     }
 }
