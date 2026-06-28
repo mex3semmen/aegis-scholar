@@ -26428,11 +26428,39 @@ fn main() {
             "smoke_test_local_runtime_inference",
             "run_llama_runtime_smoke_diagnostic",
             "run_smoke_inference_probe",
+            "preview_scholar_chat_scientific_evidence_pack_plan",
+            "preview_scholar_chat_metadata_connector_plan",
+            "preview_scholar_chat_psychology_source_connector_plan",
+            "preview_scholar_chat_scientific_search_plan",
+            "preview_scholar_chat_scientific_query_understanding",
+            "preview_scholar_chat_local_literature_index",
+            "preview_scholar_chat_course_literature_registry",
+            "preview_scholar_chat_retrieval",
+            "preview_scholar_chat_evidence_plan",
+            "preview_scholar_chat_prompt_pack",
+            "preview_scholar_chat_answer_readiness",
+            "preview_scholar_chat_draft_inference",
+            "preview_scholar_chat_grounded_answer",
+            "preview_scholar_chat_grounded_answer_write_eligibility",
+            "preview_scholar_chat_grounded_answer_execution_plan",
+            "preview_scholar_chat_scientific_paper_literature_review_plan",
             "build_answer_draft",
             "build_grounded_answer",
             "build_final_answer",
-                "build_evidence_pack",
-                "export_answer_artifacts",
+            "build_evidence_pack",
+            "export_answer_artifacts",
+            "std::fs",
+            "fs::",
+            "std::env",
+            "env::",
+            "CorpusAuthority::",
+            "SourceRegistry::",
+            "RetrievalService::new",
+            "extract_source",
+            "chunk_source",
+            "build_retrieval_index",
+            "http://",
+            "https://",
         ] {
             assert!(!body.contains(forbidden), "{forbidden} should not appear in the provider config preview body");
         }
@@ -26479,6 +26507,122 @@ fn main() {
             allow_provider_terms_unreviewed,
             allow_metadata_record_write,
         }
+    }
+
+    fn assert_scientific_metadata_provider_config_preview_boundary_flags(
+        preview: &ScholarChatScientificMetadataProviderConfigPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.metadata_provider_config_preview_only);
+        assert!(preview.dry_run_only);
+        assert!(preview.execution_disabled);
+        assert!(preview.no_network_call);
+        assert!(preview.no_web_request);
+        assert!(preview.no_http_client);
+        assert!(preview.no_api_key_read);
+        assert!(preview.no_environment_read);
+        assert!(preview.no_scraping);
+        assert!(preview.no_authenticated_library_access);
+        assert!(preview.no_paywall_bypass);
+        assert!(preview.no_connector_call);
+        assert!(preview.no_source_import);
+        assert!(preview.no_metadata_record_write);
+        assert!(preview.no_metadata_persistence);
+        assert!(preview.no_local_file_indexing);
+        assert!(preview.no_file_read);
+        assert!(preview.no_pdf_extraction);
+        assert!(preview.no_ocr);
+        assert!(preview.no_chunking_run);
+        assert!(preview.no_embedding_generation);
+        assert!(preview.no_index_created);
+        assert!(preview.no_retrieval_execution);
+        assert!(preview.no_model_loading);
+        assert!(preview.no_runtime_inference);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_literature_review_created);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_persistence);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
+    fn assert_scientific_metadata_provider_config_preview_is_path_free(
+        preview: &ScholarChatScientificMetadataProviderConfigPreview,
+        temp_path: &str,
+    ) {
+        let debug = format!("{preview:?}");
+        let json = serde_json::to_string(preview).unwrap();
+        for fragment in [
+            temp_path,
+            ".aegis",
+            "http://",
+            "https://",
+            "AppData",
+            "target/",
+            "\\target\\",
+            "dist/",
+            "\\dist\\",
+            "models/",
+            "\\models\\",
+            ":\\",
+        ] {
+            assert!(!debug.contains(fragment), "debug output should not contain {fragment}");
+            assert!(!json.contains(fragment), "json output should not contain {fragment}");
+        }
+    }
+
+    fn assert_scientific_metadata_provider_config_step_boundary_notes(
+        step: &ScholarChatScientificMetadataProviderConfigStep,
+    ) {
+        for note in [
+            "preview-only",
+            "provider config preview only",
+            "dry-run only",
+            "no network call",
+            "no web request",
+            "no HTTP client",
+            "no API key read",
+            "no environment read",
+            "no scraping",
+            "no authenticated library access",
+            "no paywall bypass",
+            "no connector call",
+            "no source import",
+            "no metadata record write",
+            "no file read",
+            "no retrieval execution",
+            "no Evidence Pack created",
+            "no Literature Review created",
+            "no artifact write",
+            "no persistence",
+        ] {
+            assert!(
+                step.boundary_notes.iter().any(|value| value == note),
+                "step {:?} should include boundary note {note}",
+                step.kind
+            );
+        }
+    }
+
+    fn assert_scientific_metadata_provider_config_record_invariants(
+        record: &ScholarChatScientificMetadataProviderConfigProviderRecord,
+    ) {
+        assert!(!record.provider_id.is_empty());
+        assert!(!record.provider_label.is_empty());
+        assert!(!record.metadata_scope.is_empty());
+        assert!(!record.planned_query_capabilities.is_empty());
+        assert!(!record.planned_filter_capabilities.is_empty());
+        assert!(!record.planned_result_fields.is_empty());
+        assert!(!record.boundary_notes.is_empty());
+        assert!(!record.summary.is_empty());
+        assert!(!record.can_execute_now);
+        assert!(!record.will_call_provider);
+        assert!(!record.will_use_http_client);
+        assert!(!record.will_read_api_key);
+        assert!(!record.will_read_environment);
+        assert!(!record.will_write_metadata);
     }
 
     fn scientific_metadata_execution_boundary_preview_request(
@@ -26908,8 +27052,8 @@ fn main() {
     #[test]
     fn scholar_chat_scientific_metadata_provider_config_needs_metadata_execution_boundary_with_supported_openalex_and_deterministic_provider_catalog() {
         let temp = tempfile::tempdir().unwrap();
-        let request = scientific_metadata_provider_config_preview_request(
-            "Signalentdeckung und Wahrnehmung",
+        let mut request = scientific_metadata_provider_config_preview_request(
+            "  Signalentdeckung   und   Wahrnehmung  ",
             vec!["openalex", "crossref", "unknown_provider"],
             Some(vec!["OpenAlex", "openalex", "crossref", "OPENALEX"]),
             true,
@@ -26918,6 +27062,7 @@ fn main() {
             false,
             false,
         );
+        request.config_goal = Some("  provider   config   planning  ".to_string());
         let first =
             preview_scholar_chat_scientific_metadata_provider_config(temp.path(), request.clone())
                 .unwrap();
@@ -26929,44 +27074,11 @@ fn main() {
         assert_eq!(first, second);
         assert!(!temp.path().join(".aegis").exists());
         for preview in [&first, &second] {
-            let debug = format!("{preview:?}");
-            let json = serde_json::to_string(preview).unwrap();
-            assert!(!debug.contains(temp_path.as_ref()));
-            assert!(!json.contains(temp_path.as_ref()));
-            assert!(preview.preview_only);
-            assert!(preview.metadata_provider_config_preview_only);
-            assert!(preview.dry_run_only);
-            assert!(preview.execution_disabled);
-            assert!(preview.no_network_call);
-            assert!(preview.no_web_request);
-            assert!(preview.no_http_client);
-            assert!(preview.no_api_key_read);
-            assert!(preview.no_environment_read);
-            assert!(preview.no_scraping);
-            assert!(preview.no_authenticated_library_access);
-            assert!(preview.no_paywall_bypass);
-            assert!(preview.no_connector_call);
-            assert!(preview.no_source_import);
-            assert!(preview.no_metadata_record_write);
-            assert!(preview.no_metadata_persistence);
-            assert!(preview.no_local_file_indexing);
-            assert!(preview.no_file_read);
-            assert!(preview.no_pdf_extraction);
-            assert!(preview.no_ocr);
-            assert!(preview.no_chunking_run);
-            assert!(preview.no_embedding_generation);
-            assert!(preview.no_index_created);
-            assert!(preview.no_retrieval_execution);
-            assert!(preview.no_model_loading);
-            assert!(preview.no_runtime_inference);
-            assert!(preview.no_llm_call);
-            assert!(preview.no_answer_generated);
-            assert!(preview.no_literature_review_created);
-            assert!(preview.no_evidence_pack_created);
-            assert!(preview.no_artifact_write);
-            assert!(preview.no_persistence);
-            assert!(preview.no_registry_status_change);
-            assert!(preview.no_audit_write);
+            assert_scientific_metadata_provider_config_preview_boundary_flags(preview);
+            assert_scientific_metadata_provider_config_preview_is_path_free(
+                preview,
+                temp_path.as_ref(),
+            );
             assert_eq!(
                 preview.status,
                 ScholarChatScientificMetadataProviderConfigStatus::NeedsMetadataExecutionBoundary
@@ -26978,6 +27090,31 @@ fn main() {
             assert_eq!(
                 preview.normalized_provider_override,
                 Some(vec!["crossref".to_string(), "openalex".to_string()])
+            );
+            assert_eq!(
+                preview.normalized_query,
+                "Signalentdeckung und Wahrnehmung"
+            );
+            assert_eq!(
+                preview.normalized_mode,
+                Some("scientific_paper".to_string())
+            );
+            assert_eq!(
+                preview.normalized_config_goal,
+                Some("provider config planning".to_string())
+            );
+            assert_eq!(preview.selected_provider_ids, vec!["openalex", "crossref"]);
+            assert_eq!(preview.selected_provider_count, 2);
+            assert_eq!(preview.unknown_provider_ids, vec!["unknown_provider"]);
+            assert!(preview
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("Unknown provider override is preserved only as a preview-only hint.")));
+            assert_eq!(
+                preview
+                    .metadata_execution_boundary_strategy
+                    .clone(),
+                ScholarChatScientificMetadataExecutionBoundaryStrategy::ExecutionGatePending
             );
             assert_eq!(
                 preview.provider_configs.len(),
@@ -26995,6 +27132,10 @@ fn main() {
                 .provider_configs
                 .iter()
                 .all(|record| record.supported));
+            assert!(preview
+                .provider_configs
+                .iter()
+                .all(|record| !record.selected || preview.selected_provider_ids.contains(&record.provider_id)));
             assert!(preview
                 .provider_configs
                 .iter()
@@ -27019,6 +27160,556 @@ fn main() {
                 .provider_configs
                 .iter()
                 .all(|record| !record.will_write_metadata));
+            for record in &preview.provider_configs {
+                assert_scientific_metadata_provider_config_record_invariants(record);
+                match record.provider_id.as_str() {
+                    "openalex" => {
+                        assert_eq!(
+                            record.access_kind,
+                            ScholarChatScientificMetadataProviderAccessKind::OpenMetadata
+                        );
+                        assert!(record.selected);
+                        assert!(record.requires_network_permission);
+                        assert!(record.requires_terms_review);
+                        assert!(!record.requires_attribution);
+                        assert!(!record.requires_api_key_later);
+                        assert!(!record.requires_environment_later);
+                        assert!(!record.requires_institutional_access_review_later);
+                        assert!(!record.authenticated_access_blocked_now);
+                        assert!(!record.paywall_bypass_blocked_now);
+                    }
+                    "crossref" => {
+                        assert_eq!(
+                            record.access_kind,
+                            ScholarChatScientificMetadataProviderAccessKind::PublicMetadataApi
+                        );
+                        assert!(record.selected);
+                        assert!(record.requires_network_permission);
+                        assert!(record.requires_terms_review);
+                        assert!(record.requires_attribution);
+                        assert!(!record.requires_api_key_later);
+                        assert!(!record.requires_environment_later);
+                        assert!(!record.requires_institutional_access_review_later);
+                        assert!(!record.authenticated_access_blocked_now);
+                        assert!(!record.paywall_bypass_blocked_now);
+                    }
+                    "pubmed" => {
+                        assert_eq!(
+                            record.access_kind,
+                            ScholarChatScientificMetadataProviderAccessKind::PublicMetadataApi
+                        );
+                        assert!(!record.selected);
+                        assert!(record.requires_network_permission);
+                        assert!(record.requires_terms_review);
+                        assert!(record.requires_attribution);
+                        assert!(!record.requires_api_key_later);
+                        assert!(!record.requires_environment_later);
+                        assert!(!record.requires_institutional_access_review_later);
+                        assert!(!record.authenticated_access_blocked_now);
+                        assert!(!record.paywall_bypass_blocked_now);
+                    }
+                    "eric" => {
+                        assert_eq!(
+                            record.access_kind,
+                            ScholarChatScientificMetadataProviderAccessKind::PublicMetadataApi
+                        );
+                        assert!(!record.selected);
+                        assert!(record.requires_network_permission);
+                        assert!(record.requires_terms_review);
+                        assert!(record.requires_attribution);
+                        assert!(!record.requires_api_key_later);
+                        assert!(!record.requires_environment_later);
+                        assert!(!record.requires_institutional_access_review_later);
+                        assert!(!record.authenticated_access_blocked_now);
+                        assert!(!record.paywall_bypass_blocked_now);
+                    }
+                    "apa_psycnet" => {
+                        assert_eq!(
+                            record.access_kind,
+                            ScholarChatScientificMetadataProviderAccessKind::InstitutionalDiscovery
+                        );
+                        assert!(!record.selected);
+                        assert!(record.requires_network_permission);
+                        assert!(record.requires_terms_review);
+                        assert!(!record.requires_attribution);
+                        assert!(record.requires_api_key_later);
+                        assert!(!record.requires_environment_later);
+                        assert!(record.requires_institutional_access_review_later);
+                        assert!(record.authenticated_access_blocked_now);
+                        assert!(record.paywall_bypass_blocked_now);
+                    }
+                    "psycinfo" => {
+                        assert_eq!(
+                            record.access_kind,
+                            ScholarChatScientificMetadataProviderAccessKind::AuthenticatedLibraryBoundary
+                        );
+                        assert!(!record.selected);
+                        assert!(record.requires_network_permission);
+                        assert!(record.requires_terms_review);
+                        assert!(!record.requires_attribution);
+                        assert!(record.requires_api_key_later);
+                        assert!(!record.requires_environment_later);
+                        assert!(record.requires_institutional_access_review_later);
+                        assert!(record.authenticated_access_blocked_now);
+                        assert!(record.paywall_bypass_blocked_now);
+                    }
+                    other => panic!("unexpected provider id {other}"),
+                }
+            }
+            assert_eq!(
+                preview.provider_terms_policy.providers_requiring_terms_review,
+                vec!["openalex".to_string(), "crossref".to_string()]
+            );
+            assert!(preview
+                .provider_terms_policy
+                .providers_requiring_institutional_access_review_later
+                .is_empty());
+            assert!(preview.provider_terms_policy.terms_review_required);
+            assert!(!preview.provider_terms_policy.unreviewed_terms_block_execution);
+            assert!(preview.provider_terms_policy.authenticated_access_blocked);
+            assert!(preview.provider_terms_policy.paywall_bypass_blocked);
+            assert!(!preview.provider_terms_policy.summary.is_empty());
+            assert_eq!(
+                preview.provider_access_policy.open_metadata_providers,
+                vec!["openalex".to_string()]
+            );
+            assert_eq!(
+                preview.provider_access_policy.public_metadata_api_providers,
+                vec![
+                    "crossref".to_string(),
+                    "pubmed".to_string(),
+                    "eric".to_string()
+                ]
+            );
+            assert_eq!(
+                preview.provider_access_policy.institutional_boundary_providers,
+                vec!["apa_psycnet".to_string(), "psycinfo".to_string()]
+            );
+            assert!(preview.provider_access_policy.authenticated_access_blocked_now);
+            assert!(!preview
+                .provider_access_policy
+                .manual_access_review_required_later);
+            assert!(!preview.provider_access_policy.summary.is_empty());
+            assert_eq!(
+                preview.provider_rate_limit_policy.providers_requiring_rate_limit_review_later,
+                vec!["openalex".to_string(), "crossref".to_string()]
+            );
+            assert!(preview
+                .provider_rate_limit_policy
+                .provider_request_budget_planned_later);
+            assert!(!preview
+                .provider_rate_limit_policy
+                .will_enforce_rate_limit_now);
+            assert!(!preview.provider_rate_limit_policy.will_call_provider_now);
+            assert!(!preview.provider_rate_limit_policy.summary.is_empty());
+            assert_eq!(
+                preview.provider_attribution_policy.providers_requiring_attribution,
+                vec!["crossref".to_string()]
+            );
+            assert_eq!(
+                preview.provider_attribution_policy.required_attribution_fields,
+                vec![
+                    "provider_name".to_string(),
+                    "provider_record_id".to_string(),
+                    "source_family".to_string(),
+                    "provider_terms_note".to_string()
+                ]
+            );
+            assert!(!preview.provider_attribution_policy.will_emit_citations_now);
+            assert!(!preview.provider_attribution_policy.will_write_attribution_now);
+            assert!(!preview.provider_attribution_policy.summary.is_empty());
+            assert!(preview.provider_safety_boundary.external_services_blocked_now);
+            assert!(preview.provider_safety_boundary.connector_calls_blocked_now);
+            assert!(preview.provider_safety_boundary.network_blocked_now);
+            assert!(preview.provider_safety_boundary.http_client_blocked_now);
+            assert!(preview.provider_safety_boundary.api_key_reads_blocked_now);
+            assert!(preview.provider_safety_boundary.environment_reads_blocked_now);
+            assert!(preview.provider_safety_boundary.scraping_blocked_now);
+            assert!(preview
+                .provider_safety_boundary
+                .authenticated_library_access_blocked_now);
+            assert!(preview.provider_safety_boundary.paywall_bypass_blocked_now);
+            assert!(preview.provider_safety_boundary.metadata_writes_blocked_now);
+            assert!(preview.provider_safety_boundary.source_import_blocked_now);
+            assert!(!preview.provider_safety_boundary.summary.is_empty());
+            let expected_step_kinds = vec![
+                ScholarChatScientificMetadataProviderConfigStepKind::MetadataExecutionBoundaryAlignment,
+                ScholarChatScientificMetadataProviderConfigStepKind::ProviderCapabilityCatalog,
+                ScholarChatScientificMetadataProviderConfigStepKind::ProviderTermsPolicy,
+                ScholarChatScientificMetadataProviderConfigStepKind::ProviderAccessPolicy,
+                ScholarChatScientificMetadataProviderConfigStepKind::ProviderRateLimitPolicy,
+                ScholarChatScientificMetadataProviderConfigStepKind::ProviderAttributionPolicy,
+                ScholarChatScientificMetadataProviderConfigStepKind::ProviderSafetyBoundary,
+                ScholarChatScientificMetadataProviderConfigStepKind::DownstreamMetadataExecutionAlignment,
+                ScholarChatScientificMetadataProviderConfigStepKind::DownstreamEvidencePackAlignment,
+                ScholarChatScientificMetadataProviderConfigStepKind::DownstreamLiteratureReviewAlignment,
+            ];
+            assert_eq!(
+                preview
+                    .planned_config_steps
+                    .iter()
+                    .map(|step| step.kind.clone())
+                    .collect::<Vec<_>>(),
+                expected_step_kinds
+            );
+            assert!(preview.planned_config_steps.iter().all(|step| step.preview_only));
+            assert!(preview.planned_config_steps.iter().all(|step| step.active));
+            for step in &preview.planned_config_steps {
+                assert!(!step.id.is_empty());
+                assert!(!step.label.is_empty());
+                assert!(!step.description.is_empty());
+                assert!(!step.planned_inputs.is_empty());
+                assert!(!step.planned_outputs.is_empty());
+                assert_scientific_metadata_provider_config_step_boundary_notes(step);
+            }
+        }
+    }
+
+    #[test]
+    fn scholar_chat_scientific_metadata_provider_config_minimal_request_deserializes_with_safe_defaults() {
+        let request: ScholarChatScientificMetadataProviderConfigPreviewRequest =
+            serde_json::from_str(r#"{"query":"  provider config planning  "}"#).unwrap();
+
+        assert_eq!(request.query, "  provider config planning  ");
+        assert_eq!(request.mode, None);
+        assert_eq!(request.context_tags, None);
+        assert_eq!(request.preferred_metadata_sources, None);
+        assert_eq!(request.preferred_psychology_source_families, None);
+        assert_eq!(request.provider_override, None);
+        assert_eq!(request.require_open_access, None);
+        assert_eq!(request.require_doi, None);
+        assert_eq!(request.year_from, None);
+        assert_eq!(request.year_to, None);
+        assert_eq!(request.config_goal, None);
+        assert_eq!(request.include_disabled_providers, None);
+        assert_eq!(request.include_institutional_providers, None);
+        assert_eq!(request.include_rate_limit_notes, None);
+        assert_eq!(request.include_attribution_requirements, None);
+        assert!(!request.execution_requested);
+        assert!(!request.allow_network);
+        assert!(!request.allow_provider_terms_unreviewed);
+        assert!(!request.allow_metadata_record_write);
+    }
+
+    #[test]
+    fn scholar_chat_scientific_metadata_provider_config_status_matrix_matches_preview_contract() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut cases = Vec::new();
+
+        let mut blank_query = scientific_metadata_provider_config_preview_request(
+            "   ",
+            vec!["openalex"],
+            None,
+            false,
+            false,
+            false,
+            false,
+            false,
+        );
+        blank_query.config_goal = Some("   ".to_string());
+        cases.push((
+            "blank query",
+            blank_query,
+            ScholarChatScientificMetadataProviderConfigStatus::Blocked,
+            ScholarChatScientificMetadataProviderConfigStrategy::Blocked,
+        ));
+
+        cases.push((
+            "no selected provider",
+            scientific_metadata_provider_config_preview_request(
+                "Signalentdeckung und Wahrnehmung",
+                vec![],
+                Some(vec!["unknown_provider"]),
+                true,
+                true,
+                false,
+                true,
+                true,
+            ),
+            ScholarChatScientificMetadataProviderConfigStatus::NeedsMetadataExecutionBoundary,
+            ScholarChatScientificMetadataProviderConfigStrategy::ProviderPolicyReviewFirst,
+        ));
+
+        for (label, request, expected_status, expected_strategy) in cases {
+            let preview =
+                preview_scholar_chat_scientific_metadata_provider_config(temp.path(), request)
+                    .unwrap();
+            assert_eq!(preview.status, expected_status, "{label}");
+            assert_eq!(preview.provider_config_strategy, expected_strategy, "{label}");
+            assert_scientific_metadata_provider_config_preview_boundary_flags(&preview);
+            assert!(!preview.summary.is_empty(), "{label}");
+            if matches!(
+                expected_status,
+                ScholarChatScientificMetadataProviderConfigStatus::Blocked
+            ) {
+                assert!(preview
+                    .planned_config_steps
+                    .iter()
+                    .all(|step| !step.active),
+                    "{label}"
+                );
+            } else {
+                assert!(preview
+                    .planned_config_steps
+                    .iter()
+                    .all(|step| step.active),
+                    "{label}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn scholar_chat_scientific_metadata_provider_config_policy_and_step_invariants_remain_deterministic_and_path_free() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut request = scientific_metadata_provider_config_preview_request(
+            "  Signalentdeckung   und   Wahrnehmung  ",
+            vec!["openalex", "crossref", "unknown_provider"],
+            Some(vec!["OpenAlex", "openalex", "crossref", "OPENALEX"]),
+            true,
+            false,
+            false,
+            false,
+            false,
+        );
+        request.config_goal = Some("  provider   config   planning  ".to_string());
+
+        let first =
+            preview_scholar_chat_scientific_metadata_provider_config(temp.path(), request.clone())
+                .unwrap();
+        let second =
+            preview_scholar_chat_scientific_metadata_provider_config(temp.path(), request)
+                .unwrap();
+        let temp_path = temp.path().to_string_lossy();
+
+        assert_eq!(first, second);
+        assert!(!temp.path().join(".aegis").exists());
+        assert_scientific_metadata_provider_config_preview_is_path_free(&first, temp_path.as_ref());
+        assert_scientific_metadata_provider_config_preview_is_path_free(&second, temp_path.as_ref());
+        assert_eq!(
+            first.normalized_query,
+            "Signalentdeckung und Wahrnehmung"
+        );
+        assert_eq!(
+            first.normalized_mode,
+            Some("scientific_paper".to_string())
+        );
+        assert_eq!(
+            first.normalized_config_goal,
+            Some("provider config planning".to_string())
+        );
+        assert_eq!(first.status, ScholarChatScientificMetadataProviderConfigStatus::NeedsMetadataExecutionBoundary);
+        assert_eq!(
+            first.provider_config_strategy,
+            ScholarChatScientificMetadataProviderConfigStrategy::ProviderPolicyReviewFirst
+        );
+        assert_eq!(first.selected_provider_ids, vec!["openalex", "crossref"]);
+        assert_eq!(first.selected_provider_count, 2);
+        assert_eq!(first.unknown_provider_ids, vec!["unknown_provider"]);
+        assert!(
+            first
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("Unknown provider override is preserved only as a preview-only hint."))
+        );
+        assert_eq!(
+            first.metadata_execution_boundary_status,
+            ScholarChatScientificMetadataExecutionBoundaryStatus::NeedsNetworkPermission
+        );
+        assert_eq!(
+            first.metadata_execution_boundary_strategy,
+            ScholarChatScientificMetadataExecutionBoundaryStrategy::ExecutionGatePending
+        );
+        assert_eq!(
+            first.provider_terms_policy.providers_requiring_terms_review,
+            vec!["openalex".to_string(), "crossref".to_string()]
+        );
+        assert!(first
+            .provider_terms_policy
+            .providers_requiring_institutional_access_review_later
+            .is_empty());
+        assert!(first.provider_terms_policy.terms_review_required);
+        assert!(!first.provider_terms_policy.unreviewed_terms_block_execution);
+        assert!(first.provider_terms_policy.authenticated_access_blocked);
+        assert!(first.provider_terms_policy.paywall_bypass_blocked);
+        assert!(!first.provider_terms_policy.summary.is_empty());
+        assert_eq!(
+            first.provider_access_policy.open_metadata_providers,
+            vec!["openalex".to_string()]
+        );
+        assert_eq!(
+            first.provider_access_policy.public_metadata_api_providers,
+            vec![
+                "crossref".to_string(),
+                "pubmed".to_string(),
+                "eric".to_string()
+            ]
+        );
+        assert_eq!(
+            first.provider_access_policy.institutional_boundary_providers,
+            vec!["apa_psycnet".to_string(), "psycinfo".to_string()]
+        );
+        assert!(first.provider_access_policy.authenticated_access_blocked_now);
+        assert!(!first.provider_access_policy.manual_access_review_required_later);
+        assert!(!first.provider_access_policy.summary.is_empty());
+        assert_eq!(
+            first.provider_rate_limit_policy.providers_requiring_rate_limit_review_later,
+            vec!["openalex".to_string(), "crossref".to_string()]
+        );
+        assert!(first.provider_rate_limit_policy.provider_request_budget_planned_later);
+        assert!(!first.provider_rate_limit_policy.will_enforce_rate_limit_now);
+        assert!(!first.provider_rate_limit_policy.will_call_provider_now);
+        assert!(!first.provider_rate_limit_policy.summary.is_empty());
+        assert_eq!(
+            first.provider_attribution_policy.providers_requiring_attribution,
+            vec!["crossref".to_string()]
+        );
+        assert_eq!(
+            first.provider_attribution_policy.required_attribution_fields,
+            vec![
+                "provider_name".to_string(),
+                "provider_record_id".to_string(),
+                "source_family".to_string(),
+                "provider_terms_note".to_string()
+            ]
+        );
+        assert!(!first.provider_attribution_policy.will_emit_citations_now);
+        assert!(!first.provider_attribution_policy.will_write_attribution_now);
+        assert!(!first.provider_attribution_policy.summary.is_empty());
+        assert!(first.provider_safety_boundary.external_services_blocked_now);
+        assert!(first.provider_safety_boundary.connector_calls_blocked_now);
+        assert!(first.provider_safety_boundary.network_blocked_now);
+        assert!(first.provider_safety_boundary.http_client_blocked_now);
+        assert!(first.provider_safety_boundary.api_key_reads_blocked_now);
+        assert!(first.provider_safety_boundary.environment_reads_blocked_now);
+        assert!(first.provider_safety_boundary.scraping_blocked_now);
+        assert!(first
+            .provider_safety_boundary
+            .authenticated_library_access_blocked_now);
+        assert!(first.provider_safety_boundary.paywall_bypass_blocked_now);
+        assert!(first.provider_safety_boundary.metadata_writes_blocked_now);
+        assert!(first.provider_safety_boundary.source_import_blocked_now);
+        assert!(!first.provider_safety_boundary.summary.is_empty());
+        assert_eq!(
+            first.planned_config_steps.iter().map(|step| step.kind.clone()).collect::<Vec<_>>(),
+            vec![
+                ScholarChatScientificMetadataProviderConfigStepKind::MetadataExecutionBoundaryAlignment,
+                ScholarChatScientificMetadataProviderConfigStepKind::ProviderCapabilityCatalog,
+                ScholarChatScientificMetadataProviderConfigStepKind::ProviderTermsPolicy,
+                ScholarChatScientificMetadataProviderConfigStepKind::ProviderAccessPolicy,
+                ScholarChatScientificMetadataProviderConfigStepKind::ProviderRateLimitPolicy,
+                ScholarChatScientificMetadataProviderConfigStepKind::ProviderAttributionPolicy,
+                ScholarChatScientificMetadataProviderConfigStepKind::ProviderSafetyBoundary,
+                ScholarChatScientificMetadataProviderConfigStepKind::DownstreamMetadataExecutionAlignment,
+                ScholarChatScientificMetadataProviderConfigStepKind::DownstreamEvidencePackAlignment,
+                ScholarChatScientificMetadataProviderConfigStepKind::DownstreamLiteratureReviewAlignment,
+            ]
+        );
+        assert!(first.planned_config_steps.iter().all(|step| step.preview_only));
+        assert!(first.planned_config_steps.iter().all(|step| step.active));
+        for step in &first.planned_config_steps {
+            assert!(!step.id.is_empty());
+            assert!(!step.label.is_empty());
+            assert!(!step.description.is_empty());
+            assert!(!step.planned_inputs.is_empty());
+            assert!(!step.planned_outputs.is_empty());
+            assert_scientific_metadata_provider_config_step_boundary_notes(step);
+        }
+        for record in &first.provider_configs {
+            assert_scientific_metadata_provider_config_record_invariants(record);
+            match record.provider_id.as_str() {
+                "openalex" => {
+                    assert_eq!(
+                        record.access_kind,
+                        ScholarChatScientificMetadataProviderAccessKind::OpenMetadata
+                    );
+                    assert!(record.selected);
+                    assert!(record.requires_network_permission);
+                    assert!(record.requires_terms_review);
+                    assert!(!record.requires_attribution);
+                    assert!(!record.requires_api_key_later);
+                    assert!(!record.requires_environment_later);
+                    assert!(!record.requires_institutional_access_review_later);
+                    assert!(!record.authenticated_access_blocked_now);
+                    assert!(!record.paywall_bypass_blocked_now);
+                }
+                "crossref" => {
+                    assert_eq!(
+                        record.access_kind,
+                        ScholarChatScientificMetadataProviderAccessKind::PublicMetadataApi
+                    );
+                    assert!(record.selected);
+                    assert!(record.requires_network_permission);
+                    assert!(record.requires_terms_review);
+                    assert!(record.requires_attribution);
+                    assert!(!record.requires_api_key_later);
+                    assert!(!record.requires_environment_later);
+                    assert!(!record.requires_institutional_access_review_later);
+                    assert!(!record.authenticated_access_blocked_now);
+                    assert!(!record.paywall_bypass_blocked_now);
+                }
+                "pubmed" => {
+                    assert_eq!(
+                        record.access_kind,
+                        ScholarChatScientificMetadataProviderAccessKind::PublicMetadataApi
+                    );
+                    assert!(!record.selected);
+                    assert!(record.requires_network_permission);
+                    assert!(record.requires_terms_review);
+                    assert!(record.requires_attribution);
+                    assert!(!record.requires_api_key_later);
+                    assert!(!record.requires_environment_later);
+                    assert!(!record.requires_institutional_access_review_later);
+                    assert!(!record.authenticated_access_blocked_now);
+                    assert!(!record.paywall_bypass_blocked_now);
+                }
+                "eric" => {
+                    assert_eq!(
+                        record.access_kind,
+                        ScholarChatScientificMetadataProviderAccessKind::PublicMetadataApi
+                    );
+                    assert!(!record.selected);
+                    assert!(record.requires_network_permission);
+                    assert!(record.requires_terms_review);
+                    assert!(record.requires_attribution);
+                    assert!(!record.requires_api_key_later);
+                    assert!(!record.requires_environment_later);
+                    assert!(!record.requires_institutional_access_review_later);
+                    assert!(!record.authenticated_access_blocked_now);
+                    assert!(!record.paywall_bypass_blocked_now);
+                }
+                "apa_psycnet" => {
+                    assert_eq!(
+                        record.access_kind,
+                        ScholarChatScientificMetadataProviderAccessKind::InstitutionalDiscovery
+                    );
+                    assert!(!record.selected);
+                    assert!(record.requires_network_permission);
+                    assert!(record.requires_terms_review);
+                    assert!(!record.requires_attribution);
+                    assert!(record.requires_api_key_later);
+                    assert!(!record.requires_environment_later);
+                    assert!(record.requires_institutional_access_review_later);
+                    assert!(record.authenticated_access_blocked_now);
+                    assert!(record.paywall_bypass_blocked_now);
+                }
+                "psycinfo" => {
+                    assert_eq!(
+                        record.access_kind,
+                        ScholarChatScientificMetadataProviderAccessKind::AuthenticatedLibraryBoundary
+                    );
+                    assert!(!record.selected);
+                    assert!(record.requires_network_permission);
+                    assert!(record.requires_terms_review);
+                    assert!(!record.requires_attribution);
+                    assert!(record.requires_api_key_later);
+                    assert!(!record.requires_environment_later);
+                    assert!(record.requires_institutional_access_review_later);
+                    assert!(record.authenticated_access_blocked_now);
+                    assert!(record.paywall_bypass_blocked_now);
+                }
+                other => panic!("unexpected provider id {other}"),
+            }
         }
     }
 
