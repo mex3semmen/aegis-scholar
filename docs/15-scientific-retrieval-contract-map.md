@@ -95,7 +95,7 @@ Future execution stages:
 | `preview_scholar_chat_scientific_metadata_provider_config` | Plans provider config and access boundaries. | Provider config panel. | GUI-ready preview | No provider execution or writes. |
 | `preview_scholar_chat_scientific_metadata_query_plan` | Plans query templates, filters, and provider-family partitioning. | Query-plan panel. | GUI-ready preview | No provider execution or writes. |
 | `preview_scholar_chat_scientific_metadata_provider_request` | Plans provider request templates, methods, parameters, headers, and bodies. | Provider request preview panel. | GUI-ready preview | No URL building, no request emission, no provider calls. |
-| `run_scholar_chat_openalex_metadata_execution_slice` | Executes the consent-gated OpenAlex-only metadata execution slice. | OpenAlex execution panel. | Future execution candidate | OpenAlex only; disabled by default; no writes by default. |
+| `run_scholar_chat_openalex_metadata_execution_slice` | Executes the consent-gated OpenAlex-only metadata execution slice. | OpenAlex execution panel. | Future execution candidate | OpenAlex only; disabled by default; explicit developer/advanced action; no writes by default. |
 
 ### Runtime diagnostics
 
@@ -202,17 +202,22 @@ This is a future refactor target, not part of Phase 109.0.
 The intended next execution path after this documentation phase is:
 
 - Phase 110.0: OpenAlex Metadata Execution Slice
+- implemented first OpenAlex-only execution slice
 - disabled by default
 - OpenAlex only
-- requires explicit `allow_network == true`
-- requires provider terms / config acceptance gate
-- no writes by default
+- requires `execution_requested == true`
+- requires `allow_network == true`
+- requires OpenAlex terms/config acceptance
+- requires either a request-provided API key or explicit no-key usage consent
+- writes remain blocked by default
+- output is temporary in-memory normalized metadata records
+- no raw provider URL, no provider hostname, no API key value, no raw provider response
 - no citation emission
 - no Evidence Pack creation
 - no Literature Review creation
-- no broad provider execution
+- no Crossref / PubMed / ERIC execution
 - no APA PsycNet / PsycINFO execution
-- output should remain temporary in-memory normalized metadata preview unless a later write gate is added
+- GUI treats this as an explicit developer / advanced action until a later product UI phase
 
 Later phases should add:
 
