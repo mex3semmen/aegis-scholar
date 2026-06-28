@@ -88,6 +88,9 @@ use scholar_chat::{
     preview_scholar_chat_scientific_metadata_query_plan as preview_scholar_chat_scientific_metadata_query_plan_impl,
     preview_scholar_chat_scientific_metadata_provider_request as preview_scholar_chat_scientific_metadata_provider_request_impl,
     preview_scholar_chat_openalex_metadata_cache_write_gate as preview_scholar_chat_openalex_metadata_cache_write_gate_impl,
+    preview_scholar_chat_openalex_evidence_candidate_conversion as preview_scholar_chat_openalex_evidence_candidate_conversion_impl,
+    ScholarChatOpenAlexEvidenceCandidateConversionPreview,
+    ScholarChatOpenAlexEvidenceCandidateConversionPreviewRequest,
     run_scholar_chat_openalex_metadata_execution_slice as run_scholar_chat_openalex_metadata_execution_slice_impl,
     preview_scholar_chat_grounded_answer_write_eligibility as preview_scholar_chat_grounded_answer_write_eligibility_impl,
     preview_scholar_chat_request as preview_scholar_chat_request_impl,
@@ -751,6 +754,15 @@ fn preview_scholar_chat_openalex_metadata_cache_write_gate(
     preview_scholar_chat_openalex_metadata_cache_write_gate_impl(root, request).map_err(to_user_error)
 }
 
+#[tauri::command]
+fn preview_scholar_chat_openalex_evidence_candidate_conversion(
+    root: String,
+    request: ScholarChatOpenAlexEvidenceCandidateConversionPreviewRequest,
+) -> Result<ScholarChatOpenAlexEvidenceCandidateConversionPreview, String> {
+    preview_scholar_chat_openalex_evidence_candidate_conversion_impl(root.into(), request)
+        .map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -816,6 +828,7 @@ pub fn run() {
             preview_scholar_chat_scientific_metadata_provider_request,
             run_scholar_chat_openalex_metadata_execution_slice,
             preview_scholar_chat_openalex_metadata_cache_write_gate,
+            preview_scholar_chat_openalex_evidence_candidate_conversion,
             preview_scholar_chat_runtime_diagnostic_bridge,
             preview_scholar_chat_runtime_diagnostic_result,
             preview_scholar_chat_runtime_answer_pipeline_gate,

@@ -11101,6 +11101,458 @@ pub struct ScholarChatOpenAlexMetadataCacheWriteGatePreview {
     pub summary: String,
 }
 
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatOpenAlexEvidenceCandidateConversionStatus {
+    Blocked,
+    NoRecords,
+    NeedsReview,
+    ConversionPreviewReady,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatOpenAlexEvidenceCandidateStatus {
+    Blocked,
+    NeedsReview,
+    Ready,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatOpenAlexEvidenceCandidateConversionPreviewRequest {
+    pub execution_result: ScholarChatOpenAlexMetadataExecutionSliceResult,
+    #[serde(default)]
+    pub max_candidates: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatOpenAlexEvidenceCandidateInputPreview {
+    pub item_index: usize,
+    pub candidate_status: ScholarChatOpenAlexEvidenceCandidateStatus,
+    pub stable_record_key: String,
+    pub provider_id: String,
+    pub source_record_kind: String,
+    pub title: String,
+    pub title_normalized: String,
+    pub source_label: String,
+    pub publication_year: Option<u16>,
+    pub publication_year_label: Option<String>,
+    pub doi_normalized: Option<String>,
+    pub author_display: String,
+    pub concept_display: String,
+    pub topic_display: String,
+    pub open_access_status: Option<String>,
+    pub evidence_candidate_hint: String,
+    pub quality_signal_summary: String,
+    pub is_safe_for_evidence_candidate: bool,
+    pub selection_hints: Vec<String>,
+    pub limitations: Vec<String>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatOpenAlexEvidenceCandidateConversionPreview {
+    pub status: ScholarChatOpenAlexEvidenceCandidateConversionStatus,
+    pub normalized_query: String,
+    pub selected_provider_id: String,
+    pub execution_status: ScholarChatOpenAlexMetadataExecutionSliceStatus,
+    pub execution_result_summary: ScholarChatOpenAlexMetadataResultSummary,
+    pub input_record_count: usize,
+    pub candidate_count: usize,
+    pub ready_candidate_count: usize,
+    pub needs_review_candidate_count: usize,
+    pub blocked_candidate_count: usize,
+    pub candidate_limit: usize,
+    pub candidate_limit_reached: bool,
+    pub candidate_items: Vec<ScholarChatOpenAlexEvidenceCandidateInputPreview>,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub conversion_only: bool,
+    pub no_provider_execution: bool,
+    pub no_web_request: bool,
+    pub no_network_call: bool,
+    pub no_http_client: bool,
+    pub no_url_building: bool,
+    pub no_api_key_read: bool,
+    pub no_environment_read: bool,
+    pub no_scraping: bool,
+    pub no_authenticated_library_access: bool,
+    pub no_paywall_bypass: bool,
+    pub no_source_import: bool,
+    pub no_cache_write: bool,
+    pub no_metadata_record_write: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+    pub no_artifact_write: bool,
+    pub no_evidence_pack_created: bool,
+    pub no_literature_review_created: bool,
+    pub no_citation_emitted: bool,
+    pub no_answer_generated: bool,
+    pub no_retrieval_execution: bool,
+    pub no_model_loading: bool,
+    pub no_runtime_inference: bool,
+    pub no_llm_call: bool,
+}
+
+fn openalex_evidence_candidate_conversion_item_status_label(
+    status: &ScholarChatOpenAlexEvidenceCandidateStatus,
+) -> &'static str {
+    match status {
+        ScholarChatOpenAlexEvidenceCandidateStatus::Ready => "ready",
+        ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview => "needs_review",
+        ScholarChatOpenAlexEvidenceCandidateStatus::Blocked => "blocked",
+    }
+}
+
+fn openalex_evidence_candidate_conversion_item_status(
+    record: &ScholarChatOpenAlexMetadataExecutionSliceRecord,
+) -> ScholarChatOpenAlexEvidenceCandidateStatus {
+    match record.evidence_candidate_hint.as_str() {
+        "metadata_only_candidate" => ScholarChatOpenAlexEvidenceCandidateStatus::Ready,
+        "needs_title_review" => ScholarChatOpenAlexEvidenceCandidateStatus::Blocked,
+        _ => ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview,
+    }
+}
+
+fn openalex_evidence_candidate_conversion_item_selection_hints(
+    record: &ScholarChatOpenAlexMetadataExecutionSliceRecord,
+) -> Vec<String> {
+    let mut hints = Vec::new();
+    push_unique_text(
+        &mut hints,
+        &format!("stable_record_key={}", record.stable_record_key),
+    );
+    push_unique_text(
+        &mut hints,
+        &format!("candidate_hint={}", record.evidence_candidate_hint),
+    );
+    if record.has_doi {
+        push_unique_text(&mut hints, "doi_present");
+    }
+    if record.has_landing_page_signal {
+        push_unique_text(&mut hints, "landing_page_available");
+    }
+    if record.has_open_access_signal {
+        push_unique_text(&mut hints, "open_access_signaled");
+    }
+    if !record.author_names.is_empty() {
+        push_unique_text(
+            &mut hints,
+            &format!("author_count={}", record.author_names.len()),
+        );
+    }
+    if let Some(publication_year) = record.publication_year {
+        push_unique_text(
+            &mut hints,
+            &format!("publication_year={publication_year}"),
+        );
+    }
+    if !record.source_label.trim().is_empty() {
+        push_unique_text(
+            &mut hints,
+            &format!("source_label={}", compact_text_preview(&record.source_label, 60)),
+        );
+    }
+    hints
+}
+
+fn openalex_evidence_candidate_conversion_item_limitations(
+    record: &ScholarChatOpenAlexMetadataExecutionSliceRecord,
+    status: &ScholarChatOpenAlexEvidenceCandidateStatus,
+) -> Vec<String> {
+    let mut limitations = Vec::new();
+    if matches!(status, ScholarChatOpenAlexEvidenceCandidateStatus::Blocked) {
+        push_unique_text(&mut limitations, "title_review_required");
+    }
+    if !record.is_safe_for_evidence_candidate {
+        push_unique_text(&mut limitations, "candidate_hint_requires_review");
+    }
+    if record.doi_normalized.is_none() {
+        push_unique_text(&mut limitations, "doi_missing");
+    }
+    if !record.landing_page_available {
+        push_unique_text(&mut limitations, "landing_page_missing");
+    }
+    if record.publication_year.is_none() {
+        push_unique_text(&mut limitations, "publication_year_missing");
+    }
+    limitations
+}
+
+fn openalex_evidence_candidate_conversion_item_summary(
+    record: &ScholarChatOpenAlexMetadataExecutionSliceRecord,
+    status: &ScholarChatOpenAlexEvidenceCandidateStatus,
+) -> String {
+    format!(
+        "OpenAlex record {} is {} for future Evidence Pack conversion later.",
+        record.stable_record_key,
+        openalex_evidence_candidate_conversion_item_status_label(status)
+    )
+}
+
+fn openalex_evidence_candidate_conversion_item_sort_key(
+    record: &ScholarChatOpenAlexMetadataExecutionSliceRecord,
+    status: &ScholarChatOpenAlexEvidenceCandidateStatus,
+) -> (u8, u16, String, String) {
+    let status_rank = match status {
+        ScholarChatOpenAlexEvidenceCandidateStatus::Ready => 0,
+        ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview => 1,
+        ScholarChatOpenAlexEvidenceCandidateStatus::Blocked => 2,
+    };
+    let publication_year_rank = u16::MAX - record.publication_year.unwrap_or(0);
+    (
+        status_rank,
+        publication_year_rank,
+        record.title_normalized.to_lowercase(),
+        record.stable_record_key.clone(),
+    )
+}
+
+fn openalex_evidence_candidate_conversion_preview_summary(
+    status: &ScholarChatOpenAlexEvidenceCandidateConversionStatus,
+    normalized_query: &str,
+    input_record_count: usize,
+    candidate_count: usize,
+    ready_candidate_count: usize,
+    needs_review_candidate_count: usize,
+    blocked_candidate_count: usize,
+    candidate_limit: usize,
+    candidate_limit_reached: bool,
+) -> String {
+    let query_preview = compact_text_preview(normalized_query, 60);
+    let base = match status {
+        ScholarChatOpenAlexEvidenceCandidateConversionStatus::Blocked => format!(
+            "OpenAlex evidence candidate conversion preview remains blocked for \"{}\".",
+            query_preview
+        ),
+        ScholarChatOpenAlexEvidenceCandidateConversionStatus::NoRecords => format!(
+            "OpenAlex evidence candidate conversion preview found no normalized OpenAlex records for \"{}\".",
+            query_preview
+        ),
+        ScholarChatOpenAlexEvidenceCandidateConversionStatus::NeedsReview => format!(
+            "OpenAlex evidence candidate conversion preview needs review for {} of {} record(s) before future Evidence Pack conversion later; {} candidate input(s) are ready later.",
+            needs_review_candidate_count + blocked_candidate_count,
+            input_record_count,
+            ready_candidate_count
+        ),
+        ScholarChatOpenAlexEvidenceCandidateConversionStatus::ConversionPreviewReady => format!(
+            "OpenAlex evidence candidate conversion preview is ready later with {} candidate input(s) from {} normalized OpenAlex record(s); {} ready later.",
+            candidate_count,
+            input_record_count,
+            ready_candidate_count
+        ),
+    };
+    if candidate_limit_reached {
+        format!("{base} The preview was capped at {candidate_limit} candidate input(s).").trim().to_string()
+    } else {
+        base
+    }
+}
+
+pub fn preview_scholar_chat_openalex_evidence_candidate_conversion(
+    root: PathBuf,
+    request: ScholarChatOpenAlexEvidenceCandidateConversionPreviewRequest,
+) -> AegisResult<ScholarChatOpenAlexEvidenceCandidateConversionPreview> {
+    let _ = root;
+    let execution_result = request.execution_result;
+    let normalized_query = execution_result.normalized_query.trim().to_string();
+    let execution_status = execution_result.status.clone();
+    let selected_provider_id = execution_result.selected_provider_id.clone();
+    let execution_result_summary = execution_result.result_summary.clone();
+    let input_record_count = execution_result.metadata_records.len();
+    let candidate_limit = request
+        .max_candidates
+        .unwrap_or(OPENALEX_EVIDENCE_CANDIDATE_CONVERSION_PREVIEW_LIMIT)
+        .clamp(
+            1,
+            OPENALEX_EVIDENCE_CANDIDATE_CONVERSION_PREVIEW_MAX_LIMIT,
+        );
+    let mut blockers = execution_result.blockers.clone();
+    let mut warnings = execution_result.warnings.clone();
+    let mut next_required_actions = execution_result.next_required_actions.clone();
+
+    if normalized_query.is_empty() {
+        push_unique_text(
+            &mut blockers,
+            "query_missing: The normalized OpenAlex metadata result needs a query before evidence-candidate conversion can be previewed.",
+        );
+    }
+    if selected_provider_id != OPENALEX_METADATA_EXECUTION_SLICE_PROVIDER_ID {
+        push_unique_text(
+            &mut blockers,
+            "unsupported_provider_result: Only OpenAlex execution results can be converted in this preview.",
+        );
+    }
+    if !matches!(execution_status, ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed) {
+        push_unique_text(
+            &mut blockers,
+            "execution_result_not_ready_later: The normalized OpenAlex metadata result must be ready later before evidence-candidate conversion can be previewed.",
+        );
+    }
+    if input_record_count == 0 && matches!(execution_status, ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed) {
+        push_unique_text(
+            &mut blockers,
+            "no_openalex_metadata_records: The normalized OpenAlex metadata result did not contain any work records yet.",
+        );
+    }
+
+    let mut sorted_records = execution_result.metadata_records.clone();
+    sorted_records.sort_by(|left, right| {
+        let left_status = openalex_evidence_candidate_conversion_item_status(left);
+        let right_status = openalex_evidence_candidate_conversion_item_status(right);
+        openalex_evidence_candidate_conversion_item_sort_key(left, &left_status)
+            .cmp(&openalex_evidence_candidate_conversion_item_sort_key(right, &right_status))
+    });
+
+    let mut candidate_items = Vec::new();
+    for (item_index, record) in sorted_records.into_iter().take(candidate_limit).enumerate() {
+        let candidate_status = openalex_evidence_candidate_conversion_item_status(&record);
+        candidate_items.push(ScholarChatOpenAlexEvidenceCandidateInputPreview {
+            item_index,
+            candidate_status: candidate_status.clone(),
+            stable_record_key: record.stable_record_key.clone(),
+            provider_id: record.provider_id.clone(),
+            source_record_kind: record.source_record_kind.clone(),
+            title: record.title.clone(),
+            title_normalized: record.title_normalized.clone(),
+            source_label: record.source_label.clone(),
+            publication_year: record.publication_year,
+            publication_year_label: record.publication_year_label.clone(),
+            doi_normalized: record.doi_normalized.clone(),
+            author_display: record.author_display.clone(),
+            concept_display: record.concept_display.clone(),
+            topic_display: record.topic_display.clone(),
+            open_access_status: record.open_access_status.clone(),
+            evidence_candidate_hint: record.evidence_candidate_hint.clone(),
+            quality_signal_summary: record.quality_signal_summary.clone(),
+            is_safe_for_evidence_candidate: record.is_safe_for_evidence_candidate,
+            selection_hints: openalex_evidence_candidate_conversion_item_selection_hints(&record),
+            limitations: openalex_evidence_candidate_conversion_item_limitations(
+                &record,
+                &candidate_status,
+            ),
+            summary: openalex_evidence_candidate_conversion_item_summary(&record, &candidate_status),
+        });
+    }
+
+    let candidate_count = candidate_items.len();
+    let ready_candidate_count = candidate_items
+        .iter()
+        .filter(|item| matches!(item.candidate_status, ScholarChatOpenAlexEvidenceCandidateStatus::Ready))
+        .count();
+    let needs_review_candidate_count = candidate_items
+        .iter()
+        .filter(|item| matches!(item.candidate_status, ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview))
+        .count();
+    let blocked_candidate_count = candidate_items
+        .iter()
+        .filter(|item| matches!(item.candidate_status, ScholarChatOpenAlexEvidenceCandidateStatus::Blocked))
+        .count();
+    let candidate_limit_reached = input_record_count > candidate_limit;
+
+    if candidate_limit_reached {
+        push_unique_text(
+            &mut warnings,
+            &format!(
+                "candidate_limit_reached: Preview capped at {candidate_limit} candidate input(s)."
+            ),
+        );
+    }
+    if needs_review_candidate_count > 0 || blocked_candidate_count > 0 {
+        push_unique_text(
+            &mut warnings,
+            &format!(
+                "candidate_review_required: {} candidate input(s) still need review before future Evidence Pack conversion later.",
+                needs_review_candidate_count + blocked_candidate_count
+            ),
+        );
+    }
+    if candidate_count > 0 {
+        push_unique_text(
+            &mut next_required_actions,
+            "Review the evidence-candidate readiness flags before future Evidence Pack conversion later.",
+        );
+    }
+
+    let status = if normalized_query.is_empty()
+        || selected_provider_id != OPENALEX_METADATA_EXECUTION_SLICE_PROVIDER_ID
+        || !matches!(execution_status, ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed)
+    {
+        ScholarChatOpenAlexEvidenceCandidateConversionStatus::Blocked
+    } else if input_record_count == 0 {
+        ScholarChatOpenAlexEvidenceCandidateConversionStatus::NoRecords
+    } else if ready_candidate_count == candidate_count && candidate_count > 0 {
+        ScholarChatOpenAlexEvidenceCandidateConversionStatus::ConversionPreviewReady
+    } else {
+        ScholarChatOpenAlexEvidenceCandidateConversionStatus::NeedsReview
+    };
+
+    let summary = openalex_evidence_candidate_conversion_preview_summary(
+        &status,
+        &normalized_query,
+        input_record_count,
+        candidate_count,
+        ready_candidate_count,
+        needs_review_candidate_count,
+        blocked_candidate_count,
+        candidate_limit,
+        candidate_limit_reached,
+    );
+
+    Ok(ScholarChatOpenAlexEvidenceCandidateConversionPreview {
+        status,
+        normalized_query,
+        selected_provider_id,
+        execution_status,
+        execution_result_summary,
+        input_record_count,
+        candidate_count,
+        ready_candidate_count,
+        needs_review_candidate_count,
+        blocked_candidate_count,
+        candidate_limit,
+        candidate_limit_reached,
+        candidate_items,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        conversion_only: true,
+        no_provider_execution: true,
+        no_web_request: true,
+        no_network_call: true,
+        no_http_client: true,
+        no_url_building: true,
+        no_api_key_read: true,
+        no_environment_read: true,
+        no_scraping: true,
+        no_authenticated_library_access: true,
+        no_paywall_bypass: true,
+        no_source_import: true,
+        no_cache_write: true,
+        no_metadata_record_write: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+        no_artifact_write: true,
+        no_evidence_pack_created: true,
+        no_literature_review_created: true,
+        no_citation_emitted: true,
+        no_answer_generated: true,
+        no_retrieval_execution: true,
+        no_model_loading: true,
+        no_runtime_inference: true,
+        no_llm_call: true,
+    })
+}
+
+const OPENALEX_EVIDENCE_CANDIDATE_CONVERSION_PREVIEW_LIMIT: usize = 10;
+const OPENALEX_EVIDENCE_CANDIDATE_CONVERSION_PREVIEW_MAX_LIMIT: usize = 25;
+
 fn scientific_metadata_supported_providers() -> Vec<String> {
     vec![
         "openalex".to_string(),
@@ -38130,6 +38582,88 @@ fn main() {
         assert!(!source.contains("write_scholar_chat_openalex_metadata_cache("));
     }
 
+
+    #[test]
+    fn scholar_chat_openalex_evidence_candidate_conversion_tauri_wiring_is_present_once() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
+        assert!(source.contains(
+            "preview_scholar_chat_openalex_evidence_candidate_conversion as preview_scholar_chat_openalex_evidence_candidate_conversion_impl"
+        ));
+        assert!(source.contains(
+            "ScholarChatOpenAlexEvidenceCandidateConversionPreviewRequest,"
+        ));
+        assert!(source.contains(
+            "ScholarChatOpenAlexEvidenceCandidateConversionPreview,"
+        ));
+        assert!(source.contains(
+            "#[tauri::command]\nfn preview_scholar_chat_openalex_evidence_candidate_conversion("
+        ));
+        assert!(source.contains(
+            "preview_scholar_chat_openalex_evidence_candidate_conversion_impl(root.into(), request)\n        .map_err(to_user_error)"
+        ));
+        assert_eq!(
+            source
+                .matches(
+                    "preview_scholar_chat_openalex_evidence_candidate_conversion_impl(root.into(), request)"
+                )
+                .count(),
+            1
+        );
+        assert_eq!(
+            source
+                .matches("preview_scholar_chat_openalex_evidence_candidate_conversion,")
+                .count(),
+            1
+        );
+        let cache_gate_index = source
+            .find("preview_scholar_chat_openalex_metadata_cache_write_gate,")
+            .unwrap();
+        let conversion_index = source
+            .find("preview_scholar_chat_openalex_evidence_candidate_conversion,")
+            .unwrap();
+        let runtime_bridge_index = source
+            .find("preview_scholar_chat_runtime_diagnostic_bridge,")
+            .unwrap();
+        assert!(cache_gate_index < conversion_index);
+        assert!(conversion_index < runtime_bridge_index);
+    }
+
+    #[test]
+    fn scholar_chat_openalex_evidence_candidate_conversion_body_stays_preview_only_and_does_not_call_execution_or_cache_gate() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/scholar_chat.rs"));
+        let start = source
+            .find("pub fn preview_scholar_chat_openalex_evidence_candidate_conversion")
+            .unwrap();
+        let end = source[start..]
+            .find("fn scientific_metadata_supported_providers()")
+            .unwrap();
+        let body = &source[start..start + end];
+        assert_eq!(
+            body.matches("openalex_evidence_candidate_conversion_preview_summary")
+                .count(),
+            1
+        );
+        for forbidden in [
+            "Command::new",
+            "reqwest::",
+            "ureq::",
+            "std::fs",
+            "fs::",
+            "run_scholar_chat_openalex_metadata_execution_slice",
+            "preview_scholar_chat_openalex_metadata_cache_write_gate",
+            "smoke_test_local_runtime_inference",
+            "run_llama_runtime_smoke_diagnostic",
+            "run_smoke_inference_probe",
+            "build_answer_draft",
+            "build_grounded_answer",
+            "build_final_answer",
+            "build_evidence_pack",
+            "export_answer_artifacts",
+        ] {
+            assert!(!body.contains(forbidden), "{forbidden}");
+        }
+    }
+
     #[test]
     fn scholar_chat_openalex_metadata_execution_slice_dependency_guard_is_minimal_and_explicit() {
         let cargo_toml = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
@@ -38278,6 +38812,156 @@ fn main() {
         request
     }
 
+    fn openalex_metadata_execution_slice_record_preview(
+        id: &str,
+        title: &str,
+        doi: Option<&str>,
+        publication_year: Option<u16>,
+        source_label: &str,
+        landing_page_available: bool,
+    ) -> ScholarChatOpenAlexMetadataExecutionSliceRecord {
+        let doi_value = doi.unwrap_or("");
+        let landing_page_url = if landing_page_available {
+            "https://example.org/work"
+        } else {
+            ""
+        };
+        let open_access = if doi.is_some() {
+            serde_json::json!({
+                "is_oa": true,
+                "oa_status": "gold"
+            })
+        } else {
+            serde_json::json!({
+                "is_oa": false,
+                "oa_status": ""
+            })
+        };
+        let value = serde_json::json!({
+            "id": id,
+            "display_name": title,
+            "doi": doi_value,
+            "publication_year": publication_year,
+            "type": "journal-article",
+            "cited_by_count": 8,
+            "open_access": open_access,
+            "primary_location": {
+                "source": {
+                    "display_name": source_label
+                },
+                "landing_page_url": landing_page_url
+            },
+            "authorships": [
+                {
+                    "author": {
+                        "display_name": "Ada Lovelace"
+                    }
+                }
+            ],
+            "concepts": [
+                {
+                    "display_name": "Psychology"
+                }
+            ],
+            "topics": [
+                {
+                    "display_name": "Scientific metadata"
+                }
+            ]
+        });
+        openalex_metadata_execution_slice_record(&value)
+    }
+
+    fn openalex_metadata_execution_slice_result_for_conversion(
+        status: ScholarChatOpenAlexMetadataExecutionSliceStatus,
+        query: &str,
+        records: Vec<ScholarChatOpenAlexMetadataExecutionSliceRecord>,
+        blockers: Vec<String>,
+        warnings: Vec<String>,
+        next_required_actions: Vec<String>,
+    ) -> ScholarChatOpenAlexMetadataExecutionSliceResult {
+        let execution_requested = matches!(
+            status,
+            ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed
+        );
+        let result_count = records.len();
+        let execution_gate = openalex_metadata_execution_slice_gate(
+            !query.trim().is_empty(),
+            execution_requested,
+            execution_requested,
+            true,
+            true,
+            false,
+            false,
+            execution_requested,
+            blockers.clone(),
+        );
+        let request_summary = openalex_metadata_execution_slice_request_summary(
+            &status,
+            vec!["search".to_string()],
+            false,
+            false,
+        );
+        let result_summary = openalex_metadata_execution_slice_result_summary(
+            &status,
+            query,
+            10,
+            result_count,
+            vec!["open_access.is_oa:true".to_string()],
+            false,
+            false,
+            false,
+            blockers.len(),
+            warnings.len(),
+            0,
+            execution_requested,
+            execution_requested,
+            None,
+            false,
+            false,
+            false,
+            false,
+            false,
+        );
+        openalex_metadata_execution_slice_result(
+            status,
+            query.to_string(),
+            None,
+            vec!["scientific".to_string()],
+            vec!["openalex".to_string()],
+            Some(vec!["openalex".to_string()]),
+            Some("evidence candidate conversion".to_string()),
+            "openalex".to_string(),
+            "OpenAlex".to_string(),
+            10,
+            None,
+            execution_requested,
+            execution_requested,
+            execution_requested,
+            false,
+            false,
+            false,
+            false,
+            ScholarChatScientificMetadataProviderRequestStatus::ProviderRequestReadyLater,
+            ScholarChatScientificMetadataProviderRequestStrategy::PublicMetadataRequestPreview,
+            execution_gate,
+            request_summary,
+            result_summary,
+            vec!["search".to_string()],
+            "open_access.is_oa:true".to_string(),
+            "normalized OpenAlex metadata result preview".to_string(),
+            records,
+            None,
+            "no rate-limit headers reported".to_string(),
+            "OpenAlex attribution note".to_string(),
+            blockers,
+            warnings,
+            vec![],
+            next_required_actions,
+            "OpenAlex execution slice result preview for evidence candidate conversion".to_string(),
+        )
+    }
+
     fn assert_openalex_metadata_execution_slice_output_is_redacted(
         preview: &ScholarChatOpenAlexMetadataExecutionSliceResult,
         forbidden_values: &[&str],
@@ -38319,6 +39003,71 @@ fn main() {
         assert!(preview.no_literature_review_created);
         assert!(preview.no_citation_emission);
         assert!(preview.no_persistence);
+    }
+
+
+    fn assert_openalex_evidence_candidate_conversion_output_is_path_free(
+        preview: &ScholarChatOpenAlexEvidenceCandidateConversionPreview,
+        forbidden_fragments: &[&str],
+    ) {
+        let debug = format!("{preview:?}");
+        let json = serde_json::to_string_pretty(preview).unwrap();
+        for forbidden in forbidden_fragments {
+            assert!(!debug.contains(forbidden), "{forbidden}");
+            assert!(!json.contains(forbidden), "{forbidden}");
+        }
+    }
+
+    fn assert_openalex_evidence_candidate_conversion_boundary_flags(
+        preview: &ScholarChatOpenAlexEvidenceCandidateConversionPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.conversion_only);
+        assert!(preview.no_provider_execution);
+        assert!(preview.no_web_request);
+        assert!(preview.no_network_call);
+        assert!(preview.no_http_client);
+        assert!(preview.no_url_building);
+        assert!(preview.no_api_key_read);
+        assert!(preview.no_environment_read);
+        assert!(preview.no_scraping);
+        assert!(preview.no_authenticated_library_access);
+        assert!(preview.no_paywall_bypass);
+        assert!(preview.no_source_import);
+        assert!(preview.no_cache_write);
+        assert!(preview.no_metadata_record_write);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_literature_review_created);
+        assert!(preview.no_citation_emitted);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_retrieval_execution);
+        assert!(preview.no_model_loading);
+        assert!(preview.no_runtime_inference);
+        assert!(preview.no_llm_call);
+    }
+
+    fn assert_openalex_evidence_candidate_conversion_item_contract(
+        item: &ScholarChatOpenAlexEvidenceCandidateInputPreview,
+        expected_status: ScholarChatOpenAlexEvidenceCandidateStatus,
+    ) {
+        assert_eq!(item.candidate_status, expected_status);
+        assert!(!item.stable_record_key.trim().is_empty());
+        assert!(!item.stable_record_key.contains("http://"));
+        assert!(!item.stable_record_key.contains("https://"));
+        assert!(!item.provider_id.trim().is_empty());
+        assert!(!item.title_normalized.trim().is_empty() || matches!(item.candidate_status, ScholarChatOpenAlexEvidenceCandidateStatus::Blocked));
+        assert!(!item.source_label.trim().is_empty());
+        assert!(!item.author_display.trim().is_empty());
+        assert!(!item.concept_display.trim().is_empty());
+        assert!(!item.topic_display.trim().is_empty());
+        assert!(!item.evidence_candidate_hint.trim().is_empty());
+        assert!(!item.quality_signal_summary.trim().is_empty());
+        assert!(!item.summary.trim().is_empty());
+        assert!(!item.selection_hints.is_empty());
+        assert!(!item.limitations.is_empty() || matches!(item.candidate_status, ScholarChatOpenAlexEvidenceCandidateStatus::Ready));
     }
 
     fn assert_openalex_metadata_execution_slice_record_contract(
@@ -39759,6 +40508,337 @@ fn main() {
             ],
         );
         assert_eq!(transport.calls(), 2);
+    }
+
+
+    #[test]
+    fn scholar_chat_openalex_evidence_candidate_conversion_preview_blocks_for_blank_query_and_non_ready_result_without_touching_filesystem() {
+        let temp = tempfile::tempdir().unwrap();
+        let before_entries = count_entries_recursively(temp.path());
+        let preview = preview_scholar_chat_openalex_evidence_candidate_conversion(
+            temp.path().to_path_buf(),
+            ScholarChatOpenAlexEvidenceCandidateConversionPreviewRequest {
+                execution_result: openalex_metadata_execution_slice_result_for_conversion(
+                    ScholarChatOpenAlexMetadataExecutionSliceStatus::Blocked,
+                    "   ",
+                    vec![],
+                    vec![],
+                    vec![],
+                    vec![],
+                ),
+                max_candidates: None,
+            },
+        )
+        .unwrap();
+
+        let repeated = preview_scholar_chat_openalex_evidence_candidate_conversion(
+            temp.path().to_path_buf(),
+            ScholarChatOpenAlexEvidenceCandidateConversionPreviewRequest {
+                execution_result: openalex_metadata_execution_slice_result_for_conversion(
+                    ScholarChatOpenAlexMetadataExecutionSliceStatus::Blocked,
+                    "   ",
+                    vec![],
+                    vec![],
+                    vec![],
+                    vec![],
+                ),
+                max_candidates: None,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(preview, repeated);
+        assert_eq!(preview.status, ScholarChatOpenAlexEvidenceCandidateConversionStatus::Blocked);
+        assert!(preview
+            .blockers
+            .iter()
+            .any(|value| value.contains("query_missing")));
+        assert!(preview
+            .blockers
+            .iter()
+            .any(|value| value.contains("execution_result_not_ready_later")));
+        assert_eq!(preview.candidate_count, 0);
+        assert!(preview.candidate_items.is_empty());
+        assert_openalex_evidence_candidate_conversion_boundary_flags(&preview);
+        assert_openalex_evidence_candidate_conversion_output_is_path_free(
+            &preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                ".aegis",
+                "dist",
+                "models/",
+                "\\models\\",
+                "https://",
+                "openalex.org",
+            ],
+        );
+        assert_eq!(before_entries, count_entries_recursively(temp.path()));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_openalex_evidence_candidate_conversion_preview_reports_no_records_when_execution_result_is_empty() {
+        let temp = tempfile::tempdir().unwrap();
+        let before_entries = count_entries_recursively(temp.path());
+        let preview = preview_scholar_chat_openalex_evidence_candidate_conversion(
+            temp.path().to_path_buf(),
+            ScholarChatOpenAlexEvidenceCandidateConversionPreviewRequest {
+                execution_result: openalex_metadata_execution_slice_result_for_conversion(
+                    ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed,
+                    "Signalentdeckung",
+                    vec![],
+                    vec![],
+                    vec![],
+                    vec![],
+                ),
+                max_candidates: None,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(preview.status, ScholarChatOpenAlexEvidenceCandidateConversionStatus::NoRecords);
+        assert!(preview
+            .blockers
+            .iter()
+            .any(|value| value.contains("no_openalex_metadata_records")));
+        assert_eq!(preview.candidate_count, 0);
+        assert!(preview.candidate_items.is_empty());
+        assert_openalex_evidence_candidate_conversion_boundary_flags(&preview);
+        assert_openalex_evidence_candidate_conversion_output_is_path_free(
+            &preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                ".aegis",
+                "dist",
+                "models/",
+                "\\models\\",
+                "https://",
+                "openalex.org",
+            ],
+        );
+        assert_eq!(before_entries, count_entries_recursively(temp.path()));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_openalex_evidence_candidate_conversion_preview_orders_and_caps_candidates_deterministically() {
+        let temp = tempfile::tempdir().unwrap();
+        let before_entries = count_entries_recursively(temp.path());
+        let preview = preview_scholar_chat_openalex_evidence_candidate_conversion(
+            temp.path().to_path_buf(),
+            ScholarChatOpenAlexEvidenceCandidateConversionPreviewRequest {
+                execution_result: openalex_metadata_execution_slice_result_for_conversion(
+                    ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed,
+                    "Signalentdeckung",
+                    vec![
+                        openalex_metadata_execution_slice_record_preview(
+                            "https://openalex.org/W2024",
+                            "Second example",
+                            Some("10.1000/example-2"),
+                            Some(2024),
+                            "Example Journal",
+                            true,
+                        ),
+                        openalex_metadata_execution_slice_record_preview(
+                            "https://openalex.org/W2023",
+                            "First example",
+                            Some("10.1000/example-1"),
+                            Some(2023),
+                            "Example Journal",
+                            true,
+                        ),
+                        openalex_metadata_execution_slice_record_preview(
+                            "https://openalex.org/W2022",
+                            "Review example",
+                            None,
+                            Some(2022),
+                            "Example Journal",
+                            false,
+                        ),
+                        openalex_metadata_execution_slice_record_preview(
+                            "https://openalex.org/W2021",
+                            "",
+                            None,
+                            None,
+                            "Example Journal",
+                            false,
+                        ),
+                    ],
+                    vec![],
+                    vec![],
+                    vec!["review candidate inputs before future evidence pack conversion later".to_string()],
+                ),
+                max_candidates: Some(10),
+            },
+        )
+        .unwrap();
+        let repeated = preview_scholar_chat_openalex_evidence_candidate_conversion(
+            temp.path().to_path_buf(),
+            ScholarChatOpenAlexEvidenceCandidateConversionPreviewRequest {
+                execution_result: openalex_metadata_execution_slice_result_for_conversion(
+                    ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed,
+                    "Signalentdeckung",
+                    vec![
+                        openalex_metadata_execution_slice_record_preview(
+                            "https://openalex.org/W2024",
+                            "Second example",
+                            Some("10.1000/example-2"),
+                            Some(2024),
+                            "Example Journal",
+                            true,
+                        ),
+                        openalex_metadata_execution_slice_record_preview(
+                            "https://openalex.org/W2023",
+                            "First example",
+                            Some("10.1000/example-1"),
+                            Some(2023),
+                            "Example Journal",
+                            true,
+                        ),
+                        openalex_metadata_execution_slice_record_preview(
+                            "https://openalex.org/W2022",
+                            "Review example",
+                            None,
+                            Some(2022),
+                            "Example Journal",
+                            false,
+                        ),
+                        openalex_metadata_execution_slice_record_preview(
+                            "https://openalex.org/W2021",
+                            "",
+                            None,
+                            None,
+                            "Example Journal",
+                            false,
+                        ),
+                    ],
+                    vec![],
+                    vec![],
+                    vec!["review candidate inputs before future evidence pack conversion later".to_string()],
+                ),
+                max_candidates: Some(10),
+            },
+        )
+        .unwrap();
+        assert_eq!(preview, repeated);
+        assert_eq!(preview.status, ScholarChatOpenAlexEvidenceCandidateConversionStatus::NeedsReview);
+        assert_eq!(preview.input_record_count, 4);
+        assert_eq!(preview.candidate_count, 4);
+        assert_eq!(preview.ready_candidate_count, 2);
+        assert_eq!(preview.needs_review_candidate_count, 1);
+        assert_eq!(preview.blocked_candidate_count, 1);
+        assert!(!preview.candidate_limit_reached);
+        assert_eq!(preview.candidate_items.len(), 4);
+        assert_eq!(preview.candidate_items[0].publication_year, Some(2024));
+        assert_eq!(preview.candidate_items[1].publication_year, Some(2023));
+        assert_eq!(preview.candidate_items[2].candidate_status, ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview);
+        assert_eq!(preview.candidate_items[3].candidate_status, ScholarChatOpenAlexEvidenceCandidateStatus::Blocked);
+        assert_openalex_evidence_candidate_conversion_item_contract(
+            &preview.candidate_items[0],
+            ScholarChatOpenAlexEvidenceCandidateStatus::Ready,
+        );
+        assert_openalex_evidence_candidate_conversion_item_contract(
+            &preview.candidate_items[1],
+            ScholarChatOpenAlexEvidenceCandidateStatus::Ready,
+        );
+        assert_openalex_evidence_candidate_conversion_item_contract(
+            &preview.candidate_items[2],
+            ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview,
+        );
+        assert_openalex_evidence_candidate_conversion_item_contract(
+            &preview.candidate_items[3],
+            ScholarChatOpenAlexEvidenceCandidateStatus::Blocked,
+        );
+        assert!(preview.candidate_items[2]
+            .limitations
+            .iter()
+            .any(|value| value.contains("doi_missing")));
+        assert!(preview.candidate_items[3]
+            .limitations
+            .iter()
+            .any(|value| value.contains("title_review_required")));
+        assert_openalex_evidence_candidate_conversion_boundary_flags(&preview);
+        assert_openalex_evidence_candidate_conversion_output_is_path_free(
+            &preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                ".aegis",
+                "dist",
+                "models/",
+                "\\models\\",
+                "https://",
+                "openalex.org",
+            ],
+        );
+        let capped_preview = preview_scholar_chat_openalex_evidence_candidate_conversion(
+            temp.path().to_path_buf(),
+            ScholarChatOpenAlexEvidenceCandidateConversionPreviewRequest {
+                execution_result: openalex_metadata_execution_slice_result_for_conversion(
+                    ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed,
+                    "Signalentdeckung",
+                    vec![
+                        openalex_metadata_execution_slice_record_preview(
+                            "https://openalex.org/W2024",
+                            "Second example",
+                            Some("10.1000/example-2"),
+                            Some(2024),
+                            "Example Journal",
+                            true,
+                        ),
+                        openalex_metadata_execution_slice_record_preview(
+                            "https://openalex.org/W2023",
+                            "First example",
+                            Some("10.1000/example-1"),
+                            Some(2023),
+                            "Example Journal",
+                            true,
+                        ),
+                        openalex_metadata_execution_slice_record_preview(
+                            "https://openalex.org/W2022",
+                            "Review example",
+                            None,
+                            Some(2022),
+                            "Example Journal",
+                            false,
+                        ),
+                        openalex_metadata_execution_slice_record_preview(
+                            "https://openalex.org/W2021",
+                            "",
+                            None,
+                            None,
+                            "Example Journal",
+                            false,
+                        ),
+                    ],
+                    vec![],
+                    vec![],
+                    vec!["review candidate inputs before future evidence pack conversion later".to_string()],
+                ),
+                max_candidates: Some(2),
+            },
+        )
+        .unwrap();
+        assert_eq!(capped_preview.status, ScholarChatOpenAlexEvidenceCandidateConversionStatus::ConversionPreviewReady);
+        assert_eq!(capped_preview.candidate_count, 2);
+        assert!(capped_preview.candidate_limit_reached);
+        assert!(capped_preview
+            .warnings
+            .iter()
+            .any(|value| value.contains("candidate_limit_reached")));
+        assert_openalex_evidence_candidate_conversion_output_is_path_free(
+            &capped_preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                ".aegis",
+                "dist",
+                "models/",
+                "\\models\\",
+                "https://",
+                "openalex.org",
+            ],
+        );
+        assert_eq!(before_entries, count_entries_recursively(temp.path()));
+        assert!(!temp.path().join(".aegis").exists());
     }
 
     #[test]
