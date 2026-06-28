@@ -220,11 +220,16 @@ The intended next execution path after this documentation phase is:
 - GUI treats this as an explicit developer / advanced action until a later product UI phase
 - Phase 110.1: OpenAlex Metadata Execution Slice Guard Hardening
 - confirms the first execution slice remains explicit, OpenAlex-only, offline-tested, redacted, in-memory, and non-writing
+- Phase 111.0: OpenAlex Metadata Result Normalization Contract
+- stabilizes the normalized result summary, record fields, provider status labels, cursor contract, and evidence-candidate readiness hints
+- remains in-memory, redacted, and non-writing
+- GUI may use the summary and record hints for display, not for automatic Evidence Pack creation
+- Crossref / PubMed / ERIC remain later providers
+- APA PsycNet / PsycINFO remain institutional / manual boundary only
 
 Later phases should add:
 
 - OpenAlex guard hardening
-- metadata result normalization
 - optional cache / write gate
 - Crossref / PubMed / ERIC as later providers
 - GUI integration using preview contracts
