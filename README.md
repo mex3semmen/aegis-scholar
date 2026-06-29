@@ -123,6 +123,7 @@ Start here:
 14. `docs/01-architecture-overview.md`
 15. `docs/02-phase-index.md`
 16. `docs/03-github-wiki-outline.md`
+17. `docs/04-wiki-export-prep.md`
 
 ## Developer onboarding
 
@@ -165,7 +166,7 @@ git diff --check
 
 ## Current direction
 
-Current product work emphasizes Scholar Chat request contracts, preview-heavy scientific retrieval surfaces, and narrow guarded execution slices, while keeping local-first retrieval, evidence planning, and path-free diagnostics intact.
+Current product work emphasizes Scholar Chat request contracts, preview-first scientific retrieval surfaces, and narrow guarded execution slices, while keeping local-first retrieval, evidence planning, and path-free diagnostics intact.
 
 ## Initial skills
 
