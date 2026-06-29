@@ -82,6 +82,7 @@ Phase 128 now exists as the app shell/navigation skeleton. Phase 129.1 is the fo
 
 Phase 133.0 is the chat transcript interaction model implementation pass that keeps the composer dominant, shows user prompts as messages, and renders preview and execution-gate results as assistant-style responses without changing backend behavior.
 Phase 134.0 is the chat UX interaction polish pass that makes the first viewport calmer, the composer more prominent, and the sidebar lighter while preserving the same preview and transcript behavior.
+Phase 135.0 is the local model runtime setup UX pass that keeps the model path and llama.cpp executable setup secondary, consent-gated, and diagnostics-only until future answer generation work exists.
 
 ## Acceptance Criteria For Future UX Work
 

@@ -292,6 +292,12 @@ button:disabled {
   font-size: 0.92rem;
 }
 
+.chat-runtime-note {
+  margin: 0.1rem 0 0;
+  max-width: 58ch;
+  font-size: 0.88rem;
+}
+
 .chat-composer {
   border: 1px solid rgba(96, 165, 250, 0.18);
   border-radius: 20px;
@@ -547,6 +553,10 @@ pre {
   padding: 1rem;
   background: rgba(15, 23, 42, 0.72);
   color: #e2e8f0;
+}
+
+.runtime-setup-card {
+  border-color: rgba(96, 165, 250, 0.2);
 }
 
 .locator-list {

@@ -20,6 +20,7 @@ This roadmap now has a clear split between implemented foundations, preview-firs
 | Current / completed Phase 132.0 | frontend surface extraction |
 | Current / completed Phase 133.0 | chat transcript interaction model |
 | Current Phase 134.0 | chat UX interaction polish |
+| Current / completed Phase 135.0 | local model runtime setup UX |
 | Known missing product workflows | actual source import wizard, scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 | Recommended next product slices | actual source import wizard, scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 
@@ -36,6 +37,7 @@ Phase 131.0 is the frontend-only chat transcript interaction model. It turns pre
 Phase 132.0 is the frontend-only surface extraction pass. It splits major workspace presentation into smaller frontend components while keeping behavior and backend contracts unchanged. Developer Diagnostics remains in `src/App.tsx` for now because that surface is still a future extraction target.
 Phase 133.0 is the frontend-only chat transcript interaction model. It keeps Scholar Chat in-memory and preview-only, shows submitted prompts as user messages, renders preview and gate responses as assistant-style transcript cards, and leaves backend behavior unchanged.
 Phase 134.0 is the frontend-only chat UX interaction polish pass. It tightens the first viewport, composer placement, message styling, and sidebar calmness without changing backend behavior.
+Phase 135.0 is the frontend-only local model runtime setup UX pass. It surfaces exact `.gguf` and llama.cpp paths, keeps validation and probes diagnostic-only, and does not wire local model output into Scholar Chat answers.
 Phase 116 remains backend-only, preview-only, and in-memory. It does not add Evidence Pack creation, citations, writes, retrieval execution, provider expansion, runtime/model/LLM behavior, or answer generation.
 Phase 117.0 adds a backend-only Local Evidence Pack Creation MVP. It uses existing local source/retrieval/evidence data and managed Evidence Pack storage, stays deterministic and path-safe, and does not add network access, model/runtime/LLM behavior, or answer generation.
 Phase 118.0 adds a backend-only PDF Text Extraction MVP. It supports local PDFs when a text layer is present, preserves page-level locators, reuses the existing extraction-report / source-registry / corpus-layout contracts, and stays OCR-free and preview-only. It does not add OCR, web requests, scraping, downloads, connectors, source import, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
