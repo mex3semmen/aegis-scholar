@@ -267,6 +267,7 @@ export default function ScholarChatWorkspace(props: any): JSX.Element {
             <p class="chat-inline-note muted">
               {props.selectedSourceSummary} Open Sources when you want to adjust source readiness or selection.
             </p>
+            {props.runtimeReadinessNote ? <p class="chat-runtime-note muted">{props.runtimeReadinessNote}</p> : null}
             <details class="planning-options">
               <summary>Advanced planning options</summary>
               <div class="form-row">

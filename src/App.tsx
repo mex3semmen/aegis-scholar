@@ -68,7 +68,7 @@ const WORKSPACE_SECTIONS: { value: WorkspaceSection; label: string; targetId: st
     value: "developer_diagnostics",
     label: "Developer Diagnostics",
     targetId: "developer-diagnostics",
-    description: "Preview, contract, and runtime inspection.",
+    description: "Runtime setup, preview, and inspection.",
   },
 ];
 
@@ -4640,12 +4640,17 @@ export default function App() {
         formatSnakeCaseLabel={formatSnakeCaseLabel}
       />
 
-      <ScholarChatWorkspace
-        transcript={scholarChatTranscript()}
-        suggestions={SCHOLAR_CHAT_PROMPT_SUGGESTIONS}
-        prompt={scholarChatPrompt()}
-        validationError={scholarChatValidationError()}
-        error={scholarChatError()}
+        <ScholarChatWorkspace
+          transcript={scholarChatTranscript()}
+          suggestions={SCHOLAR_CHAT_PROMPT_SUGGESTIONS}
+          runtimeReadinessNote={
+            localRuntimePreview()
+              ? `Local model runtime: ${formatSnakeCaseLabel(localRuntimePreview()!.status)} preview. Configure the exact .gguf file and llama.cpp executable in Developer Diagnostics.`
+              : "Local model runtime setup stays in Developer Diagnostics. Configure the exact .gguf file and a llama.cpp executable there."
+          }
+          prompt={scholarChatPrompt()}
+          validationError={scholarChatValidationError()}
+          error={scholarChatError()}
         previewLoading={scholarChatLoading()}
         executionGateLoading={scholarChatExecutionGateLoading()}
         selectedSourceSummary={scholarChatSelectedSourceIdsSummary()}
@@ -6789,10 +6794,13 @@ export default function App() {
             <p>No Scholar Chat runtime diagnostic result preview loaded yet.</p>
           )}
         </div>
-        <div class="artifact-overview">
-          <h3>Local model runtime</h3>
+        <div class="artifact-overview runtime-setup-card">
+          <h3>Local model setup</h3>
           <p class="muted">
-            Read-only local model runtime readiness preview. It only checks configured paths and preview settings; no model is executed, no answer is generated, and nothing is persisted.
+            Secondary runtime setup and readiness preview. Select the exact `.gguf` model file, not just the folder, and select a llama.cpp executable such as `llama-cli.exe`.
+          </p>
+          <p class="muted">
+            Gemma models may need chat-template review before future answer generation. Diagnostics do not create final answers.
           </p>
           <div class="form-row">
             <label>
@@ -6809,7 +6817,7 @@ export default function App() {
               }}
               >
                 <option value="none">None</option>
-                <option value="llama_cpp">llama_cpp</option>
+                <option value="llama_cpp">llama.cpp</option>
               </select>
             </label>
             <label>
@@ -6876,7 +6884,7 @@ export default function App() {
                   clearLocalRuntimeSmokePreview();
                   clearScholarChatDraftInferencePreview();
                 }}
-                placeholder="E:\\models\\scholar.gguf"
+                placeholder="E:\\gemma4-v2-Q4_K_M\\gemma4-v2-Q4_K_M.gguf"
               />
             </label>
             <label>
@@ -6892,13 +6900,13 @@ export default function App() {
                   clearLocalRuntimeSmokePreview();
                   clearScholarChatDraftInferencePreview();
                 }}
-                placeholder="E:\\bin\\llama-server.exe"
+                placeholder="E:\\bin\\llama-cli.exe"
               />
             </label>
           </div>
           <div class="hero-actions">
             <button onClick={previewLocalRuntimeHealth} disabled={localRuntimeLoading()}>
-              {localRuntimeLoading() ? "Previewing..." : "Preview runtime health"}
+              {localRuntimeLoading() ? "Previewing..." : "Preview local runtime readiness"}
             </button>
           </div>
           <p class="muted">No model is executed. No answer will be generated. Configuration is not persisted.</p>
@@ -6961,7 +6969,7 @@ export default function App() {
                   setLocalRuntimeAdapterExecutablePath(event.currentTarget.value);
                   clearLocalRuntimeAdapterContractPreview();
                 }}
-                placeholder="E:\\bin\\llama-server.exe"
+                placeholder="E:\\bin\\llama-cli.exe"
               />
             </label>
             <label>
@@ -6973,10 +6981,11 @@ export default function App() {
                   setLocalRuntimeAdapterModelPath(event.currentTarget.value);
                   clearLocalRuntimeAdapterContractPreview();
                 }}
-                placeholder="E:\\models\\scholar.gguf"
+                placeholder="E:\\gemma4-v2-Q4_K_M\\gemma4-v2-Q4_K_M.gguf"
               />
             </label>
           </div>
+          <p class="muted">Select the exact `.gguf` file and a matching llama.cpp executable before using preview or probe actions.</p>
           <div class="form-row">
             <label>
               Model family
@@ -7317,6 +7326,7 @@ export default function App() {
               I understand this only prepares a future binary probe preview.
             </label>
           </div>
+          <p class="muted">Version probe actions remain consent-gated and do not load a model or generate answers.</p>
           <div class="hero-actions">
             <button onClick={previewLocalRuntimeProbeReadiness} disabled={localRuntimeProbeReadinessPreviewLoading()}>
               {localRuntimeProbeReadinessPreviewLoading() ? "Previewing..." : "Preview llama.cpp probe readiness"}
@@ -8154,6 +8164,7 @@ export default function App() {
               />
             </label>
           </div>
+          <p class="muted">Smoke diagnostic actions remain consent-gated and do not create Scholar Chat answers.</p>
           <div class="hero-actions">
             <button onClick={previewLocalRuntimeSmokeDiagnostic} disabled={localRuntimeSmokeLoading()}>
               {localRuntimeSmokeLoading() ? "Running..." : "Run llama.cpp smoke diagnostic"}
