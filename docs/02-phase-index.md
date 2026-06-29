@@ -17,6 +17,7 @@ This is a compressed status index, not a full changelog.
 | Phase 128.0 | in progress | app shell / navigation skeleton | `src/App.tsx`, `src/styles.css`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | diagnostics stay available but secondary; backend behavior is unchanged |
 | Phase 129.0 | in progress | chat-first UX polish | `src/App.tsx`, `src/styles.css`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | composer-first layout is polish only; preview/gate behavior stays intact |
 | Phase 129.1 | in progress | focused workspace rendering refinement | `src/App.tsx`, `src/styles.css`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | active workspace rendering replaces long default scrolling; diagnostics stay reachable |
+| Phase 130.0 | in progress | chat product surface refinement | `src/App.tsx`, `src/styles.css`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | assistant-like default chat surface is polish only; preview/gate behavior and diagnostics remain available |
 | Phase 117.0 | implemented | local Evidence Pack creation MVP | Evidence Pack backend path and managed storage | integrate with broader product surfaces |
 | Phase 118.0 | implemented | PDF text-layer extraction MVP with page-level locators | extraction and locator handling | OCR and broad PDF ingestion remain out of scope |
 | Phase 119.0 | implemented | first-run source import readiness UI | frontend guidance surfaces | actual import wizard remains missing |

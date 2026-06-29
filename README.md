@@ -5,6 +5,7 @@
 AEGIS Scholar is a Windows-first, local-first academic Scholar Chat workspace for source-grounded retrieval, evidence planning, provenance, and long-term project memory.
 
 Project knowledge base: `docs/00-project-overview.md`, `docs/01-architecture-overview.md`, `docs/02-phase-index.md`, `docs/03-github-wiki-outline.md`, `docs/04-wiki-export-prep.md`, and `docs/05-product-ux-reorientation.md`.
+Current product-direction note: `docs/05-product-ux-reorientation.md`.
 
 ## Current implementation status
 
