@@ -143,6 +143,69 @@ pub struct ScholarChatAgenticWorkflowPlanPreview {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum ScholarChatAgenticWorkflowExecutionGateStatus {
+    Blocked,
+    NeedsReview,
+    ExecutionReadyLater,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatAgenticWorkflowExecutionGateDecision {
+    Blocked,
+    NeedsContext,
+    NeedsConsent,
+    ReadyLater,
+    NoActionAvailable,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatAgenticWorkflowFutureAction {
+    RegisterSourceLater,
+    ExtractTextLater,
+    ChunkSourceLater,
+    InspectRetrievalLater,
+    BuildEvidencePackLater,
+    InspectEvidencePackLater,
+    AskLocalSourcesLater,
+    NoActionAvailable,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatAgenticWorkflowExecutionGatePreviewRequest {
+    pub scholar_chat_request: ScholarChatRequest,
+    pub user_consent_present: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatAgenticWorkflowExecutionGatePreview {
+    pub status: ScholarChatAgenticWorkflowExecutionGateStatus,
+    pub planned_intent: ScholarChatAgenticWorkflowIntent,
+    pub gate_decision: ScholarChatAgenticWorkflowExecutionGateDecision,
+    pub consent_required: bool,
+    pub user_consent_present: bool,
+    pub allowed_future_action: ScholarChatAgenticWorkflowFutureAction,
+    pub blocked_reason: String,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub required_local_context: Vec<String>,
+    pub planned_steps: Vec<String>,
+    pub next_required_actions: Vec<String>,
+    pub safety_invariants: Vec<String>,
+    pub selected_source_ids: Vec<String>,
+    pub selected_source_count: usize,
+    pub execution_allowed_now: bool,
+    pub preview_only: bool,
+    pub no_filesystem_write: bool,
+    pub no_backend_mutation: bool,
+    pub no_runtime_execution: bool,
+    pub no_llm_call: bool,
+    pub no_network_call: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum ScholarChatScientificDisciplineRegistryStatus {
     Blocked,
     ConceptMapped,
@@ -2795,6 +2858,89 @@ pub fn preview_scholar_chat_agentic_workflow_plan(
         no_artifact_write: true,
         no_registry_status_change: true,
         no_audit_write: true,
+    })
+}
+
+pub fn preview_scholar_chat_agentic_workflow_execution_gate(
+    root: impl Into<PathBuf>,
+    request: ScholarChatAgenticWorkflowExecutionGatePreviewRequest,
+) -> AegisResult<ScholarChatAgenticWorkflowExecutionGatePreview> {
+    let planner = preview_scholar_chat_agentic_workflow_plan(root, request.scholar_chat_request)?;
+    let planned_intent = planner.recognized_intent.clone();
+    let normalized_prompt_lower = planner.normalized_prompt.to_lowercase();
+    if agentic_workflow_mentions_answer_generation(&normalized_prompt_lower) {
+        let mut blockers = planner.blockers.clone();
+        blockers.push("Answer generation is not yet the product workflow in this preview.".to_string());
+        let mut warnings = planner.warnings.clone();
+        warnings.push("Answer-generation prompts are preview-only and do not enable execution in this phase.".to_string());
+        let mut next_required_actions = planner.next_required_actions.clone();
+        next_required_actions.push("Keep answer generation for a later product phase.".to_string());
+        return Ok(ScholarChatAgenticWorkflowExecutionGatePreview {
+            status: ScholarChatAgenticWorkflowExecutionGateStatus::Blocked,
+            planned_intent,
+            gate_decision: ScholarChatAgenticWorkflowExecutionGateDecision::Blocked,
+            consent_required: false,
+            user_consent_present: request.user_consent_present,
+            allowed_future_action: ScholarChatAgenticWorkflowFutureAction::NoActionAvailable,
+            blocked_reason: "Answer generation is not yet the product workflow in this preview.".to_string(),
+            blockers,
+            warnings,
+            required_local_context: planner.required_local_context,
+            planned_steps: planner.planned_steps,
+            next_required_actions,
+            safety_invariants: vec![
+                "preview_only".to_string(),
+                "no_filesystem_write".to_string(),
+                "no_backend_mutation".to_string(),
+                "no_runtime_execution".to_string(),
+                "no_llm_call".to_string(),
+                "no_network_call".to_string(),
+            ],
+            selected_source_ids: planner.selected_source_ids,
+            selected_source_count: planner.selected_source_count,
+            execution_allowed_now: false,
+            preview_only: true,
+            no_filesystem_write: true,
+            no_backend_mutation: true,
+            no_runtime_execution: true,
+            no_llm_call: true,
+            no_network_call: true,
+        });
+    }
+    let (status, gate_decision, blocked_reason, allowed_future_action, consent_required, blockers, warnings, next_required_actions) =
+        agentic_workflow_execution_gate_from_planner(&planner, request.user_consent_present);
+    let safety_invariants = vec![
+        "preview_only".to_string(),
+        "no_filesystem_write".to_string(),
+        "no_backend_mutation".to_string(),
+        "no_runtime_execution".to_string(),
+        "no_llm_call".to_string(),
+        "no_network_call".to_string(),
+    ];
+
+    Ok(ScholarChatAgenticWorkflowExecutionGatePreview {
+        status,
+        planned_intent,
+        gate_decision,
+        consent_required,
+        user_consent_present: request.user_consent_present,
+        allowed_future_action,
+        blocked_reason,
+        blockers,
+        warnings,
+        required_local_context: planner.required_local_context,
+        planned_steps: planner.planned_steps,
+        next_required_actions,
+        safety_invariants,
+        selected_source_ids: planner.selected_source_ids,
+        selected_source_count: planner.selected_source_count,
+        execution_allowed_now: false,
+        preview_only: true,
+        no_filesystem_write: true,
+        no_backend_mutation: true,
+        no_runtime_execution: true,
+        no_llm_call: true,
+        no_network_call: true,
     })
 }
 
@@ -19908,6 +20054,21 @@ fn agentic_workflow_mentions_ocr_blocker(prompt: &str) -> bool {
         || (prompt.contains("pdf") && contains_any(prompt, &["cannot read", "can't read", "cant read", "can not read", "nicht lesen"]))
 }
 
+fn agentic_workflow_mentions_answer_generation(prompt: &str) -> bool {
+    contains_any(
+        prompt,
+        &[
+            "answer generation",
+            "generate an answer",
+            "generate answer",
+            "write an answer",
+            "write answer",
+            "final answer",
+            "grounded answer",
+        ],
+    )
+}
+
 fn agentic_workflow_plan_status(
     intent: &ScholarChatAgenticWorkflowIntent,
     selected_source_count: usize,
@@ -20158,6 +20319,144 @@ fn agentic_workflow_intent_label(intent: &ScholarChatAgenticWorkflowIntent) -> &
 
 fn contains_any(prompt: &str, needles: &[&str]) -> bool {
     needles.iter().any(|needle| prompt.contains(needle))
+}
+
+fn agentic_workflow_execution_gate_from_planner(
+    planner: &ScholarChatAgenticWorkflowPlanPreview,
+    user_consent_present: bool,
+) -> (
+    ScholarChatAgenticWorkflowExecutionGateStatus,
+    ScholarChatAgenticWorkflowExecutionGateDecision,
+    String,
+    ScholarChatAgenticWorkflowFutureAction,
+    bool,
+    Vec<String>,
+    Vec<String>,
+    Vec<String>,
+) {
+    let future_action = agentic_workflow_future_action(&planner.recognized_intent, planner.selected_source_count);
+    let consent_required = !matches!(future_action, ScholarChatAgenticWorkflowFutureAction::NoActionAvailable)
+        && !matches!(
+            &planner.recognized_intent,
+            ScholarChatAgenticWorkflowIntent::UnknownOrUnsupported | ScholarChatAgenticWorkflowIntent::ExplainBlocker
+        );
+    let mut blockers = planner.blockers.clone();
+    let mut warnings = planner.warnings.clone();
+    let mut next_required_actions = planner.next_required_actions.clone();
+    let blocked_reason;
+    let (status, gate_decision) = match &planner.recognized_intent {
+        ScholarChatAgenticWorkflowIntent::ExplainBlocker => {
+            blocked_reason = "The requested workflow is blocked by an unsupported OCR or blocker request.".to_string();
+            blockers.push("The requested workflow is blocked because OCR is not supported yet.".to_string());
+            next_required_actions.push("Use a text-layer PDF or a supported local source.".to_string());
+            (
+                ScholarChatAgenticWorkflowExecutionGateStatus::Blocked,
+                ScholarChatAgenticWorkflowExecutionGateDecision::Blocked,
+            )
+        }
+        ScholarChatAgenticWorkflowIntent::UnknownOrUnsupported => {
+            blocked_reason = "Clarify the workflow intent before a future execution step can be planned.".to_string();
+            warnings.push("This preview cannot map the prompt to a concrete executable future action yet.".to_string());
+            (
+                ScholarChatAgenticWorkflowExecutionGateStatus::NeedsReview,
+                ScholarChatAgenticWorkflowExecutionGateDecision::NoActionAvailable,
+            )
+        }
+        ScholarChatAgenticWorkflowIntent::BuildEvidencePack
+        | ScholarChatAgenticWorkflowIntent::InspectEvidencePack
+        | ScholarChatAgenticWorkflowIntent::BuildOrInspectRetrieval
+        | ScholarChatAgenticWorkflowIntent::AskLocalSources
+        | ScholarChatAgenticWorkflowIntent::ChunkSource
+        | ScholarChatAgenticWorkflowIntent::ExtractText
+        | ScholarChatAgenticWorkflowIntent::SourceRegistrationNeeded => {
+            if planner.selected_source_count == 0
+                && !matches!(&planner.recognized_intent, ScholarChatAgenticWorkflowIntent::SourceRegistrationNeeded)
+            {
+                blocked_reason = "A selected or registered local source is required before this workflow can proceed later.".to_string();
+                blockers.push("Select or register a local source first.".to_string());
+                (
+                    ScholarChatAgenticWorkflowExecutionGateStatus::Blocked,
+                    ScholarChatAgenticWorkflowExecutionGateDecision::NeedsContext,
+                )
+            } else if user_consent_present {
+                blocked_reason = String::new();
+                (
+                    ScholarChatAgenticWorkflowExecutionGateStatus::ExecutionReadyLater,
+                    ScholarChatAgenticWorkflowExecutionGateDecision::ReadyLater,
+                )
+            } else {
+                blocked_reason = "Explicit user consent is required before a future execution step can be approved.".to_string();
+                warnings.push("Consent is required for every future executable action in this phase.".to_string());
+                (
+                    ScholarChatAgenticWorkflowExecutionGateStatus::NeedsReview,
+                    ScholarChatAgenticWorkflowExecutionGateDecision::NeedsConsent,
+                )
+            }
+        }
+    };
+
+    if matches!(future_action, ScholarChatAgenticWorkflowFutureAction::NoActionAvailable) {
+        next_required_actions.push("Clarify the workflow so a future executable action can be identified.".to_string());
+    } else if user_consent_present {
+        next_required_actions.push("A later execution phase may use this action after explicit consent is added.".to_string());
+    } else {
+        next_required_actions.push("Explicit user consent will be needed before a future execution command can run.".to_string());
+    }
+
+    (
+        status,
+        gate_decision,
+        blocked_reason,
+        future_action,
+        consent_required,
+        blockers,
+        warnings,
+        next_required_actions,
+    )
+}
+
+fn agentic_workflow_future_action(
+    intent: &ScholarChatAgenticWorkflowIntent,
+    selected_source_count: usize,
+) -> ScholarChatAgenticWorkflowFutureAction {
+    match intent {
+        ScholarChatAgenticWorkflowIntent::SourceRegistrationNeeded => {
+            ScholarChatAgenticWorkflowFutureAction::RegisterSourceLater
+        }
+        ScholarChatAgenticWorkflowIntent::ExtractText => ScholarChatAgenticWorkflowFutureAction::ExtractTextLater,
+        ScholarChatAgenticWorkflowIntent::ChunkSource => ScholarChatAgenticWorkflowFutureAction::ChunkSourceLater,
+        ScholarChatAgenticWorkflowIntent::BuildOrInspectRetrieval => {
+            if selected_source_count > 0 {
+                ScholarChatAgenticWorkflowFutureAction::InspectRetrievalLater
+            } else {
+                ScholarChatAgenticWorkflowFutureAction::NoActionAvailable
+            }
+        }
+        ScholarChatAgenticWorkflowIntent::BuildEvidencePack => {
+            if selected_source_count > 0 {
+                ScholarChatAgenticWorkflowFutureAction::BuildEvidencePackLater
+            } else {
+                ScholarChatAgenticWorkflowFutureAction::NoActionAvailable
+            }
+        }
+        ScholarChatAgenticWorkflowIntent::InspectEvidencePack => {
+            if selected_source_count > 0 {
+                ScholarChatAgenticWorkflowFutureAction::InspectEvidencePackLater
+            } else {
+                ScholarChatAgenticWorkflowFutureAction::NoActionAvailable
+            }
+        }
+        ScholarChatAgenticWorkflowIntent::AskLocalSources => {
+            if selected_source_count > 0 {
+                ScholarChatAgenticWorkflowFutureAction::AskLocalSourcesLater
+            } else {
+                ScholarChatAgenticWorkflowFutureAction::NoActionAvailable
+            }
+        }
+        ScholarChatAgenticWorkflowIntent::ExplainBlocker | ScholarChatAgenticWorkflowIntent::UnknownOrUnsupported => {
+            ScholarChatAgenticWorkflowFutureAction::NoActionAvailable
+        }
+    }
 }
 
 fn convert_retrieval_response(response: RetrievalResponse) -> Vec<ScholarChatRetrievalCandidate> {
@@ -24984,6 +25283,159 @@ mod tests {
         assert!(preview.no_artifact_write);
         assert!(preview.no_registry_status_change);
         assert!(preview.no_audit_write);
+    }
+
+    fn gate_request(
+        prompt: &str,
+        selected_source_ids: Vec<String>,
+        user_consent_present: bool,
+    ) -> ScholarChatAgenticWorkflowExecutionGatePreviewRequest {
+        ScholarChatAgenticWorkflowExecutionGatePreviewRequest {
+            scholar_chat_request: ScholarChatRequest {
+                prompt: prompt.to_string(),
+                mode: ScholarChatMode::LectureLearning,
+                grounding_policy: GroundingPolicy::LocalFirst,
+                selected_source_ids,
+            },
+            user_consent_present,
+        }
+    }
+
+    fn assert_agentic_workflow_gate_boundary_fields(
+        preview: &ScholarChatAgenticWorkflowExecutionGatePreview,
+    ) {
+        assert!(!preview.execution_allowed_now);
+        assert!(preview.preview_only);
+        assert!(preview.no_filesystem_write);
+        assert!(preview.no_backend_mutation);
+        assert!(preview.no_runtime_execution);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_network_call);
+    }
+
+    fn assert_agentic_workflow_gate_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatAgenticWorkflowExecutionGatePreviewRequest,
+    ) -> ScholarChatAgenticWorkflowExecutionGatePreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let before_aegis_exists = temp.path().join(".aegis").exists();
+        let first = preview_scholar_chat_agentic_workflow_execution_gate(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_agentic_workflow_execution_gate(temp.path(), request).unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        let after_aegis_exists = temp.path().join(".aegis").exists();
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        assert_eq!(before_aegis_exists, after_aegis_exists);
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_agentic_workflow_gate_boundary_fields(preview);
+        }
+        first
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_execution_gate_rejects_empty_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_agentic_workflow_execution_gate(temp.path(), gate_request("   ", vec!["src_demo".to_string()], false));
+        assert!(matches!(result, Err(AegisError::ScholarChatPromptEmpty)));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_execution_gate_rejects_invalid_source_ids_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["", " ", "..", "../evil", "evil/source", "evil\\source"] {
+            let request = gate_request("Indexiere diese PDF", vec![invalid.to_string()], false);
+            let result = preview_scholar_chat_agentic_workflow_execution_gate(temp.path(), request);
+            assert!(matches!(result, Err(AegisError::ScholarChatInvalidSourceId)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_execution_gate_composes_planner_exactly_once() {
+        let source = fs::read_to_string(file!()).unwrap();
+        let start = source.find("pub fn preview_scholar_chat_agentic_workflow_execution_gate").unwrap();
+        let end = source[start..]
+            .find("pub fn preview_scholar_chat_retrieval")
+            .map(|index| start + index)
+            .unwrap();
+        let body = &source[start..end];
+        assert_eq!(body.matches("preview_scholar_chat_agentic_workflow_plan(").count(), 1);
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_execution_gate_blocks_source_dependent_actions_without_selected_sources() {
+        let temp = tempfile::tempdir().unwrap();
+        let request = gate_request("Suche in meinen Quellen nach ANOVA", Vec::new(), false);
+        let preview = assert_agentic_workflow_gate_deterministic_and_path_free(&temp, request);
+        assert_eq!(preview.status, ScholarChatAgenticWorkflowExecutionGateStatus::Blocked);
+        assert_eq!(preview.gate_decision, ScholarChatAgenticWorkflowExecutionGateDecision::NeedsContext);
+        assert_eq!(preview.allowed_future_action, ScholarChatAgenticWorkflowFutureAction::NoActionAvailable);
+        assert!(preview.blocked_reason.contains("selected or registered local source"));
+        assert!(preview.next_required_actions.iter().any(|action| action.contains("Select or register a local source")));
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_execution_gate_requires_consent_for_future_execution_readiness() {
+        let temp = tempfile::tempdir().unwrap();
+        let request = gate_request("Was sagen meine Quellen zu ANOVA?", vec!["src_demo".to_string()], false);
+        let preview = assert_agentic_workflow_gate_deterministic_and_path_free(&temp, request);
+        assert_eq!(preview.status, ScholarChatAgenticWorkflowExecutionGateStatus::NeedsReview);
+        assert_eq!(preview.gate_decision, ScholarChatAgenticWorkflowExecutionGateDecision::NeedsConsent);
+        assert!(preview.consent_required);
+        assert!(!preview.user_consent_present);
+        assert_eq!(preview.allowed_future_action, ScholarChatAgenticWorkflowFutureAction::AskLocalSourcesLater);
+        assert!(preview.blocked_reason.contains("Explicit user consent is required"));
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_execution_gate_stays_preview_only_when_consent_is_present() {
+        let temp = tempfile::tempdir().unwrap();
+        let request = gate_request("Was sagen meine Quellen zu ANOVA?", vec!["src_demo".to_string()], true);
+        let preview = assert_agentic_workflow_gate_deterministic_and_path_free(&temp, request);
+        assert_eq!(preview.status, ScholarChatAgenticWorkflowExecutionGateStatus::ExecutionReadyLater);
+        assert_eq!(preview.gate_decision, ScholarChatAgenticWorkflowExecutionGateDecision::ReadyLater);
+        assert!(preview.consent_required);
+        assert!(preview.user_consent_present);
+        assert!(!preview.execution_allowed_now);
+        assert_eq!(preview.allowed_future_action, ScholarChatAgenticWorkflowFutureAction::AskLocalSourcesLater);
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_execution_gate_blocks_scanned_pdf_and_answer_generation_requests() {
+        let temp = tempfile::tempdir().unwrap();
+        let ocr_preview = assert_agentic_workflow_gate_deterministic_and_path_free(
+            &temp,
+            gate_request("Warum kann AEGIS meine PDF nicht lesen?", vec!["src_demo".to_string()], false),
+        );
+        assert_eq!(ocr_preview.status, ScholarChatAgenticWorkflowExecutionGateStatus::Blocked);
+        assert_eq!(ocr_preview.gate_decision, ScholarChatAgenticWorkflowExecutionGateDecision::Blocked);
+        assert_eq!(ocr_preview.allowed_future_action, ScholarChatAgenticWorkflowFutureAction::NoActionAvailable);
+        assert!(ocr_preview.blocked_reason.contains("OCR"));
+
+        let answer_preview = assert_agentic_workflow_gate_deterministic_and_path_free(
+            &temp,
+            gate_request("Generate an answer from my sources", vec!["src_demo".to_string()], true),
+        );
+        assert_eq!(answer_preview.status, ScholarChatAgenticWorkflowExecutionGateStatus::Blocked);
+        assert_eq!(answer_preview.gate_decision, ScholarChatAgenticWorkflowExecutionGateDecision::Blocked);
+        assert_eq!(answer_preview.allowed_future_action, ScholarChatAgenticWorkflowFutureAction::NoActionAvailable);
+        assert!(answer_preview.blocked_reason.contains("Answer generation is not yet the product workflow"));
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_execution_gate_returns_unknown_prompt_without_executable_action() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_agentic_workflow_gate_deterministic_and_path_free(&temp, gate_request("???", vec!["src_demo".to_string()], false));
+        assert_eq!(preview.status, ScholarChatAgenticWorkflowExecutionGateStatus::NeedsReview);
+        assert_eq!(preview.gate_decision, ScholarChatAgenticWorkflowExecutionGateDecision::NoActionAvailable);
+        assert_eq!(preview.allowed_future_action, ScholarChatAgenticWorkflowFutureAction::NoActionAvailable);
+        assert!(preview.next_required_actions.iter().any(|action| action.contains("Clarify the workflow")));
     }
 
     fn assert_agentic_workflow_plan_deterministic_and_path_free(

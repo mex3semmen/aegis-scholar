@@ -98,6 +98,7 @@ use scholar_chat::{
     preview_scholar_chat_grounded_answer_write_eligibility as preview_scholar_chat_grounded_answer_write_eligibility_impl,
     preview_scholar_chat_request as preview_scholar_chat_request_impl,
     preview_scholar_chat_agentic_workflow_plan as preview_scholar_chat_agentic_workflow_plan_impl,
+    preview_scholar_chat_agentic_workflow_execution_gate as preview_scholar_chat_agentic_workflow_execution_gate_impl,
     preview_scholar_chat_evidence_plan as preview_scholar_chat_evidence_plan_impl,
     preview_scholar_chat_prompt_pack as preview_scholar_chat_prompt_pack_impl,
     preview_scholar_chat_retrieval as preview_scholar_chat_retrieval_impl,
@@ -117,6 +118,8 @@ use scholar_chat::{
     ScholarChatGroundedAnswerWriteEligibilityPreview,
     ScholarChatGroundedDraftReadinessPreview,
     ScholarChatAgenticWorkflowPlanPreview,
+    ScholarChatAgenticWorkflowExecutionGatePreview,
+    ScholarChatAgenticWorkflowExecutionGatePreviewRequest,
     ScholarChatRuntimeDiagnosticBridgePreview,
     ScholarChatRuntimeDiagnosticBridgePreviewRequest,
     ScholarChatRuntimeDiagnosticResultPreview,
@@ -377,6 +380,15 @@ fn preview_scholar_chat_agentic_workflow_plan(
     request: ScholarChatRequest,
 ) -> Result<ScholarChatAgenticWorkflowPlanPreview, String> {
     preview_scholar_chat_agentic_workflow_plan_impl(root, request)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
+fn preview_scholar_chat_agentic_workflow_execution_gate(
+    root: String,
+    request: ScholarChatAgenticWorkflowExecutionGatePreviewRequest,
+) -> Result<ScholarChatAgenticWorkflowExecutionGatePreview, String> {
+    preview_scholar_chat_agentic_workflow_execution_gate_impl(root, request)
         .map_err(to_user_error)
 }
 
@@ -821,6 +833,7 @@ pub fn run() {
             export_answer_artifacts,
             preview_scholar_chat_request,
             preview_scholar_chat_agentic_workflow_plan,
+            preview_scholar_chat_agentic_workflow_execution_gate,
             preview_scholar_chat_answer_readiness,
             preview_scholar_chat_draft_inference,
             preview_scholar_chat_draft_grounding_inspection,
