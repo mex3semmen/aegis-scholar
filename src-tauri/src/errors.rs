@@ -30,6 +30,12 @@ pub enum AegisError {
     #[error("Unsupported extraction type: {0}")]
     UnsupportedExtractionType(String),
 
+    #[error("PDF text layer missing")]
+    PdfTextLayerMissing,
+
+    #[error("PDF text extraction failed")]
+    PdfTextExtractionFailed,
+
     #[error("Extraction input missing")]
     ExtractionInputMissing,
 
