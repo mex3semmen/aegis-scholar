@@ -94,6 +94,55 @@ pub struct ScholarChatResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum ScholarChatAgenticWorkflowPlanStatus {
+    Blocked,
+    NeedsReview,
+    PlanReadyLater,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatAgenticWorkflowIntent {
+    SourceRegistrationNeeded,
+    ExtractText,
+    ChunkSource,
+    BuildOrInspectRetrieval,
+    BuildEvidencePack,
+    InspectEvidencePack,
+    AskLocalSources,
+    ExplainBlocker,
+    UnknownOrUnsupported,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatAgenticWorkflowPlanPreview {
+    pub status: ScholarChatAgenticWorkflowPlanStatus,
+    pub recognized_intent: ScholarChatAgenticWorkflowIntent,
+    pub normalized_prompt: String,
+    pub mode: ScholarChatMode,
+    pub grounding_policy: GroundingPolicy,
+    pub selected_source_ids: Vec<String>,
+    pub selected_source_count: usize,
+    pub required_local_context: Vec<String>,
+    pub planned_steps: Vec<String>,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub execution_allowed: bool,
+    pub preview_only: bool,
+    pub no_runtime_execution: bool,
+    pub no_llm_call: bool,
+    pub no_answer_generated: bool,
+    pub no_evidence_pack_built: bool,
+    pub no_persistence: bool,
+    pub no_artifact_write: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum ScholarChatScientificDisciplineRegistryStatus {
     Blocked,
     ConceptMapped,
@@ -2676,6 +2725,76 @@ pub fn preview_scholar_chat_request(
         selected_source_count,
         grounding_plan,
         warnings,
+    })
+}
+
+pub fn preview_scholar_chat_agentic_workflow_plan(
+    root: impl Into<PathBuf>,
+    request: ScholarChatRequest,
+) -> AegisResult<ScholarChatAgenticWorkflowPlanPreview> {
+    let request_preview = preview_scholar_chat_request(root, request)?;
+    let normalized_prompt = request_preview.normalized_prompt;
+    let recognized_intent = classify_agentic_workflow_intent(&normalized_prompt);
+    let status = agentic_workflow_plan_status(&recognized_intent, request_preview.selected_source_count, &normalized_prompt);
+    let required_local_context = agentic_workflow_required_local_context(
+        &recognized_intent,
+        request_preview.selected_source_count,
+        &normalized_prompt,
+    );
+    let mut warnings = request_preview.warnings;
+    warnings.extend(agentic_workflow_warnings(
+        &recognized_intent,
+        request_preview.selected_source_count,
+        &normalized_prompt,
+    ));
+    let blockers = agentic_workflow_blockers(
+        &status,
+        &recognized_intent,
+        request_preview.selected_source_count,
+        &normalized_prompt,
+    );
+    let next_required_actions = agentic_workflow_next_required_actions(
+        &status,
+        &recognized_intent,
+        request_preview.selected_source_count,
+        &normalized_prompt,
+    );
+    let planned_steps = agentic_workflow_planned_steps(
+        &recognized_intent,
+        request_preview.selected_source_count,
+        &normalized_prompt,
+    );
+    let summary = agentic_workflow_summary(
+        &status,
+        &recognized_intent,
+        request_preview.selected_source_count,
+        &normalized_prompt,
+    );
+
+    Ok(ScholarChatAgenticWorkflowPlanPreview {
+        status,
+        recognized_intent,
+        normalized_prompt,
+        mode: request_preview.mode,
+        grounding_policy: request_preview.grounding_policy,
+        selected_source_ids: request_preview.selected_source_ids,
+        selected_source_count: request_preview.selected_source_count,
+        required_local_context,
+        planned_steps,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        execution_allowed: false,
+        preview_only: true,
+        no_runtime_execution: true,
+        no_llm_call: true,
+        no_answer_generated: true,
+        no_evidence_pack_built: true,
+        no_persistence: true,
+        no_artifact_write: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
     })
 }
 
@@ -19757,6 +19876,290 @@ fn grounding_plan(mode: &ScholarChatMode, policy: &GroundingPolicy, selected_sou
     }
 }
 
+fn classify_agentic_workflow_intent(normalized_prompt: &str) -> ScholarChatAgenticWorkflowIntent {
+    let prompt = normalized_prompt.to_lowercase();
+    if agentic_workflow_mentions_ocr_blocker(&prompt) {
+        ScholarChatAgenticWorkflowIntent::ExplainBlocker
+    } else if contains_any(&prompt, &["evidence pack", "evidence-pack"]) {
+        if contains_any(&prompt, &["inspect", "read", "view", "show", "inspectieren", "anzeigen"]) {
+            ScholarChatAgenticWorkflowIntent::InspectEvidencePack
+        } else {
+            ScholarChatAgenticWorkflowIntent::BuildEvidencePack
+        }
+    } else if contains_any(&prompt, &["chunk", "chunking", "zerteilen", "zerlege"]) {
+        ScholarChatAgenticWorkflowIntent::ChunkSource
+    } else if contains_any(&prompt, &["search in my sources", "search my sources", "retrieval", "suche in meinen quellen", "suche in meinen quellen nach"]) {
+        ScholarChatAgenticWorkflowIntent::BuildOrInspectRetrieval
+    } else if contains_any(&prompt, &["what do my sources say", "what do my source say", "was sagen meine quellen", "ask my sources", "fragen meine quellen"]) {
+        ScholarChatAgenticWorkflowIntent::AskLocalSources
+    } else if contains_any(&prompt, &["register", "registration", "source registration", "registriere", "registrieren", "add a source", "add source", "neue quelle", "new source"]) {
+        ScholarChatAgenticWorkflowIntent::SourceRegistrationNeeded
+    } else if contains_any(&prompt, &["index", "indexiere", "extract", "extrahiere", "pdf", "text-layer"]) {
+        ScholarChatAgenticWorkflowIntent::ExtractText
+    } else if contains_any(&prompt, &["why", "warum", "cannot", "can't", "cant", "nicht lesen", "can not read", "cannot read"]) {
+        ScholarChatAgenticWorkflowIntent::ExplainBlocker
+    } else {
+        ScholarChatAgenticWorkflowIntent::UnknownOrUnsupported
+    }
+}
+
+fn agentic_workflow_mentions_ocr_blocker(prompt: &str) -> bool {
+    contains_any(prompt, &["ocr", "scanned pdf", "scanned pdfs", "gescannte pdf", "gescannte pdfs"])
+        || (prompt.contains("pdf") && contains_any(prompt, &["cannot read", "can't read", "cant read", "can not read", "nicht lesen"]))
+}
+
+fn agentic_workflow_plan_status(
+    intent: &ScholarChatAgenticWorkflowIntent,
+    selected_source_count: usize,
+    normalized_prompt: &str,
+) -> ScholarChatAgenticWorkflowPlanStatus {
+    if agentic_workflow_mentions_ocr_blocker(&normalized_prompt.to_lowercase()) {
+        return ScholarChatAgenticWorkflowPlanStatus::Blocked;
+    }
+    match intent {
+        ScholarChatAgenticWorkflowIntent::UnknownOrUnsupported => ScholarChatAgenticWorkflowPlanStatus::NeedsReview,
+        ScholarChatAgenticWorkflowIntent::ExtractText
+        | ScholarChatAgenticWorkflowIntent::ChunkSource
+        | ScholarChatAgenticWorkflowIntent::BuildOrInspectRetrieval
+        | ScholarChatAgenticWorkflowIntent::BuildEvidencePack
+        | ScholarChatAgenticWorkflowIntent::InspectEvidencePack
+        | ScholarChatAgenticWorkflowIntent::AskLocalSources => {
+            if selected_source_count == 0 {
+                ScholarChatAgenticWorkflowPlanStatus::NeedsReview
+            } else {
+                ScholarChatAgenticWorkflowPlanStatus::PlanReadyLater
+            }
+        }
+        ScholarChatAgenticWorkflowIntent::SourceRegistrationNeeded => ScholarChatAgenticWorkflowPlanStatus::PlanReadyLater,
+        ScholarChatAgenticWorkflowIntent::ExplainBlocker => ScholarChatAgenticWorkflowPlanStatus::NeedsReview,
+    }
+}
+
+fn agentic_workflow_required_local_context(
+    intent: &ScholarChatAgenticWorkflowIntent,
+    selected_source_count: usize,
+    normalized_prompt: &str,
+) -> Vec<String> {
+    let mut required_local_context = Vec::new();
+    if selected_source_count > 0 {
+        required_local_context.push("selected_source_context".to_string());
+    } else {
+        required_local_context.push("registered_local_source".to_string());
+    }
+    match intent {
+        ScholarChatAgenticWorkflowIntent::SourceRegistrationNeeded => {
+            required_local_context.push("local_source_registration".to_string());
+        }
+        ScholarChatAgenticWorkflowIntent::ExtractText => {
+            required_local_context.push("pdf_text_layer_source".to_string());
+        }
+        ScholarChatAgenticWorkflowIntent::ChunkSource => {
+            required_local_context.push("chunkable_source".to_string());
+        }
+        ScholarChatAgenticWorkflowIntent::BuildOrInspectRetrieval
+        | ScholarChatAgenticWorkflowIntent::AskLocalSources => {
+            required_local_context.push("retrieval_ready_source".to_string());
+        }
+        ScholarChatAgenticWorkflowIntent::BuildEvidencePack => {
+            required_local_context.push("retrieval_candidates".to_string());
+            required_local_context.push("evidence_pack_ready_source".to_string());
+        }
+        ScholarChatAgenticWorkflowIntent::InspectEvidencePack => {
+            required_local_context.push("existing_evidence_pack".to_string());
+        }
+        ScholarChatAgenticWorkflowIntent::ExplainBlocker => {
+            if normalized_prompt.to_lowercase().contains("pdf") {
+                required_local_context.push("pdf_text_layer_source".to_string());
+            }
+        }
+        ScholarChatAgenticWorkflowIntent::UnknownOrUnsupported => {
+            required_local_context.push("clarified_workflow_intent".to_string());
+        }
+    }
+    required_local_context.sort();
+    required_local_context.dedup();
+    required_local_context
+}
+
+fn agentic_workflow_planned_steps(
+    intent: &ScholarChatAgenticWorkflowIntent,
+    selected_source_count: usize,
+    normalized_prompt: &str,
+) -> Vec<String> {
+    let mut steps = Vec::new();
+    if selected_source_count == 0 && !matches!(intent, ScholarChatAgenticWorkflowIntent::SourceRegistrationNeeded) {
+        steps.push("Select or register a local source.".to_string());
+    }
+    match intent {
+        ScholarChatAgenticWorkflowIntent::SourceRegistrationNeeded => {
+            steps.push("Register a local source.".to_string());
+            steps.push("Extract text from the registered source.".to_string());
+            steps.push("Chunk the source while preserving locators and provenance.".to_string());
+            steps.push("Build or inspect retrieval before Evidence Pack work.".to_string());
+            steps.push("Build or read an Evidence Pack later if needed.".to_string());
+        }
+        ScholarChatAgenticWorkflowIntent::ExtractText => {
+            steps.push("Use the text-layer extraction path for the selected local source.".to_string());
+            steps.push("Chunk the extracted source text.".to_string());
+            steps.push("Build or inspect retrieval before Evidence Pack work.".to_string());
+            steps.push("Build or read an Evidence Pack later if needed.".to_string());
+        }
+        ScholarChatAgenticWorkflowIntent::ChunkSource => {
+            steps.push("Extract text from the selected local source first.".to_string());
+            steps.push("Chunk the source while keeping locators and provenance intact.".to_string());
+            steps.push("Build or inspect retrieval before Evidence Pack work.".to_string());
+            steps.push("Build or read an Evidence Pack later if needed.".to_string());
+        }
+        ScholarChatAgenticWorkflowIntent::BuildOrInspectRetrieval => {
+            steps.push("Inspect the selected local source context.".to_string());
+            steps.push("Build or inspect retrieval candidates and index readiness.".to_string());
+            steps.push("Review evidence candidates before any Evidence Pack work.".to_string());
+            steps.push("Build or read an Evidence Pack later if needed.".to_string());
+        }
+        ScholarChatAgenticWorkflowIntent::BuildEvidencePack => {
+            steps.push("Select retrieval-ready local sources.".to_string());
+            steps.push("Review retrieval candidates and provenance.".to_string());
+            steps.push("Assemble an Evidence Pack from local evidence only.".to_string());
+            steps.push("Keep citation and answer generation for later phases.".to_string());
+        }
+        ScholarChatAgenticWorkflowIntent::InspectEvidencePack => {
+            steps.push("Select an existing local Evidence Pack.".to_string());
+            steps.push("Inspect its items, provenance, and citation readiness.".to_string());
+            steps.push("Use the review to plan any later answer work.".to_string());
+        }
+        ScholarChatAgenticWorkflowIntent::AskLocalSources => {
+            steps.push("Use the selected local source context.".to_string());
+            steps.push("Preview retrieval candidates before any answer work.".to_string());
+            steps.push("Review the resulting evidence before later synthesis.".to_string());
+        }
+        ScholarChatAgenticWorkflowIntent::ExplainBlocker => {
+            steps.push("Identify why the workflow is blocked.".to_string());
+            steps.push("Use a text-layer PDF or another supported local source.".to_string());
+            steps.push("Keep scanned-PDF OCR for a later supported phase.".to_string());
+        }
+        ScholarChatAgenticWorkflowIntent::UnknownOrUnsupported => {
+            steps.push("Clarify the local workflow intent.".to_string());
+            steps.push("Name a source action such as register, extract, chunk, retrieval, or Evidence Pack.".to_string());
+            steps.push("Re-run the preview once the task is more specific.".to_string());
+        }
+    }
+    if normalized_prompt.to_lowercase().contains("answer") {
+        steps.push("Answer generation is not yet the primary product workflow.".to_string());
+    }
+    steps
+}
+
+fn agentic_workflow_warnings(
+    intent: &ScholarChatAgenticWorkflowIntent,
+    selected_source_count: usize,
+    normalized_prompt: &str,
+) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if selected_source_count == 0 && !matches!(intent, ScholarChatAgenticWorkflowIntent::SourceRegistrationNeeded) {
+        warnings.push("I need a selected or registered local source to scope this workflow.".to_string());
+    }
+    if normalized_prompt.to_lowercase().contains("pdf") {
+        warnings.push("PDF text-layer extraction is supported; scanned PDF OCR is not supported.".to_string());
+    }
+    if normalized_prompt.to_lowercase().contains("answer") {
+        warnings.push("Answer generation is not yet the primary workflow in this preview.".to_string());
+    }
+    warnings
+}
+
+fn agentic_workflow_blockers(
+    status: &ScholarChatAgenticWorkflowPlanStatus,
+    intent: &ScholarChatAgenticWorkflowIntent,
+    selected_source_count: usize,
+    normalized_prompt: &str,
+) -> Vec<String> {
+    let mut blockers = Vec::new();
+    if matches!(status, ScholarChatAgenticWorkflowPlanStatus::Blocked) {
+        blockers.push("Scanned PDF OCR is not supported in this preview.".to_string());
+    }
+    if selected_source_count == 0 && !matches!(intent, ScholarChatAgenticWorkflowIntent::SourceRegistrationNeeded) {
+        blockers.push("I need a selected or registered local source to make this plan more specific.".to_string());
+    }
+    if matches!(intent, ScholarChatAgenticWorkflowIntent::UnknownOrUnsupported) {
+        blockers.push("I could not map this prompt to a supported local workflow yet.".to_string());
+    }
+    if normalized_prompt.to_lowercase().contains("answer") && selected_source_count == 0 {
+        blockers.push("Answer generation is not yet the primary product workflow in this preview.".to_string());
+    }
+    blockers
+}
+
+fn agentic_workflow_next_required_actions(
+    status: &ScholarChatAgenticWorkflowPlanStatus,
+    intent: &ScholarChatAgenticWorkflowIntent,
+    selected_source_count: usize,
+    normalized_prompt: &str,
+) -> Vec<String> {
+    let mut actions = Vec::new();
+    match status {
+        ScholarChatAgenticWorkflowPlanStatus::Blocked => {
+            actions.push("Use a text-layer PDF or a supported local source.".to_string());
+            actions.push("OCR for scanned PDFs is not available yet.".to_string());
+        }
+        ScholarChatAgenticWorkflowPlanStatus::NeedsReview => {
+            if selected_source_count == 0 && !matches!(intent, ScholarChatAgenticWorkflowIntent::SourceRegistrationNeeded) {
+                actions.push("Select or register a local source.".to_string());
+            }
+            if matches!(intent, ScholarChatAgenticWorkflowIntent::UnknownOrUnsupported) {
+                actions.push("Clarify the local workflow intent.".to_string());
+            }
+            actions.push("Re-run the preview after clarifying the local workflow.".to_string());
+        }
+        ScholarChatAgenticWorkflowPlanStatus::PlanReadyLater => {
+            actions.push("Follow the planned local steps when that gated phase becomes available.".to_string());
+            actions.push("Keep execution disabled until a later explicit phase adds it.".to_string());
+        }
+    }
+    if normalized_prompt.to_lowercase().contains("answer") {
+        actions.push("Treat answer generation as a later workflow, not this preview.".to_string());
+    }
+    actions
+}
+
+fn agentic_workflow_summary(
+    status: &ScholarChatAgenticWorkflowPlanStatus,
+    intent: &ScholarChatAgenticWorkflowIntent,
+    selected_source_count: usize,
+    normalized_prompt: &str,
+) -> String {
+    let prompt_focus = normalized_prompt.split_whitespace().take(8).collect::<Vec<_>>().join(" ");
+    let prefix = match status {
+        ScholarChatAgenticWorkflowPlanStatus::Blocked => "This workflow is blocked",
+        ScholarChatAgenticWorkflowPlanStatus::NeedsReview => "This workflow needs review",
+        ScholarChatAgenticWorkflowPlanStatus::PlanReadyLater => "I can plan this now",
+    };
+    format!(
+        "{} as {} for {} selected source(s); execution_allowed=false; prompt=\"{}\".",
+        prefix,
+        agentic_workflow_intent_label(intent),
+        selected_source_count,
+        prompt_focus
+    )
+}
+
+fn agentic_workflow_intent_label(intent: &ScholarChatAgenticWorkflowIntent) -> &'static str {
+    match intent {
+        ScholarChatAgenticWorkflowIntent::SourceRegistrationNeeded => "source_registration_needed",
+        ScholarChatAgenticWorkflowIntent::ExtractText => "extract_text",
+        ScholarChatAgenticWorkflowIntent::ChunkSource => "chunk_source",
+        ScholarChatAgenticWorkflowIntent::BuildOrInspectRetrieval => "build_or_inspect_retrieval",
+        ScholarChatAgenticWorkflowIntent::BuildEvidencePack => "build_evidence_pack",
+        ScholarChatAgenticWorkflowIntent::InspectEvidencePack => "inspect_evidence_pack",
+        ScholarChatAgenticWorkflowIntent::AskLocalSources => "ask_local_sources",
+        ScholarChatAgenticWorkflowIntent::ExplainBlocker => "explain_blocker",
+        ScholarChatAgenticWorkflowIntent::UnknownOrUnsupported => "unknown_or_unsupported",
+    }
+}
+
+fn contains_any(prompt: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| prompt.contains(needle))
+}
+
 fn convert_retrieval_response(response: RetrievalResponse) -> Vec<ScholarChatRetrievalCandidate> {
     response
         .results
@@ -24566,6 +24969,145 @@ mod tests {
         assert!(!json.contains(temp_path.as_ref()));
         assert!(!temp.path().join(".aegis").exists());
         assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+
+    fn assert_agentic_workflow_plan_boundary_fields(
+        preview: &ScholarChatAgenticWorkflowPlanPreview,
+    ) {
+        assert_eq!(preview.execution_allowed, false);
+        assert!(preview.preview_only);
+        assert!(preview.no_runtime_execution);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_evidence_pack_built);
+        assert!(preview.no_persistence);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+    }
+
+    fn assert_agentic_workflow_plan_deterministic_and_path_free(
+        temp: &tempfile::TempDir,
+        request: ScholarChatRequest,
+    ) -> ScholarChatAgenticWorkflowPlanPreview {
+        let before_entries = count_entries_recursively(temp.path());
+        let before_aegis_exists = temp.path().join(".aegis").exists();
+        let first = preview_scholar_chat_agentic_workflow_plan(temp.path(), request.clone()).unwrap();
+        let second = preview_scholar_chat_agentic_workflow_plan(temp.path(), request).unwrap();
+        let after_entries = count_entries_recursively(temp.path());
+        let after_aegis_exists = temp.path().join(".aegis").exists();
+        assert_eq!(first, second);
+        assert_eq!(before_entries, after_entries);
+        assert_eq!(before_aegis_exists, after_aegis_exists);
+        let temp_path = temp.path().to_string_lossy();
+        for preview in [&first, &second] {
+            let debug = format!("{preview:?}");
+            let json = serde_json::to_string(preview).unwrap();
+            assert!(!debug.contains(temp_path.as_ref()));
+            assert!(!json.contains(temp_path.as_ref()));
+            assert_agentic_workflow_plan_boundary_fields(preview);
+        }
+        first
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_plan_rejects_empty_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = preview_scholar_chat_agentic_workflow_plan(temp.path(), request("   "));
+        assert!(matches!(result, Err(AegisError::ScholarChatPromptEmpty)));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_plan_rejects_invalid_source_ids_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        for invalid in ["", " ", "..", "../evil", "evil/source", "evil\\source"] {
+            let mut workflow_request = request("Indexiere diese PDF");
+            workflow_request.selected_source_ids = vec![invalid.to_string()];
+            let result = preview_scholar_chat_agentic_workflow_plan(temp.path(), workflow_request);
+            assert!(matches!(result, Err(AegisError::ScholarChatInvalidSourceId)));
+            assert!(!temp.path().join(".aegis").exists());
+        }
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_plan_plans_source_registration_later_for_registration_prompts() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut workflow_request = request("Registriere diese Quelle");
+        workflow_request.selected_source_ids = Vec::new();
+        let preview = assert_agentic_workflow_plan_deterministic_and_path_free(&temp, workflow_request);
+        assert_eq!(preview.status, ScholarChatAgenticWorkflowPlanStatus::PlanReadyLater);
+        assert_eq!(preview.recognized_intent, ScholarChatAgenticWorkflowIntent::SourceRegistrationNeeded);
+        assert!(preview.required_local_context.iter().any(|item| item.contains("registered_local_source")));
+        assert!(preview.planned_steps.iter().any(|step| step.contains("Register a local source")));
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_plan_plans_extract_text_prompts() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_agentic_workflow_plan_deterministic_and_path_free(&temp, request("Indexiere diese PDF"));
+        assert_eq!(preview.status, ScholarChatAgenticWorkflowPlanStatus::PlanReadyLater);
+        assert_eq!(preview.recognized_intent, ScholarChatAgenticWorkflowIntent::ExtractText);
+        assert!(preview.required_local_context.iter().any(|item| item == "pdf_text_layer_source"));
+        assert!(preview.warnings.iter().any(|warning| warning.contains("PDF text-layer extraction is supported")));
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_plan_plans_chunk_source_prompts() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_agentic_workflow_plan_deterministic_and_path_free(&temp, request("Teile die Quelle in Chunks"));
+        assert_eq!(preview.status, ScholarChatAgenticWorkflowPlanStatus::PlanReadyLater);
+        assert_eq!(preview.recognized_intent, ScholarChatAgenticWorkflowIntent::ChunkSource);
+        assert!(preview.planned_steps.iter().any(|step| step.contains("Chunk the source")));
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_plan_plans_build_evidence_pack_prompts() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_agentic_workflow_plan_deterministic_and_path_free(&temp, request("Baue ein Evidence Pack zu Signalentdeckung"));
+        assert_eq!(preview.status, ScholarChatAgenticWorkflowPlanStatus::PlanReadyLater);
+        assert_eq!(preview.recognized_intent, ScholarChatAgenticWorkflowIntent::BuildEvidencePack);
+        assert!(preview.planned_steps.iter().any(|step| step.contains("Assemble an Evidence Pack")));
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_plan_plans_ask_local_sources_prompts() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_agentic_workflow_plan_deterministic_and_path_free(&temp, request("Was sagen meine Quellen zu ANOVA?"));
+        assert_eq!(preview.status, ScholarChatAgenticWorkflowPlanStatus::PlanReadyLater);
+        assert_eq!(preview.recognized_intent, ScholarChatAgenticWorkflowIntent::AskLocalSources);
+        assert!(preview.planned_steps.iter().any(|step| step.contains("Preview retrieval candidates")));
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_plan_blocks_scanned_pdf_ocr_prompts() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_agentic_workflow_plan_deterministic_and_path_free(&temp, request("Warum kann AEGIS meine PDF nicht lesen?"));
+        assert_eq!(preview.status, ScholarChatAgenticWorkflowPlanStatus::Blocked);
+        assert_eq!(preview.recognized_intent, ScholarChatAgenticWorkflowIntent::ExplainBlocker);
+        assert!(preview.blockers.iter().any(|blocker| blocker.contains("OCR is not supported")));
+        assert!(preview.warnings.iter().any(|warning| warning.contains("PDF text-layer extraction is supported")));
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_plan_requires_selected_source_for_retrieval_prompts() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut workflow_request = request("Suche in meinen Quellen nach ANOVA");
+        workflow_request.selected_source_ids = Vec::new();
+        let preview = assert_agentic_workflow_plan_deterministic_and_path_free(&temp, workflow_request);
+        assert_eq!(preview.status, ScholarChatAgenticWorkflowPlanStatus::NeedsReview);
+        assert_eq!(preview.recognized_intent, ScholarChatAgenticWorkflowIntent::BuildOrInspectRetrieval);
+        assert!(preview.blockers.iter().any(|blocker| blocker.contains("selected or registered local source")));
+        assert!(preview.next_required_actions.iter().any(|action| action.contains("Select or register a local source")));
+    }
+
+    #[test]
+    fn scholar_chat_agentic_workflow_plan_returns_unknown_or_unsupported_prompt_safely() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = assert_agentic_workflow_plan_deterministic_and_path_free(&temp, request("???"));
+        assert_eq!(preview.status, ScholarChatAgenticWorkflowPlanStatus::NeedsReview);
+        assert_eq!(preview.recognized_intent, ScholarChatAgenticWorkflowIntent::UnknownOrUnsupported);
+        assert!(preview.next_required_actions.iter().any(|action| action.contains("Clarify the local workflow intent")));
     }
 
     fn retrieval_request(prompt: &str, selected_source_ids: Vec<String>) -> ScholarChatRequest {
