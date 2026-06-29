@@ -38872,6 +38872,27 @@ fn main() {
         openalex_metadata_execution_slice_record(&value)
     }
 
+    fn openalex_metadata_execution_slice_record_preview_with_mutation(
+        id: &str,
+        title: &str,
+        doi: Option<&str>,
+        publication_year: Option<u16>,
+        source_label: &str,
+        landing_page_available: bool,
+        mutate: impl FnOnce(&mut ScholarChatOpenAlexMetadataExecutionSliceRecord),
+    ) -> ScholarChatOpenAlexMetadataExecutionSliceRecord {
+        let mut record = openalex_metadata_execution_slice_record_preview(
+            id,
+            title,
+            doi,
+            publication_year,
+            source_label,
+            landing_page_available,
+        );
+        mutate(&mut record);
+        record
+    }
+
     fn openalex_metadata_execution_slice_result_for_conversion(
         status: ScholarChatOpenAlexMetadataExecutionSliceStatus,
         query: &str,
@@ -40835,6 +40856,307 @@ fn main() {
                 "\\models\\",
                 "https://",
                 "openalex.org",
+            ],
+        );
+        assert_eq!(before_entries, count_entries_recursively(temp.path()));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_openalex_evidence_candidate_conversion_preview_serializes_statuses_and_keeps_safety_flags() {
+        let temp = tempfile::tempdir().unwrap();
+        let preview = preview_scholar_chat_openalex_evidence_candidate_conversion(
+            temp.path().to_path_buf(),
+            ScholarChatOpenAlexEvidenceCandidateConversionPreviewRequest {
+                execution_result: openalex_metadata_execution_slice_result_for_conversion(
+                    ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed,
+                    "Signalentdeckung",
+                    vec![openalex_metadata_execution_slice_record_preview(
+                        "https://openalex.org/WREADY",
+                        "Ready example",
+                        Some("10.1000/example-ready"),
+                        Some(2024),
+                        "Example Journal",
+                        true,
+                    )],
+                    vec![],
+                    vec![],
+                    vec![],
+                ),
+                max_candidates: Some(0),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            serde_json::to_value(ScholarChatOpenAlexEvidenceCandidateConversionStatus::ConversionPreviewReady)
+                .unwrap(),
+            serde_json::Value::String("conversion_preview_ready".to_string())
+        );
+        assert_eq!(
+            serde_json::to_value(ScholarChatOpenAlexEvidenceCandidateConversionStatus::NoRecords)
+                .unwrap(),
+            serde_json::Value::String("no_records".to_string())
+        );
+        assert_eq!(
+            serde_json::to_value(ScholarChatOpenAlexEvidenceCandidateConversionStatus::Blocked).unwrap(),
+            serde_json::Value::String("blocked".to_string())
+        );
+        assert_eq!(
+            serde_json::to_value(ScholarChatOpenAlexEvidenceCandidateStatus::Ready).unwrap(),
+            serde_json::Value::String("ready".to_string())
+        );
+        assert_eq!(
+            serde_json::to_value(ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview).unwrap(),
+            serde_json::Value::String("needs_review".to_string())
+        );
+        assert_eq!(
+            serde_json::to_value(ScholarChatOpenAlexEvidenceCandidateStatus::Blocked).unwrap(),
+            serde_json::Value::String("blocked".to_string())
+        );
+
+        assert_eq!(preview.status, ScholarChatOpenAlexEvidenceCandidateConversionStatus::ConversionPreviewReady);
+        assert_eq!(preview.candidate_limit, 1);
+        assert_eq!(preview.candidate_count, 1);
+        assert!(!preview.candidate_limit_reached);
+        assert_eq!(preview.candidate_items.len(), 1);
+        assert_openalex_evidence_candidate_conversion_boundary_flags(&preview);
+        assert_openalex_evidence_candidate_conversion_output_is_path_free(
+            &preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                ".aegis",
+                "dist",
+                "models/",
+                "\\models\\",
+                "https://",
+                "http://",
+                "api.openalex.org",
+                "openalex.org",
+                "provider_url",
+                "host=",
+                "api_key=",
+                "token=",
+                "bearer ",
+                "\"results\":",
+                "citation_locator",
+                "evidence_pack_item",
+                "final_answer_item",
+                "literature_review_item",
+            ],
+        );
+        assert!(!preview.candidate_items[0].stable_record_key.contains("http://"));
+        assert!(!preview.candidate_items[0].stable_record_key.contains("https://"));
+        assert!(preview.candidate_items[0]
+            .selection_hints
+            .iter()
+            .any(|value| value.contains("stable_record_key=")));
+        assert!(preview
+            .candidate_items[0]
+            .summary
+            .contains("future Evidence Pack conversion later"));
+    }
+
+    #[test]
+    fn scholar_chat_openalex_evidence_candidate_conversion_preview_handles_incomplete_metadata_and_path_free_leakage() {
+        let temp = tempfile::tempdir().unwrap();
+        let before_entries = count_entries_recursively(temp.path());
+        let incomplete_record = openalex_metadata_execution_slice_record_preview_with_mutation(
+            "https://openalex.org/WINCOMPLETE",
+            "Incomplete example",
+            None,
+            None,
+            "Example Journal",
+            false,
+            |record| {
+                record.title.clear();
+                record.title_normalized.clear();
+                record.source_label.clear();
+                record.author_display.clear();
+                record.concept_display.clear();
+                record.topic_display.clear();
+                record.publication_year = None;
+                record.publication_year_label = None;
+                record.doi = None;
+                record.doi_normalized = None;
+                record.open_access_status = None;
+                record.evidence_candidate_hint = "needs_title_review".to_string();
+                record.quality_signal_summary.clear();
+                record.is_safe_for_evidence_candidate = false;
+                record.summary.clear();
+            },
+        );
+        let preview = preview_scholar_chat_openalex_evidence_candidate_conversion(
+            temp.path().to_path_buf(),
+            ScholarChatOpenAlexEvidenceCandidateConversionPreviewRequest {
+                execution_result: openalex_metadata_execution_slice_result_for_conversion(
+                    ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed,
+                    "Signalentdeckung",
+                    vec![incomplete_record],
+                    vec![],
+                    vec![],
+                    vec![],
+                ),
+                max_candidates: Some(10),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(preview.status, ScholarChatOpenAlexEvidenceCandidateConversionStatus::NeedsReview);
+        assert_eq!(preview.candidate_count, 1);
+        assert_eq!(preview.candidate_items.len(), 1);
+        assert_eq!(
+            preview.candidate_items[0].candidate_status,
+            ScholarChatOpenAlexEvidenceCandidateStatus::Blocked
+        );
+        assert!(preview.candidate_items[0].title.is_empty());
+        assert!(preview.candidate_items[0].title_normalized.is_empty());
+        assert!(preview.candidate_items[0].source_label.is_empty());
+        assert!(preview.candidate_items[0].author_display.is_empty());
+        assert!(preview.candidate_items[0].concept_display.is_empty());
+        assert!(preview.candidate_items[0].topic_display.is_empty());
+        assert!(preview.candidate_items[0].publication_year.is_none());
+        assert!(preview.candidate_items[0].publication_year_label.is_none());
+        assert!(preview.candidate_items[0].doi_normalized.is_none());
+        assert!(preview.candidate_items[0]
+            .limitations
+            .iter()
+            .any(|value| value.contains("title_review_required")));
+        assert!(preview.candidate_items[0]
+            .limitations
+            .iter()
+            .any(|value| value.contains("doi_missing")));
+        assert!(preview.candidate_items[0]
+            .limitations
+            .iter()
+            .any(|value| value.contains("publication_year_missing")));
+        assert_openalex_evidence_candidate_conversion_boundary_flags(&preview);
+        assert_openalex_evidence_candidate_conversion_output_is_path_free(
+            &preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                ".aegis",
+                "dist",
+                "models/",
+                "\\models\\",
+                "https://",
+                "http://",
+                "api.openalex.org",
+                "openalex.org",
+                "provider_url",
+                "host=",
+                "api_key=",
+                "token=",
+                "bearer ",
+                "\"results\":",
+                "citation_locator",
+                "evidence_pack_item",
+                "final_answer_item",
+                "literature_review_item",
+            ],
+        );
+        assert_eq!(before_entries, count_entries_recursively(temp.path()));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_openalex_evidence_candidate_conversion_preview_caps_zero_and_high_limits_deterministically() {
+        let temp = tempfile::tempdir().unwrap();
+        let before_entries = count_entries_recursively(temp.path());
+        let zero_limit_records = vec![openalex_metadata_execution_slice_record_preview(
+            "https://openalex.org/WZERO",
+            "Ready example zero",
+            Some("10.1000/example-zero"),
+            Some(2024),
+            "Example Journal",
+            true,
+        )];
+        let ready_records: Vec<_> = (0..26)
+            .map(|index| {
+                openalex_metadata_execution_slice_record_preview(
+                    &format!("https://openalex.org/W{index:02}"),
+                    &format!("Ready example {index:02}"),
+                    Some(&format!("10.1000/example-{index:02}")),
+                    Some(2024),
+                    "Example Journal",
+                    true,
+                )
+            })
+            .collect();
+
+        let zero_limit_preview = preview_scholar_chat_openalex_evidence_candidate_conversion(
+            temp.path().to_path_buf(),
+            ScholarChatOpenAlexEvidenceCandidateConversionPreviewRequest {
+                execution_result: openalex_metadata_execution_slice_result_for_conversion(
+                    ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed,
+                    "Signalentdeckung",
+                    zero_limit_records,
+                    vec![],
+                    vec![],
+                    vec![],
+                ),
+                max_candidates: Some(0),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            zero_limit_preview.status,
+            ScholarChatOpenAlexEvidenceCandidateConversionStatus::ConversionPreviewReady
+        );
+        assert_eq!(zero_limit_preview.candidate_limit, 1);
+        assert_eq!(zero_limit_preview.candidate_count, 1);
+        assert!(!zero_limit_preview.candidate_limit_reached);
+        assert_openalex_evidence_candidate_conversion_boundary_flags(&zero_limit_preview);
+
+        let capped_preview = preview_scholar_chat_openalex_evidence_candidate_conversion(
+            temp.path().to_path_buf(),
+            ScholarChatOpenAlexEvidenceCandidateConversionPreviewRequest {
+                execution_result: openalex_metadata_execution_slice_result_for_conversion(
+                    ScholarChatOpenAlexMetadataExecutionSliceStatus::Executed,
+                    "Signalentdeckung",
+                    ready_records,
+                    vec![],
+                    vec![],
+                    vec![],
+                ),
+                max_candidates: Some(100),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            capped_preview.status,
+            ScholarChatOpenAlexEvidenceCandidateConversionStatus::ConversionPreviewReady
+        );
+        assert_eq!(capped_preview.candidate_limit, OPENALEX_EVIDENCE_CANDIDATE_CONVERSION_PREVIEW_MAX_LIMIT);
+        assert_eq!(capped_preview.candidate_count, OPENALEX_EVIDENCE_CANDIDATE_CONVERSION_PREVIEW_MAX_LIMIT);
+        assert!(capped_preview.candidate_limit_reached);
+        assert!(capped_preview
+            .warnings
+            .iter()
+            .any(|value| value.contains("candidate_limit_reached")));
+        assert_openalex_evidence_candidate_conversion_boundary_flags(&capped_preview);
+        assert_openalex_evidence_candidate_conversion_output_is_path_free(
+            &capped_preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                ".aegis",
+                "dist",
+                "models/",
+                "\\models\\",
+                "https://",
+                "http://",
+                "api.openalex.org",
+                "openalex.org",
+                "provider_url",
+                "host=",
+                "api_key=",
+                "token=",
+                "bearer ",
+                "\"results\":",
+                "citation_locator",
+                "evidence_pack_item",
+                "final_answer_item",
+                "literature_review_item",
             ],
         );
         assert_eq!(before_entries, count_entries_recursively(temp.path()));
