@@ -22,6 +22,7 @@ User Query
 -> OpenAlex-only execution slice
 -> normalized OpenAlex metadata result contract
 -> OpenAlex cache/write gate preview
+-> OpenAlex metadata to Evidence Candidate conversion preview
 -> OpenAlex GUI integration readiness contract
 -> future Evidence Pack conversion contract
 -> future Evidence Pack creation
@@ -100,12 +101,14 @@ Future execution stages:
 | `preview_scholar_chat_scientific_metadata_provider_request` | Plans provider request templates, methods, parameters, headers, and bodies. | Provider request preview panel. | GUI-ready preview | No URL building, no request emission, no provider calls. |
 | `run_scholar_chat_openalex_metadata_execution_slice` | Executes the consent-gated OpenAlex-only metadata execution slice. | OpenAlex execution panel. | Future execution candidate | OpenAlex only; disabled by default; explicit developer/advanced action; no writes by default. |
 | `preview_scholar_chat_openalex_metadata_cache_write_gate` | Plans cache scope, retention, deduplication, and future record/audit write boundaries from normalized OpenAlex execution output. | OpenAlex cache/write gate preview panel. | GUI-ready preview | No cache writes, no record writes, no audit writes. |
+| `preview_scholar_chat_openalex_evidence_candidate_conversion` | Converts normalized OpenAlex execution records into deterministic evidence-candidate input previews. | OpenAlex evidence candidate conversion panel. | GUI-ready preview | No execution, no writes. |
 
 ### OpenAlex GUI integration readiness
 
 Phase 113.0 adds a docs-only OpenAlex Metadata GUI Integration Readiness Contract. It defines how future GUI panels may safely integrate the existing OpenAlex metadata commands before any frontend wiring, and it keeps the command flow preview-only, consent-gated, redacted, and non-writing. GUI may use the contract before any frontend wiring, but it must not infer permission from preview output or expose an actual write button yet.
 Phase 114.0 adds the first frontend read-only OpenAlex metadata panel scaffold. It uses the existing Scholar Chat prompt as query input, invokes only `preview_scholar_chat_scientific_metadata_provider_request`, and may display provider-request preview results. It does not wire OpenAlex execution or cache/write gate execution, exposes no write button, and does not add Evidence Pack, citation, Literature Review, answer, provider expansion, persistence, model/runtime/LLM, or retrieval execution behavior.
 Phase 114.1 hardens the read-only OpenAlex panel boundaries. It keeps only provider request preview wired, keeps execution and cache/write unwired, adds a visible boundary checklist, and does not add any backend, dependency, or product behavior.
+Phase 115.0 is a backend-only OpenAlex metadata to Evidence Candidate conversion preview. It composes the normalized OpenAlex metadata result contract, derives deterministic candidate-input previews, stays preview-only and in-memory, and does not add execution, cache/write, Evidence Pack, citation, Literature Review, answer, retrieval, runtime, or LLM behavior.
 
 Reference:
 
