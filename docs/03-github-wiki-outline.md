@@ -4,6 +4,10 @@ This is a proposed GitHub Wiki structure for external reviewers, collaborators, 
 
 Repo docs remain the source of truth; the wiki is a later mirror, not a separate spec.
 
+For the operational copy guide and manual export checklist, see `docs/04-wiki-export-prep.md`.
+
+This page stays the conceptual outline for the wiki page set.
+
 ## Wiki Home
 
 - Purpose: entry page with short project summary, navigation, and current status
@@ -91,5 +95,7 @@ Repo docs remain the source of truth; the wiki is a later mirror, not a separate
 ## Recommendation
 
 Repo docs remain the source of truth.
+
+Use `docs/04-wiki-export-prep.md` as the operational copy guide when manually populating the wiki.
 
 The GitHub Wiki can be manually populated from these docs now, or synced later if the documentation process is formalized.
