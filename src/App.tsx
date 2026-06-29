@@ -2205,12 +2205,12 @@ export default function App() {
   const [localRuntimeSmokeExecutionPlanValidationError, setLocalRuntimeSmokeExecutionPlanValidationError] = createSignal<string | null>(null);
   const [localRuntimeSmokeExecutionPlanLoading, setLocalRuntimeSmokeExecutionPlanLoading] = createSignal(false);
   const [localRuntimeSmokeExecutionPlanHasRun, setLocalRuntimeSmokeExecutionPlanHasRun] = createSignal(false);
-  const [localRuntimeKind, setLocalRuntimeKind] = createSignal<LocalModelRuntimeKind>("none");
-  const [localRuntimeModelPath, setLocalRuntimeModelPath] = createSignal("");
+  const [localRuntimeKind, setLocalRuntimeKind] = createSignal<LocalModelRuntimeKind>("llama_cpp");
+  const [localRuntimeModelPath, setLocalRuntimeModelPath] = createSignal("E:\\gemma4-v2-Q4_K_M\\gemma4-v2-Q4_K_M.gguf");
   const [localRuntimeExecutablePath, setLocalRuntimeExecutablePath] = createSignal("");
-  const [localRuntimeContextWindow, setLocalRuntimeContextWindow] = createSignal("");
-  const [localRuntimeGpuLayers, setLocalRuntimeGpuLayers] = createSignal("");
-  const [localRuntimeTemperature, setLocalRuntimeTemperature] = createSignal("");
+  const [localRuntimeContextWindow, setLocalRuntimeContextWindow] = createSignal("4096");
+  const [localRuntimeGpuLayers, setLocalRuntimeGpuLayers] = createSignal("0");
+  const [localRuntimeTemperature, setLocalRuntimeTemperature] = createSignal("0.2");
   const [localRuntimeAdapterExecutablePath, setLocalRuntimeAdapterExecutablePath] = createSignal("");
   const [localRuntimeAdapterModelPath, setLocalRuntimeAdapterModelPath] = createSignal("");
   const [localRuntimeAdapterModelFamily, setLocalRuntimeAdapterModelFamily] = createSignal("");
@@ -2267,8 +2267,8 @@ export default function App() {
   const [localRuntimeSmokeReadinessHasRun, setLocalRuntimeSmokeReadinessHasRun] = createSignal(false);
   const [localRuntimeSmokePrompt, setLocalRuntimeSmokePrompt] = createSignal("Say READY in one short sentence.");
   const [localRuntimeSmokeAllowExecution, setLocalRuntimeSmokeAllowExecution] = createSignal(false);
-  const [localRuntimeSmokeTimeoutMs, setLocalRuntimeSmokeTimeoutMs] = createSignal("3000");
-  const [localRuntimeSmokeMaxOutputTokens, setLocalRuntimeSmokeMaxOutputTokens] = createSignal("8");
+  const [localRuntimeSmokeTimeoutMs, setLocalRuntimeSmokeTimeoutMs] = createSignal("5000");
+  const [localRuntimeSmokeMaxOutputTokens, setLocalRuntimeSmokeMaxOutputTokens] = createSignal("16");
   const [localRuntimeSmokeResult, setLocalRuntimeSmokeResult] = createSignal<LocalRuntimeSmokeDiagnosticPreview | null>(null);
   const [localRuntimeSmokeError, setLocalRuntimeSmokeError] = createSignal<string | null>(null);
   const [localRuntimeSmokeValidationError, setLocalRuntimeSmokeValidationError] = createSignal<string | null>(null);
@@ -6802,6 +6802,14 @@ export default function App() {
           <p class="muted">
             Gemma models may need chat-template review before future answer generation. Diagnostics do not create final answers.
           </p>
+          <ol class="runtime-sequence">
+            <li>Enter the exact `.gguf` model file path.</li>
+            <li>Enter the `llama-cli.exe` executable path.</li>
+            <li>Preview local runtime readiness.</li>
+            <li>Validate the adapter setup.</li>
+            <li>Run the version probe only after explicit consent.</li>
+            <li>Run the smoke diagnostic only after explicit consent.</li>
+          </ol>
           <div class="form-row">
             <label>
               Runtime kind
@@ -6866,7 +6874,7 @@ export default function App() {
                   clearLocalRuntimeSmokePreview();
                   clearScholarChatDraftInferencePreview();
                 }}
-                placeholder="0.7"
+                placeholder="0.2"
               />
             </label>
           </div>
@@ -6900,7 +6908,7 @@ export default function App() {
                   clearLocalRuntimeSmokePreview();
                   clearScholarChatDraftInferencePreview();
                 }}
-                placeholder="E:\\bin\\llama-cli.exe"
+                placeholder="E:\\llama.cpp\\b9842-cpu\\...\\llama-cli.exe"
               />
             </label>
           </div>
@@ -6909,6 +6917,7 @@ export default function App() {
               {localRuntimeLoading() ? "Previewing..." : "Preview local runtime readiness"}
             </button>
           </div>
+          <p class="muted">Use the exact `.gguf` file, not only the model folder. Use `llama-cli.exe` from a llama.cpp Windows release.</p>
           <p class="muted">No model is executed. No answer will be generated. Configuration is not persisted.</p>
           {localRuntimeValidationError() && <p class="error">{localRuntimeValidationError()}</p>}
           {localRuntimeError() && <p class="error">{localRuntimeError()}</p>}
@@ -6947,10 +6956,10 @@ export default function App() {
                 )}
               </>
             ) : (
-              <p>No local model runtime preview loaded yet.</p>
+              <p class="muted">Run readiness preview to see status, blockers, warnings, and next actions.</p>
             )
           ) : (
-            <p>No local model runtime preview loaded yet.</p>
+            <p class="muted">Run readiness preview to see status, blockers, warnings, and next actions.</p>
           )}
         </div>
         <div class="artifact-overview">
@@ -7184,10 +7193,10 @@ export default function App() {
                 )}
               </>
             ) : (
-              <p>No llama.cpp adapter contract preview loaded yet.</p>
+              <p class="muted">Run adapter preview to see compatibility, blockers, warnings, and next actions.</p>
             )
           ) : (
-            <p>No llama.cpp adapter contract preview loaded yet.</p>
+            <p class="muted">Run adapter preview to see compatibility, blockers, warnings, and next actions.</p>
           )}
         </div>
         <div class="artifact-overview">
@@ -7300,10 +7309,10 @@ export default function App() {
                 )}
               </>
             ) : (
-              <p>No llama.cpp validation preview loaded yet.</p>
+              <p class="muted">Run validation preview to see path checks, blockers, warnings, and next actions.</p>
             )
           ) : (
-            <p>No llama.cpp validation preview loaded yet.</p>
+            <p class="muted">Run validation preview to see path checks, blockers, warnings, and next actions.</p>
           )}
         </div>
         <div class="artifact-overview">
@@ -7442,10 +7451,10 @@ export default function App() {
                 )}
               </>
             ) : (
-              <p>No llama.cpp probe readiness preview loaded yet.</p>
+              <p class="muted">Run probe readiness preview to see readiness reasons, blockers, warnings, and next actions.</p>
             )
           ) : (
-            <p>No llama.cpp probe readiness preview loaded yet.</p>
+            <p class="muted">Run probe readiness preview to see readiness reasons, blockers, warnings, and next actions.</p>
           )}
         </div>
         <div class="artifact-overview">
@@ -7584,12 +7593,12 @@ export default function App() {
                 )}
               </>
             ) : (
-              <p>No llama.cpp version probe preview loaded yet.</p>
+              <p class="muted">Run the version probe to confirm the executable can start with `--version`.</p>
             )
-        ) : (
-          <p>No llama.cpp version probe preview loaded yet.</p>
-        )}
-      </div>
+          ) : (
+              <p class="muted">Run the version probe to confirm the executable can start with `--version`.</p>
+          )}
+        </div>
       <div class="artifact-overview">
         <h3>llama.cpp capability preview</h3>
         <p class="muted">
@@ -7714,8 +7723,8 @@ export default function App() {
           <p>No llama.cpp capability preview loaded yet.</p>
         )}
       </div>
-      <div class="artifact-overview">
-        <h3>llama.cpp smoke readiness</h3>
+        <div class="artifact-overview">
+          <h3>llama.cpp smoke readiness</h3>
         <p class="muted">
           Smoke readiness only - this does not run inference, does not pass a model path to a process, does not load or read a model, does not call an LLM, and does not persist settings or artifacts.
         </p>
@@ -7855,11 +7864,11 @@ export default function App() {
                 <p>No next required actions.</p>
               )}
             </>
+            ) : (
+              <p class="muted">Run smoke readiness preview to see readiness reasons, blockers, warnings, and next actions.</p>
+            )
           ) : (
-            <p>No llama.cpp smoke readiness preview loaded yet.</p>
-          )
-        ) : (
-          <p>No llama.cpp smoke readiness preview loaded yet.</p>
+          <p class="muted">Run smoke readiness preview to see readiness reasons, blockers, warnings, and next actions.</p>
         )}
       </div>
       <div class="artifact-overview">
@@ -7978,13 +7987,13 @@ export default function App() {
                 <p>No next required actions.</p>
               )}
             </>
+            ) : (
+              <p class="muted">Run the smoke execution plan preview to see the diagnostic-only plan and consent gate.</p>
+            )
           ) : (
-            <p>No llama.cpp smoke execution plan preview loaded yet.</p>
-          )
-        ) : (
-          <p>No llama.cpp smoke execution plan preview loaded yet.</p>
-        )}
-      </div>
+            <p class="muted">Run the smoke execution plan preview to see the diagnostic-only plan and consent gate.</p>
+          )}
+        </div>
       <div class="artifact-overview">
         <h3>Runtime invocation plan</h3>
         <p class="muted">
@@ -8147,7 +8156,7 @@ export default function App() {
                   clearLocalRuntimeSmokePreview();
                   clearLocalRuntimeSmokeReadinessPreview();
                 }}
-                placeholder="3000"
+                placeholder="5000"
               />
             </label>
             <label>
@@ -8160,7 +8169,7 @@ export default function App() {
                   clearLocalRuntimeSmokePreview();
                   clearLocalRuntimeSmokeReadinessPreview();
                 }}
-                placeholder="8"
+                placeholder="16"
               />
             </label>
           </div>
@@ -8271,10 +8280,10 @@ export default function App() {
                 )}
               </>
             ) : (
-              <p>No llama.cpp smoke diagnostic preview loaded yet.</p>
+              <p class="muted">Run the smoke diagnostic to see diagnostic-only status, blockers, warnings, and next actions.</p>
             )
           ) : (
-            <p>No llama.cpp smoke diagnostic preview loaded yet.</p>
+            <p class="muted">Run the smoke diagnostic to see diagnostic-only status, blockers, warnings, and next actions.</p>
           )}
         </div>
         </details>

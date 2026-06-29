@@ -23,6 +23,7 @@ This is a compressed status index, not a full changelog.
 | Phase 133.0 | complete | chat transcript interaction model | `src/App.tsx`, `src/workspaces/ScholarChatWorkspace.tsx`, `src/styles.css`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | transcript turns are in-memory only; preview/gate behavior remains preview-only and assistant-style responses stay secondary |
 | Phase 134.0 | in progress | chat UX interaction polish | `src/workspaces/ScholarChatWorkspace.tsx`, `src/styles.css`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | assistant-style chat ergonomics are being refined; backend behavior remains unchanged |
 | Phase 135.0 | complete | local model runtime setup UX | `src/App.tsx`, `src/workspaces/ScholarChatWorkspace.tsx`, `src/styles.css`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | exact GGUF and llama.cpp setup are surfaced; diagnostics remain secondary and answer generation stays absent |
+| Phase 136.0 | complete | local runtime probe validation | `src/App.tsx`, `src/workspaces/ScholarChatWorkspace.tsx`, `src/styles.css`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | exact `.gguf` and llama.cpp probe flow is clarified; diagnostics remain secondary and answer generation stays absent |
 | Phase 117.0 | implemented | local Evidence Pack creation MVP | Evidence Pack backend path and managed storage | integrate with broader product surfaces |
 | Phase 118.0 | implemented | PDF text-layer extraction MVP with page-level locators | extraction and locator handling | OCR and broad PDF ingestion remain out of scope |
 | Phase 119.0 | implemented | first-run source import readiness UI | frontend guidance surfaces | actual import wizard remains missing |
@@ -45,6 +46,7 @@ The most relevant recent product milestones are:
 - Phase 133.0 chat transcript interaction model
 - Phase 134.0 chat UX interaction polish
 - Phase 135.0 local model runtime setup UX
+- Phase 136.0 local runtime probe validation
 - Evidence Pack planning and creation
 - PDF text-layer extraction
 - first-run and source workflow guidance
