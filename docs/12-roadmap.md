@@ -10,12 +10,13 @@ This roadmap now has a clear split between implemented foundations, preview-heav
 | Diagnostic / preview-heavy product shell | Scholar Chat and Scientific Retrieval preview surfaces, read-only diagnostics, and contract previews |
 | Runtime diagnostics | local runtime health, invocation planning, capability, probe-readiness, smoke-readiness, and developer bridge/result/pipeline-gate previews |
 | OpenAlex metadata execution slice | guarded OpenAlex-only execution slice plus normalized result, cache/write gate, evidence-candidate conversion, and assembly-plan previews |
-| Current Phase 117 | backend-only Local Evidence Pack Creation MVP |
-| Known missing product workflows | PDF text extraction MVP, first-run source import flow, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
-| Recommended next product slices | PDF text extraction MVP, first-run source import flow, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
+| Current Phase 118 | backend-only PDF Text Extraction MVP |
+| Known missing product workflows | scanned PDF OCR, first-run source import flow, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
+| Recommended next product slices | scanned PDF OCR, first-run source import flow, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 
 Phase 116 remains backend-only, preview-only, and in-memory. It does not add Evidence Pack creation, citations, writes, retrieval execution, provider expansion, runtime/model/LLM behavior, or answer generation.
 Phase 117.0 adds a backend-only Local Evidence Pack Creation MVP. It uses existing local source/retrieval/evidence data and managed Evidence Pack storage, stays deterministic and path-safe, and does not add network access, model/runtime/LLM behavior, or answer generation.
+Phase 118.0 adds a backend-only PDF Text Extraction MVP. It supports local PDFs when a text layer is present, preserves page-level locators, reuses the existing extraction-report / source-registry / corpus-layout contracts, and stays OCR-free and preview-only. It does not add OCR, web requests, scraping, downloads, connectors, source import, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
 
 ## Phase 0 — Documentation baseline
 
@@ -63,7 +64,7 @@ Do not implement:
 
 Implement extraction for local text sources while preserving paragraph and section locators.
 
-Phase 2.0 stores extraction reports under the managed corpus tree, supports `markdown_note`, `dataset_note` and `web_snapshot`, and returns a typed unsupported error for PDFs and slides until narrow locator-safe extraction is added later.
+Phase 2.0 stores extraction reports under the managed corpus tree, supports `markdown_note`, `dataset_note` and `web_snapshot`, and now supports PDF text-layer extraction with page-level locators while keeping slides typed unsupported until narrow locator-safe extraction is added later.
 
 ## Phase 3 — Chunking + Metadata Index
 

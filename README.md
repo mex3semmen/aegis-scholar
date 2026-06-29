@@ -35,7 +35,7 @@ It does not yet provide:
 
 - full answer generation as the primary product workflow
 - semantic/vector retrieval as the main product workflow
-- PDF extraction MVP
+- scanned PDF OCR or broad PDF ingestion beyond text-layer extraction
 - finished Evidence Pack creation
 - citation emission
 - local LLM inference as a product workflow

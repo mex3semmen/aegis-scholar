@@ -5,6 +5,7 @@ use crate::locators::CitationLocator;
 use crate::source_metadata::{IngestionStatus, SourceRecord, SourceType};
 use crate::source_registry::SourceRegistry;
 use chrono::{DateTime, Utc};
+use lopdf::Document;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -43,13 +44,13 @@ impl ExtractionService {
     }
 
     pub fn extract_source(&self, source_id: &str) -> AegisResult<ExtractionReport> {
-        self.paths.ensure_layout()?;
         let registry_path = self.paths.registry_path();
         let mut registry = SourceRegistry::load(&registry_path)?;
         let record = registry.get_source(source_id)?;
         let report = self.extract_record(&record);
         match report {
             Ok(report) => {
+                self.paths.ensure_layout()?;
                 let mut updated = record.clone();
                 updated.ingestion_status = IngestionStatus::Extracted;
                 registry.remove_and_replace(updated)?;
@@ -59,6 +60,7 @@ impl ExtractionService {
                 Ok(report)
             }
             Err(error) => {
+                self.paths.ensure_layout()?;
                 let mut failed = record.clone();
                 failed.ingestion_status = IngestionStatus::Failed;
                 registry.remove_and_replace(failed)?;
@@ -70,9 +72,9 @@ impl ExtractionService {
     }
 
     pub fn read_extraction_report(&self, source_id: &str) -> AegisResult<ExtractionReport> {
-        self.paths.ensure_layout()?;
         let registry = SourceRegistry::load(&self.paths.registry_path())?;
         let record = registry.get_source(source_id)?;
+        self.paths.ensure_layout()?;
         let path = self.report_path(&record.source_id, &record.version_id);
         if !path.exists() {
             return Err(AegisError::ExtractionReportMissing);
@@ -85,6 +87,7 @@ impl ExtractionService {
 
     fn extract_record(&self, record: &SourceRecord) -> AegisResult<ExtractionReport> {
         match &record.source_type {
+            SourceType::Pdf => self.extract_pdf_text(record),
             SourceType::MarkdownNote | SourceType::DatasetNote | SourceType::WebSnapshot => {
                 let mut bytes = Vec::new();
                 fs::File::open(&record.path)
@@ -96,6 +99,55 @@ impl ExtractionService {
             }
             other => Err(AegisError::UnsupportedExtractionType(format!("{other:?}"))),
         }
+    }
+
+    fn extract_pdf_text(&self, record: &SourceRecord) -> AegisResult<ExtractionReport> {
+        let bytes = fs::read(&record.path).map_err(|_| AegisError::ExtractionInputMissing)?;
+        let document = Document::load_mem(&bytes).map_err(|_| AegisError::PdfTextExtractionFailed)?;
+        let mut units = Vec::new();
+        let mut warnings = Vec::new();
+
+        for page_number in document.get_pages().keys().copied() {
+            let raw_text = document.extract_text(&[page_number]).map_err(|_| AegisError::PdfTextExtractionFailed)?;
+            let text = raw_text.trim().to_string();
+            if text.is_empty() {
+                warnings.push(format!("page {} has no extractable text layer", page_number));
+                continue;
+            }
+
+            let char_end = text.len();
+            units.push(ExtractedUnit {
+                source_id: record.source_id.clone(),
+                version_id: record.version_id.clone(),
+                locator: CitationLocator {
+                    locator_type: crate::locators::LocatorType::Page,
+                    label: format!("page:{}", page_number),
+                    page: Some(page_number),
+                    slide: None,
+                    section_path: None,
+                    character_start: Some(0),
+                    character_end: Some(char_end),
+                },
+                text: text.clone(),
+                text_hash: sha256_text(&text),
+                char_start: 0,
+                char_end,
+            });
+        }
+
+        if units.is_empty() {
+            return Err(AegisError::PdfTextLayerMissing);
+        }
+
+        Ok(ExtractionReport {
+            source_id: record.source_id.clone(),
+            version_id: record.version_id.clone(),
+            source_type: record.source_type.clone(),
+            extracted_at: Utc::now(),
+            unit_count: units.len(),
+            warnings,
+            units,
+        })
     }
 
     fn extract_text(&self, record: &SourceRecord, text: String) -> AegisResult<ExtractionReport> {
@@ -287,10 +339,13 @@ fn sha256_text(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lopdf::{content::{Content, Operation}, dictionary, Document, Object, Stream};
     use crate::source_metadata::{IngestionStatus, SourceMetadataInput};
     use crate::corpus_authority::CorpusAuthority;
+    use crate::locators::LocatorType;
     use crate::source_metadata::SourceType;
     use std::fs;
+    use std::path::Path;
 
     fn valid_metadata(source_type: SourceType) -> SourceMetadataInput {
         SourceMetadataInput {
@@ -302,6 +357,83 @@ mod tests {
             tags: vec!["study".to_string()],
             reliability_notes: None,
         }
+    }
+
+    fn write_pdf_with_pages(path: &Path, pages: &[&str]) {
+        let mut doc = Document::with_version("1.5");
+        let pages_id = doc.new_object_id();
+        let font_id = doc.new_object_id();
+        let resources_id = doc.new_object_id();
+
+        doc.objects.insert(
+            font_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Font",
+                "Subtype" => "Type1",
+                "BaseFont" => "Helvetica",
+            }),
+        );
+        doc.objects.insert(
+            resources_id,
+            Object::Dictionary(dictionary! {
+                "Font" => dictionary! {
+                    "F1" => Object::Reference(font_id),
+                },
+            }),
+        );
+
+        let mut page_ids = Vec::new();
+        for page_text in pages {
+            let content_id = doc.new_object_id();
+            let mut operations = vec![
+                Operation::new("BT", vec![]),
+                Operation::new("Tf", vec![Object::Name(b"F1".to_vec()), Object::Integer(18)]),
+                Operation::new("Td", vec![Object::Integer(50), Object::Integer(700)]),
+            ];
+            if !page_text.is_empty() {
+                operations.push(Operation::new("Tj", vec![Object::string_literal(*page_text)]));
+            }
+            operations.push(Operation::new("ET", vec![]));
+            let content = Content { operations };
+            doc.objects.insert(
+                content_id,
+                Object::Stream(Stream::new(dictionary! {}, content.encode().unwrap())),
+            );
+
+            let page_id = doc.new_object_id();
+            doc.objects.insert(
+                page_id,
+                Object::Dictionary(dictionary! {
+                    "Type" => "Page",
+                    "Parent" => Object::Reference(pages_id),
+                    "Contents" => Object::Reference(content_id),
+                    "Resources" => Object::Reference(resources_id),
+                    "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+                }),
+            );
+            page_ids.push(page_id);
+        }
+
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Kids" => page_ids.iter().copied().map(Object::Reference).collect::<Vec<_>>(),
+                "Count" => page_ids.len() as i64,
+            }),
+        );
+
+        let catalog_id = doc.new_object_id();
+        doc.objects.insert(
+            catalog_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Catalog",
+                "Pages" => Object::Reference(pages_id),
+            }),
+        );
+        doc.trailer.set("Root", Object::Reference(catalog_id));
+        doc.compress();
+        doc.save(path).unwrap();
     }
 
     #[test]
@@ -373,25 +505,51 @@ mod tests {
         fs::write(&source_path, "text").unwrap();
 
         let authority = CorpusAuthority::new(temp.path());
-        let record = authority.register_source(&source_path, valid_metadata(SourceType::Pdf)).unwrap();
+        let record = authority.register_source(&source_path, valid_metadata(SourceType::Paper)).unwrap();
         let result = ExtractionService::new(temp.path()).extract_source(&record.source_id);
 
         assert!(matches!(result, Err(AegisError::UnsupportedExtractionType(_))));
     }
 
     #[test]
-    fn failed_extraction_does_not_write_success_report() {
+    fn pdf_text_layer_extracts_page_locators_and_preserves_order() {
         let temp = tempfile::tempdir().unwrap();
-        let source_path = temp.path().join("paper.txt");
-        fs::write(&source_path, "text").unwrap();
+        let source_path = temp.path().join("paper.pdf");
+        write_pdf_with_pages(&source_path, &["First page text", "Second page text"]);
 
         let authority = CorpusAuthority::new(temp.path());
         let record = authority.register_source(&source_path, valid_metadata(SourceType::Pdf)).unwrap();
-        let result = ExtractionService::new(temp.path()).extract_source(&record.source_id);
-        assert!(result.is_err());
+        let report = ExtractionService::new(temp.path()).extract_source(&record.source_id).unwrap();
 
-        let report_path = ExtractionService::new(temp.path()).report_path(&record.source_id, &record.version_id);
+        assert_eq!(report.source_type, SourceType::Pdf);
+        assert_eq!(report.unit_count, 2);
+        assert_eq!(report.units[0].locator.locator_type, LocatorType::Page);
+        assert_eq!(report.units[0].locator.page, Some(1));
+        assert_eq!(report.units[0].locator.label, "page:1");
+        assert_eq!(report.units[0].text, "First page text");
+        assert_eq!(report.units[1].locator.locator_type, LocatorType::Page);
+        assert_eq!(report.units[1].locator.page, Some(2));
+        assert_eq!(report.units[1].locator.label, "page:2");
+        assert_eq!(report.units[1].text, "Second page text");
+        assert!(report.warnings.is_empty());
+    }
+
+    #[test]
+    fn pdf_without_text_layer_returns_typed_error_and_writes_no_report() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("blank.pdf");
+        write_pdf_with_pages(&source_path, &[""]);
+
+        let authority = CorpusAuthority::new(temp.path());
+        let record = authority.register_source(&source_path, valid_metadata(SourceType::Pdf)).unwrap();
+        let service = ExtractionService::new(temp.path());
+        let result = service.extract_source(&record.source_id);
+        assert!(matches!(result, Err(AegisError::PdfTextLayerMissing)));
+
+        let report_path = service.report_path(&record.source_id, &record.version_id);
         assert!(!report_path.exists());
+        let reread = CorpusAuthority::new(temp.path()).get_source(&record.source_id).unwrap();
+        assert_eq!(reread.ingestion_status, IngestionStatus::Failed);
     }
 
     #[test]
@@ -412,10 +570,25 @@ mod tests {
     }
 
     #[test]
-    fn missing_source_id_returns_typed_error() {
+    fn missing_source_id_returns_typed_error_without_creating_layout() {
         let temp = tempfile::tempdir().unwrap();
         let result = ExtractionService::new(temp.path()).extract_source("src_missing");
         assert!(matches!(result, Err(AegisError::SourceNotFound(_))));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn missing_pdf_file_returns_typed_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("paper.pdf");
+        write_pdf_with_pages(&source_path, &["hello"]);
+
+        let authority = CorpusAuthority::new(temp.path());
+        let record = authority.register_source(&source_path, valid_metadata(SourceType::Pdf)).unwrap();
+        fs::remove_file(&record.path).unwrap();
+
+        let result = ExtractionService::new(temp.path()).extract_source(&record.source_id);
+        assert!(matches!(result, Err(AegisError::ExtractionInputMissing)));
     }
 
     #[test]
