@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document is the central contract map for Scientific Retrieval before the first real execution slice. It is the reference for GUI planning, backend refactoring, preview-only boundaries, and future execution cutover.
+This document is the central contract map for Scientific Retrieval. It tracks preview-only contracts, guarded execution slices, GUI readiness, backend refactor targets, and later execution cutover.
 
 ## Current pipeline map
 
@@ -47,10 +47,16 @@ Preview-only contracts that already exist:
 - Scientific Metadata Query Plan Preview
 - Scientific Metadata Provider Request Preview
 
-Future execution stages:
+Current execution and preview stages:
 
-- future OpenAlex-only execution gate
-- future metadata result normalization
+- OpenAlex-only execution slice
+- normalized OpenAlex metadata result contract
+- OpenAlex cache/write gate preview
+- OpenAlex metadata to Evidence Candidate conversion preview
+- Evidence Pack assembly plan preview
+
+Later execution stages:
+
 - future Evidence Pack creation
 - future Literature Review / Final Answer
 
@@ -100,7 +106,7 @@ Future execution stages:
 | `preview_scholar_chat_scientific_metadata_provider_config` | Plans provider config and access boundaries. | Provider config panel. | GUI-ready preview | No provider execution or writes. |
 | `preview_scholar_chat_scientific_metadata_query_plan` | Plans query templates, filters, and provider-family partitioning. | Query-plan panel. | GUI-ready preview | No provider execution or writes. |
 | `preview_scholar_chat_scientific_metadata_provider_request` | Plans provider request templates, methods, parameters, headers, and bodies. | Provider request preview panel. | GUI-ready preview | No URL building, no request emission, no provider calls. |
-| `run_scholar_chat_openalex_metadata_execution_slice` | Executes the consent-gated OpenAlex-only metadata execution slice. | OpenAlex execution panel. | Future execution candidate | OpenAlex only; disabled by default; explicit developer/advanced action; no writes by default. |
+| `run_scholar_chat_openalex_metadata_execution_slice` | Executes the consent-gated OpenAlex-only metadata execution slice. | OpenAlex execution panel. | Guarded execution slice | OpenAlex only; disabled by default; explicit developer/advanced action; no writes by default. |
 | `preview_scholar_chat_openalex_metadata_cache_write_gate` | Plans cache scope, retention, deduplication, and future record/audit write boundaries from normalized OpenAlex execution output. | OpenAlex cache/write gate preview panel. | GUI-ready preview | No cache writes, no record writes, no audit writes. |
 | `preview_scholar_chat_openalex_evidence_candidate_conversion` | Converts normalized OpenAlex execution records into deterministic evidence-candidate input previews. | OpenAlex evidence candidate conversion panel. | GUI-ready preview | No execution, no writes. |
 | `preview_scholar_chat_evidence_pack_assembly_plan` | Plans future Evidence Pack assembly from deterministic evidence-candidate input previews. | Evidence Pack assembly plan panel. | GUI-ready preview | No Evidence Pack creation, no citations, no writes. |
@@ -156,6 +162,7 @@ Safe to expose as read-only previews now:
 - safety / boundary panel
 - next required actions panel
 - retrieval / evidence / prompt-pack preview panels
+- evidence-pack assembly plan preview panel
 - runtime diagnostic bridge / result / pipeline-gate panels for developer diagnostics
 
 Useful for developer or advanced diagnostics only:
@@ -163,11 +170,13 @@ Useful for developer or advanced diagnostics only:
 - local runtime health and invocation planning previews
 - llama adapter contract, validation, probe readiness, capability, and smoke-readiness previews
 - version probe and smoke diagnostic execution candidates as explicit developer actions
+- boundary-heavy execution plan / readiness previews
 
 Not suitable for a user-facing execution GUI yet:
 
 - `run_llama_runtime_version_probe`
 - `run_llama_runtime_smoke_diagnostic`
+- any panel whose primary state is boundary booleans without actionable preview detail
 
 Probable widgets for GUI-ready previews:
 
@@ -179,6 +188,8 @@ Probable widgets for GUI-ready previews:
 - provider request preview panel
 - safety / boundary panel
 - next required actions panel
+
+Boundary booleans should remain secondary technical details; `warnings`, `blockers`, and `next_required_actions` should drive the primary UI state.
 
 ## DTO and status contract map
 

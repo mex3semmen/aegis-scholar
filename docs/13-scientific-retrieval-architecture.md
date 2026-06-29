@@ -18,21 +18,44 @@ The architecture is designed to support preview-first rollout phases before any 
 
 ## Current State
 
-The currently implemented system has preview gates for local runtime and Scholar Chat answer-related planning.
-It does not yet implement the scientific retrieval stack itself.
+The current system is a mixed preview / execution stack:
+
+- implemented as preview / planning / DTO surface:
+  - scientific query understanding preview
+  - scientific source / discipline registry previews
+  - scientific search plan preview
+  - local literature index preview
+  - course literature registry preview
+  - metadata connector preview surfaces
+  - scientific evidence pack preview
+  - scientific paper mode literature review preview
+  - scientific metadata execution boundary, provider config, query plan, and provider request previews
+  - OpenAlex evidence-candidate conversion preview
+  - Evidence Pack assembly plan preview
+- implemented as limited execution:
+  - guarded OpenAlex-only metadata execution slice
+  - normalized OpenAlex metadata result contract for GUI and later planning
+- not implemented as production execution:
+  - broad provider execution
+  - automatic literature search
+  - general web-search style retrieval execution
+- not implemented as persistence / writes:
+  - cache writes
+  - metadata writes
+  - registry writes
+  - audit writes
+  - artifact writes
+- not implemented as retrieval execution:
+  - BM25 retrieval
+  - vector retrieval
+  - retrieval-driven answer synthesis
+- not implemented as answer generation:
+  - answer generation
+  - citation emission
+  - Evidence Pack creation
+  - Literature Review creation
+
 Local scientific models and corpus data must remain outside Git in user-controlled storage until explicit app-managed storage is implemented.
-
-Not yet implemented:
-
-- discipline registry
-- source registry
-- scientific query planner
-- external metadata connectors
-- local literature index
-- BM25 retrieval
-- vector retrieval
-- evidence pack generation from scientific search
-- automatic literature search
 
 ## Phase 98.1
 
@@ -296,6 +319,7 @@ Expected preview:
 - store license / access metadata for every source
 - full text ingestion requires explicit legal / access status
 - preview phases must not perform network access
+- official APIs and metadata are preferred over scraping for open sources
 
 ## Preview-First Implementation Roadmap
 
