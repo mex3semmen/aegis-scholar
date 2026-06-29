@@ -10,13 +10,14 @@ This roadmap now has a clear split between implemented foundations, preview-firs
 | Diagnostic / preview-first product shell | Scholar Chat and Scientific Retrieval preview surfaces, read-only diagnostics, and contract previews |
 | Runtime diagnostics | local runtime health, invocation planning, capability, probe-readiness, smoke-readiness, and developer bridge/result/pipeline-gate previews |
 | OpenAlex metadata execution slice | guarded OpenAlex-only execution slice plus normalized result, cache/write gate, evidence-candidate conversion, and assembly-plan previews |
-| Current Phase 125.0 | wiki export prep guide / copy-ready GitHub Wiki source material |
+| Current Phase 126.0 | wiki copy QA / publication checklist |
 | Known missing product workflows | actual source import wizard, scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 | Recommended next product slices | actual source import wizard, scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 
 Phase 123.0 created the docs-only project knowledge base for external orientation and GitHub Wiki readiness.
 Phase 124.0 is the docs QA pass. It tightens terminology, trims overclaiming, and keeps the knowledge base safe for GitHub-facing use without changing production code, frontend code, backend code, Tauri command wiring, or tests.
 Phase 125.0 is the docs-only wiki export prep pass on the current feature branch. It prepares copy-ready GitHub Wiki source material and keeps repo docs authoritative.
+Phase 126.0 is the docs-only wiki copy QA pass on the current feature branch. It adds publication checklists and safe wording guidance while keeping wiki publication manual and mirror-only.
 Phase 116 remains backend-only, preview-only, and in-memory. It does not add Evidence Pack creation, citations, writes, retrieval execution, provider expansion, runtime/model/LLM behavior, or answer generation.
 Phase 117.0 adds a backend-only Local Evidence Pack Creation MVP. It uses existing local source/retrieval/evidence data and managed Evidence Pack storage, stays deterministic and path-safe, and does not add network access, model/runtime/LLM behavior, or answer generation.
 Phase 118.0 adds a backend-only PDF Text Extraction MVP. It supports local PDFs when a text layer is present, preserves page-level locators, reuses the existing extraction-report / source-registry / corpus-layout contracts, and stays OCR-free and preview-only. It does not add OCR, web requests, scraping, downloads, connectors, source import, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
@@ -25,6 +26,7 @@ Phase 120.0 adds a frontend-first source workflow action hints pass. It tightens
 Phase 121.0 adds a Scholar Chat agentic workflow plan preview. It treats the chat prompt as the primary workflow entry point, classifies local workflow intent, reuses selected source context when available, and plans next steps for source registration, extraction, chunking, retrieval, or Evidence Pack review while staying preview-only and non-executing. It does not add automatic orchestration, web requests, scraping, connectors, OCR, broad PDF ingestion, source import behavior, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
 Phase 122.0 adds a Scholar Chat agentic workflow execution gate preview. It composes the Phase 121 planner and decides whether a future execution step would need context, consent, or clarification, while still remaining preview-only and non-executing. It does not add automatic orchestration, extraction execution, chunking execution, retrieval execution, Evidence Pack creation, answer generation, web requests, scraping, connectors, OCR, broad PDF ingestion, source import behavior, model loading, runtime inference, LLM calls, artifact writes, persistence, registry status changes, or audit writes.
 Phase 124.0 is this docs-only documentation QA / GitHub Wiki readiness review.
+Phase 126.0 is this docs-only wiki copy QA / publication checklist pass.
 
 ## Phase 0 — Documentation baseline
 

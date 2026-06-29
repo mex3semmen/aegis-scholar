@@ -12,6 +12,7 @@ This is a compressed status index, not a full changelog.
 | Phase 123.0 | complete | project knowledge base for external orientation and GitHub Wiki readiness | `docs/00-project-overview.md`, `docs/01-architecture-overview.md`, `docs/03-github-wiki-outline.md` | wiki mirror can follow later |
 | Phase 124.0 | complete | documentation QA, terminology normalization, and wiki-ready cleanup | `README.md`, `docs/00-project-overview.md`, `docs/01-architecture-overview.md`, `docs/02-phase-index.md`, `docs/03-github-wiki-outline.md`, `docs/12-roadmap.md`, `docs/13-scientific-retrieval-architecture.md` | repo docs remain the source of truth; wiki sync can follow later |
 | Phase 125.0 | complete | wiki export prep guide for copy-ready GitHub Wiki source material | `docs/04-wiki-export-prep.md`, `docs/03-github-wiki-outline.md` | repo docs remain authoritative; wiki material is a mirror only |
+| Phase 126.0 | complete | wiki copy QA and publication checklist pass | `docs/04-wiki-export-prep.md`, `docs/03-github-wiki-outline.md` | repo docs remain authoritative; wiki publication is manual and mirror-only |
 | Phase 117.0 | implemented | local Evidence Pack creation MVP | Evidence Pack backend path and managed storage | integrate with broader product surfaces |
 | Phase 118.0 | implemented | PDF text-layer extraction MVP with page-level locators | extraction and locator handling | OCR and broad PDF ingestion remain out of scope |
 | Phase 119.0 | implemented | first-run source import readiness UI | frontend guidance surfaces | actual import wizard remains missing |
@@ -30,6 +31,7 @@ The most relevant recent product milestones are:
 - Phase 123.0 docs knowledge base creation
 - Phase 124.0 docs QA / GitHub Wiki readiness review
 - Phase 125.0 wiki export prep guide
+- Phase 126.0 wiki copy QA / publication checklist
 - Evidence Pack planning and creation
 - PDF text-layer extraction
 - first-run and source workflow guidance
