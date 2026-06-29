@@ -33,6 +33,20 @@ Use the page titles below as the manual GitHub Wiki page names.
 | Roadmap | `docs/12-roadmap.md`, `docs/02-phase-index.md` | maintainer-facing | Current phase direction and remaining gaps. | Phases are status markers, not shipping claims. |
 | Glossary | `docs/00-project-overview.md`, `docs/01-architecture-overview.md`, `docs/03-corpus-authority.md` | user-facing | Stable project terms and boundary language. | Use the repo definitions exactly. |
 
+## Safe Wording Checklist
+
+Use these wording rules when copying to the wiki:
+
+- `preview-only planner`: say it plans or classifies future work, not that it performs the work.
+- `execution gate`: say it decides whether something is allowed, blocked, or needs consent, not that it executes.
+- `Evidence Pack MVP`: say it is a local, early Evidence Pack capability, not a finished answer system.
+- `PDF text-layer extraction`: say it only works when a text layer exists, and call out that OCR is missing.
+- `diagnostics-heavy UI`: say the UI exposes inspectable status and preview surfaces, not a polished finished workflow.
+- `missing OCR`: say OCR is not implemented.
+- `missing polished chat-first UX`: say the chat experience is still early and not a finished product shell.
+- `missing fully autonomous execution`: say autonomous agentic execution does not exist yet.
+- `missing production answer-generation`: say finished answer generation remains future work.
+
 ## Manual Copy Checklist
 
 1. Open the source repo docs for the page you are copying.
@@ -45,7 +59,27 @@ Use the page titles below as the manual GitHub Wiki page names.
 8. Verify the wiki page still points back to the repo docs when a local note is useful.
 9. Stop and refresh the source repo doc if the wiki copy would need a new claim.
 
-## Maintenance Checklist
+## Pre-Publication Review Checklist
+
+1. Confirm every wiki page has a source repo doc mapping.
+2. Confirm every page has an anti-overclaiming caveat.
+3. Confirm the page does not claim published wiki status unless the wiki page actually exists.
+4. Confirm preview-only, gated, diagnostic, and MVP language is preserved.
+5. Confirm OCR, polished UX, and fully autonomous execution are still described as missing.
+6. Confirm the page title matches the intended wiki page title in `docs/03-github-wiki-outline.md`.
+7. Confirm the wiki page content is copy-ready and does not require new claims.
+
+## Manual Publication Checklist
+
+1. Copy the selected repo doc sections into the matching GitHub Wiki page.
+2. Preserve the status caveats and source-of-truth note.
+3. Keep the wiki page summary short and mirror-like.
+4. Link back to the repo docs where that helps readers reorient.
+5. Check that the final wiki page does not add new product claims.
+6. Verify the wiki page title, audience, and summary still match the outline.
+7. Publish only the copied page, not a separate wiki clone or duplicate docs set.
+
+## Post-Publication Maintenance Checklist
 
 1. When a repo doc changes, update the mirrored wiki page before calling the wiki current.
 2. Keep this guide and `docs/03-github-wiki-outline.md` aligned.
@@ -53,6 +87,7 @@ Use the page titles below as the manual GitHub Wiki page names.
 4. Refresh the wiki copy if preview, gate, or execution boundaries change in the repo docs.
 5. Keep the wiki subordinate to the repo docs if the two drift.
 6. Review the caveats before publishing any page that mentions current capability.
+7. Record whether the wiki copy remains a direct mirror or needs a fresh source-doc pass.
 
 ## Do Not Overclaim
 
