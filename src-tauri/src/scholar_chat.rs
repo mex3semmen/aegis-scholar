@@ -11550,6 +11550,632 @@ pub fn preview_scholar_chat_openalex_evidence_candidate_conversion(
     })
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScholarChatEvidencePackAssemblyPlanStatus {
+    Blocked,
+    NoCandidates,
+    NeedsReview,
+    AssemblyPreviewReady,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatEvidencePackAssemblyPlanPreviewRequest {
+    pub normalized_query: String,
+    pub candidate_items: Vec<ScholarChatOpenAlexEvidenceCandidateInputPreview>,
+    #[serde(default)]
+    pub max_pack_items: Option<usize>,
+    #[serde(default)]
+    pub include_blocked_candidates: Option<bool>,
+    #[serde(default)]
+    pub include_needs_review_candidates: Option<bool>,
+    #[serde(default)]
+    pub requested_citation_style: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatEvidencePackAssemblyPlanItemPreview {
+    pub item_index: usize,
+    pub plan_item_id: String,
+    pub source_candidate_key: String,
+    pub candidate_status: ScholarChatOpenAlexEvidenceCandidateStatus,
+    pub title: String,
+    pub source_label: String,
+    pub publication_year: Option<u16>,
+    pub author_display: String,
+    pub doi_present: bool,
+    pub open_access_status: Option<String>,
+    pub planned_role: String,
+    pub evidence_kind: String,
+    pub metadata_completeness: String,
+    pub citation_readiness: String,
+    pub assembly_readiness: String,
+    pub assembly_reasons: Vec<String>,
+    pub limitations: Vec<String>,
+    pub dedup_key: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatEvidencePackAssemblyPlanSkippedCandidatePreview {
+    pub item_index: usize,
+    pub source_candidate_key: String,
+    pub candidate_status: ScholarChatOpenAlexEvidenceCandidateStatus,
+    pub skip_reason: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScholarChatEvidencePackAssemblyPlanPreview {
+    pub status: ScholarChatEvidencePackAssemblyPlanStatus,
+    pub normalized_query: String,
+    pub input_candidate_count: usize,
+    pub planned_item_count: usize,
+    pub skipped_candidate_count: usize,
+    pub blocked_candidate_count: usize,
+    pub needs_review_candidate_count: usize,
+    pub ready_candidate_count: usize,
+    pub max_pack_items: usize,
+    pub candidate_limit_reached: bool,
+    pub planned_items: Vec<ScholarChatEvidencePackAssemblyPlanItemPreview>,
+    pub skipped_candidates: Vec<ScholarChatEvidencePackAssemblyPlanSkippedCandidatePreview>,
+    pub blockers: Vec<String>,
+    pub warnings: Vec<String>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub preview_only: bool,
+    pub assembly_plan_only: bool,
+    pub metadata_only: bool,
+    pub no_evidence_pack_created: bool,
+    pub no_citation_emitted: bool,
+    pub no_provider_execution: bool,
+    pub no_retrieval_execution: bool,
+    pub no_network_call: bool,
+    pub no_http_client: bool,
+    pub no_url_building: bool,
+    pub no_api_key_read: bool,
+    pub no_environment_read: bool,
+    pub no_cache_write: bool,
+    pub no_metadata_record_write: bool,
+    pub no_registry_status_change: bool,
+    pub no_audit_write: bool,
+    pub no_artifact_write: bool,
+    pub no_literature_review_created: bool,
+    pub no_answer_generated: bool,
+    pub no_model_loading: bool,
+    pub no_runtime_inference: bool,
+    pub no_llm_call: bool,
+    pub no_scraping: bool,
+    pub no_paywall_bypass: bool,
+    pub no_authenticated_library_access: bool,
+}
+
+const EVIDENCE_PACK_ASSEMBLY_PLAN_DEFAULT_MAX_PACK_ITEMS: usize = 10;
+const EVIDENCE_PACK_ASSEMBLY_PLAN_MAX_PACK_ITEMS: usize = 50;
+
+fn evidence_pack_assembly_plan_item_status_label(
+    candidate_status: &ScholarChatOpenAlexEvidenceCandidateStatus,
+) -> &'static str {
+    match candidate_status {
+        ScholarChatOpenAlexEvidenceCandidateStatus::Ready => "ready_for_future_pack_input",
+        ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview => "needs_metadata_review",
+        ScholarChatOpenAlexEvidenceCandidateStatus::Blocked => "blocked_incomplete_metadata",
+    }
+}
+
+fn evidence_pack_assembly_plan_item_planned_role(
+    candidate_status: &ScholarChatOpenAlexEvidenceCandidateStatus,
+    is_primary_ready_item: bool,
+) -> &'static str {
+    match candidate_status {
+        ScholarChatOpenAlexEvidenceCandidateStatus::Ready if is_primary_ready_item => {
+            "primary_metadata_candidate"
+        }
+        ScholarChatOpenAlexEvidenceCandidateStatus::Ready => "supporting_metadata_candidate",
+        ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview => "review_required_candidate",
+        ScholarChatOpenAlexEvidenceCandidateStatus::Blocked => "blocked_candidate",
+    }
+}
+
+fn evidence_pack_assembly_plan_item_evidence_kind(
+    candidate_status: &ScholarChatOpenAlexEvidenceCandidateStatus,
+) -> &'static str {
+    match candidate_status {
+        ScholarChatOpenAlexEvidenceCandidateStatus::Ready => "metadata_record",
+        ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview => "open_metadata_record",
+        ScholarChatOpenAlexEvidenceCandidateStatus::Blocked => "metadata_only_record",
+    }
+}
+
+fn evidence_pack_assembly_plan_item_metadata_completeness(
+    item: &ScholarChatOpenAlexEvidenceCandidateInputPreview,
+) -> &'static str {
+    if !item.title.trim().is_empty()
+        && !item.author_display.trim().is_empty()
+        && item.publication_year.is_some()
+        && item.doi_normalized.is_some()
+    {
+        "complete_metadata"
+    } else if !item.title.trim().is_empty()
+        && !item.author_display.trim().is_empty()
+        && (item.publication_year.is_some() || item.doi_normalized.is_some())
+    {
+        "partial_metadata"
+    } else if !item.title.trim().is_empty() {
+        "minimal_metadata"
+    } else {
+        "insufficient_metadata"
+    }
+}
+
+fn evidence_pack_assembly_plan_item_citation_readiness(
+    item: &ScholarChatOpenAlexEvidenceCandidateInputPreview,
+    candidate_status: &ScholarChatOpenAlexEvidenceCandidateStatus,
+) -> &'static str {
+    if matches!(candidate_status, ScholarChatOpenAlexEvidenceCandidateStatus::Blocked) {
+        "citation_not_emitted"
+    } else if item.doi_normalized.is_some() {
+        "citation_metadata_ready"
+    } else {
+        "citation_metadata_needs_review"
+    }
+}
+
+fn evidence_pack_assembly_plan_item_reasons(
+    item: &ScholarChatOpenAlexEvidenceCandidateInputPreview,
+    candidate_status: &ScholarChatOpenAlexEvidenceCandidateStatus,
+) -> Vec<String> {
+    let mut reasons = Vec::new();
+    push_unique_text(
+        &mut reasons,
+        evidence_pack_assembly_plan_item_status_label(candidate_status),
+    );
+    if item.doi_normalized.is_some() {
+        push_unique_text(&mut reasons, "doi_present");
+    } else {
+        push_unique_text(&mut reasons, "doi_missing");
+    }
+    if !item.open_access_status.as_deref().unwrap_or("").trim().is_empty() {
+        push_unique_text(&mut reasons, "open_access_status_available");
+    }
+    if !item.source_label.trim().is_empty() {
+        push_unique_text(&mut reasons, "source_label_available");
+    }
+    if !item.author_display.trim().is_empty() {
+        push_unique_text(&mut reasons, "author_display_available");
+    }
+    reasons
+}
+
+fn evidence_pack_assembly_plan_item_summary(
+    item: &ScholarChatOpenAlexEvidenceCandidateInputPreview,
+    planned_role: &str,
+) -> String {
+    format!(
+        "Candidate {} remains {} for future pack assembly later.",
+        compact_text_preview(&item.stable_record_key, 48),
+        planned_role
+    )
+}
+
+fn evidence_pack_assembly_plan_item_sort_key(
+    item: &ScholarChatOpenAlexEvidenceCandidateInputPreview,
+) -> (u8, u16, String, String) {
+    let status_rank = match item.candidate_status {
+        ScholarChatOpenAlexEvidenceCandidateStatus::Ready => 0,
+        ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview => 1,
+        ScholarChatOpenAlexEvidenceCandidateStatus::Blocked => 2,
+    };
+    let publication_year_rank = u16::MAX - item.publication_year.unwrap_or(0);
+    let title_rank = if item.title_normalized.trim().is_empty() {
+        item.title.to_lowercase()
+    } else {
+        item.title_normalized.to_lowercase()
+    };
+    (
+        status_rank,
+        publication_year_rank,
+        title_rank,
+        item.stable_record_key.clone(),
+    )
+}
+
+fn normalize_evidence_pack_assembly_plan_max_pack_items(
+    max_pack_items: Option<usize>,
+) -> (usize, bool) {
+    let normalized = max_pack_items.unwrap_or(EVIDENCE_PACK_ASSEMBLY_PLAN_DEFAULT_MAX_PACK_ITEMS);
+    if normalized == 0 {
+        (1, true)
+    } else if normalized > EVIDENCE_PACK_ASSEMBLY_PLAN_MAX_PACK_ITEMS {
+        (EVIDENCE_PACK_ASSEMBLY_PLAN_MAX_PACK_ITEMS, true)
+    } else {
+        (normalized, false)
+    }
+}
+
+fn evidence_pack_assembly_plan_summary(
+    status: &ScholarChatEvidencePackAssemblyPlanStatus,
+    normalized_query: &str,
+    input_candidate_count: usize,
+    planned_item_count: usize,
+    skipped_candidate_count: usize,
+    max_pack_items: usize,
+    candidate_limit_reached: bool,
+) -> String {
+    let query_preview = compact_text_preview(normalized_query, 60);
+    let base = match status {
+        ScholarChatEvidencePackAssemblyPlanStatus::Blocked => {
+            "Evidence pack assembly plan preview is blocked until the normalized query is nonblank."
+                .to_string()
+        }
+        ScholarChatEvidencePackAssemblyPlanStatus::NoCandidates => format!(
+            "Evidence pack assembly plan preview found no plannable candidate items for \"{}\".",
+            query_preview
+        ),
+        ScholarChatEvidencePackAssemblyPlanStatus::NeedsReview => format!(
+            "Evidence pack assembly plan preview needs review with {} planned item(s) from {} candidate preview(s); {} item(s) were skipped.",
+            planned_item_count,
+            input_candidate_count,
+            skipped_candidate_count
+        ),
+        ScholarChatEvidencePackAssemblyPlanStatus::AssemblyPreviewReady => format!(
+            "Evidence pack assembly plan preview is ready later with {} planned item(s) from {} candidate preview(s).",
+            planned_item_count,
+            input_candidate_count
+        ),
+    };
+    if candidate_limit_reached {
+        format!("{base} The preview was capped at {max_pack_items} planned item(s).")
+    } else {
+        base
+    }
+}
+
+fn evidence_pack_assembly_plan_next_required_actions(
+    status: &ScholarChatEvidencePackAssemblyPlanStatus,
+    included_needs_review: bool,
+    included_blocked: bool,
+    candidate_limit_reached: bool,
+) -> Vec<String> {
+    let mut actions = Vec::new();
+    match status {
+        ScholarChatEvidencePackAssemblyPlanStatus::Blocked => {
+            push_unique_text(
+                &mut actions,
+                "Provide a nonblank normalized query before previewing evidence pack assembly again.",
+            );
+        }
+        ScholarChatEvidencePackAssemblyPlanStatus::NoCandidates => {
+            push_unique_text(
+                &mut actions,
+                "Add ready candidate previews or allow review candidates to be included before previewing evidence pack assembly again.",
+            );
+        }
+        ScholarChatEvidencePackAssemblyPlanStatus::NeedsReview => {
+            push_unique_text(
+                &mut actions,
+                "Review candidate metadata gaps before future Evidence Pack assembly.",
+            );
+        }
+        ScholarChatEvidencePackAssemblyPlanStatus::AssemblyPreviewReady => {
+            push_unique_text(
+                &mut actions,
+                "Keep this preview-only; do not create an Evidence Pack yet.",
+            );
+        }
+    }
+    if included_needs_review {
+        push_unique_text(
+            &mut actions,
+            "Review-needed candidate previews remain marked for later manual review.",
+        );
+    }
+    if included_blocked {
+        push_unique_text(
+            &mut actions,
+            "Blocked candidate previews remain blocked for future pack assembly.",
+        );
+    }
+    if candidate_limit_reached {
+        push_unique_text(
+            &mut actions,
+            "Consider increasing the preview cap or narrowing candidate inputs later.",
+        );
+    }
+    actions
+}
+
+fn evidence_pack_assembly_plan_blockers(
+    status: &ScholarChatEvidencePackAssemblyPlanStatus,
+    invalid_candidate_count: usize,
+    planned_item_count: usize,
+) -> Vec<String> {
+    let mut blockers = Vec::new();
+    match status {
+        ScholarChatEvidencePackAssemblyPlanStatus::Blocked => {
+            push_unique_text(&mut blockers, "normalized_query_missing");
+        }
+        ScholarChatEvidencePackAssemblyPlanStatus::NoCandidates => {
+            push_unique_text(&mut blockers, "no_plannable_candidate_items");
+        }
+        ScholarChatEvidencePackAssemblyPlanStatus::NeedsReview
+        | ScholarChatEvidencePackAssemblyPlanStatus::AssemblyPreviewReady => {}
+    }
+    if invalid_candidate_count > 0 && planned_item_count == 0 {
+        push_unique_text(&mut blockers, "invalid_candidate_input");
+    }
+    blockers
+}
+
+fn evidence_pack_assembly_plan_warnings(
+    skipped_candidates: &[ScholarChatEvidencePackAssemblyPlanSkippedCandidatePreview],
+    candidate_limit_reached: bool,
+    include_needs_review_candidates: bool,
+    include_blocked_candidates: bool,
+) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if !skipped_candidates.is_empty() {
+        push_unique_text(
+            &mut warnings,
+            &format!(
+                "{} candidate preview(s) were skipped before future assembly planning.",
+                skipped_candidates.len()
+            ),
+        );
+    }
+    if candidate_limit_reached {
+        push_unique_text(&mut warnings, "candidate_limit_reached");
+    }
+    if include_needs_review_candidates {
+        push_unique_text(
+            &mut warnings,
+            "needs-review candidate previews were included for later review.",
+        );
+    }
+    if include_blocked_candidates {
+        push_unique_text(
+            &mut warnings,
+            "blocked candidate previews were included for later review.",
+        );
+    }
+    warnings
+}
+
+pub fn preview_scholar_chat_evidence_pack_assembly_plan(
+    root: impl Into<PathBuf>,
+    request: ScholarChatEvidencePackAssemblyPlanPreviewRequest,
+) -> AegisResult<ScholarChatEvidencePackAssemblyPlanPreview> {
+    let _ = root.into();
+    let normalized_query = normalize_scientific_topic_text(&request.normalized_query);
+    let input_candidate_count = request.candidate_items.len();
+    let include_blocked_candidates = request.include_blocked_candidates.unwrap_or(false);
+    let include_needs_review_candidates = request.include_needs_review_candidates.unwrap_or(false);
+    let (max_pack_items, _max_pack_items_was_adjusted) =
+        normalize_evidence_pack_assembly_plan_max_pack_items(request.max_pack_items);
+
+    let mut candidate_items = request.candidate_items;
+    candidate_items.sort_by(|left, right| {
+        evidence_pack_assembly_plan_item_sort_key(left)
+            .cmp(&evidence_pack_assembly_plan_item_sort_key(right))
+    });
+
+    let mut planned_items = Vec::new();
+    let mut skipped_candidates = Vec::new();
+    let mut ready_candidate_count = 0usize;
+    let mut needs_review_candidate_count = 0usize;
+    let mut blocked_candidate_count = 0usize;
+    let mut invalid_candidate_count = 0usize;
+
+    for candidate in candidate_items.into_iter() {
+        let candidate_status = candidate.candidate_status.clone();
+        match candidate_status {
+            ScholarChatOpenAlexEvidenceCandidateStatus::Ready => {
+                ready_candidate_count += 1;
+            }
+            ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview => {
+                needs_review_candidate_count += 1;
+            }
+            ScholarChatOpenAlexEvidenceCandidateStatus::Blocked => {
+                blocked_candidate_count += 1;
+            }
+        }
+
+        let candidate_key = candidate.stable_record_key.trim().to_string();
+        let unusable_candidate = candidate_key.is_empty() || candidate.title.trim().is_empty();
+        if unusable_candidate {
+            invalid_candidate_count += 1;
+            skipped_candidates.push(ScholarChatEvidencePackAssemblyPlanSkippedCandidatePreview {
+                item_index: skipped_candidates.len() + 1,
+                source_candidate_key: candidate_key.clone(),
+                candidate_status: candidate_status.clone(),
+                skip_reason: "invalid_candidate_input".to_string(),
+                summary: format!(
+                    "Candidate {} was skipped because required metadata was incomplete.",
+                    compact_text_preview(&candidate_key, 48)
+                ),
+            });
+            continue;
+        }
+
+        let include_candidate = match candidate_status {
+            ScholarChatOpenAlexEvidenceCandidateStatus::Ready => true,
+            ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview => {
+                include_needs_review_candidates
+            }
+            ScholarChatOpenAlexEvidenceCandidateStatus::Blocked => include_blocked_candidates,
+        };
+
+        if !include_candidate {
+            skipped_candidates.push(ScholarChatEvidencePackAssemblyPlanSkippedCandidatePreview {
+                item_index: skipped_candidates.len() + 1,
+                source_candidate_key: candidate_key.clone(),
+                candidate_status: candidate_status.clone(),
+                skip_reason: match candidate_status {
+                    ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview => {
+                        "needs_review_candidate_excluded".to_string()
+                    }
+                    ScholarChatOpenAlexEvidenceCandidateStatus::Blocked => {
+                        "blocked_candidate_excluded".to_string()
+                    }
+                    ScholarChatOpenAlexEvidenceCandidateStatus::Ready => {
+                        "candidate_excluded".to_string()
+                    }
+                },
+                summary: format!(
+                    "Candidate {} was skipped because it was not included in this preview.",
+                    compact_text_preview(&candidate_key, 48)
+                ),
+            });
+            continue;
+        }
+
+        if planned_items.len() >= max_pack_items {
+            skipped_candidates.push(ScholarChatEvidencePackAssemblyPlanSkippedCandidatePreview {
+                item_index: skipped_candidates.len() + 1,
+                source_candidate_key: candidate_key.clone(),
+                candidate_status: candidate_status.clone(),
+                skip_reason: "candidate_limit_reached".to_string(),
+                summary: format!(
+                    "Candidate {} was skipped because the preview cap was reached.",
+                    compact_text_preview(&candidate_key, 48)
+                ),
+            });
+            continue;
+        }
+
+        let is_primary_ready_item = candidate_status
+            == ScholarChatOpenAlexEvidenceCandidateStatus::Ready
+            && !planned_items.iter().any(|item: &ScholarChatEvidencePackAssemblyPlanItemPreview| {
+                item.candidate_status == ScholarChatOpenAlexEvidenceCandidateStatus::Ready
+            });
+        let planned_role =
+            evidence_pack_assembly_plan_item_planned_role(&candidate_status, is_primary_ready_item)
+                .to_string();
+
+        let plan_item = ScholarChatEvidencePackAssemblyPlanItemPreview {
+            item_index: planned_items.len() + 1,
+            plan_item_id: format!("assembly_plan_item_{}", planned_items.len() + 1),
+            source_candidate_key: candidate_key.clone(),
+            candidate_status: candidate_status.clone(),
+            title: compact_text_preview(&candidate.title, 120),
+            source_label: compact_text_preview(&candidate.source_label, 80),
+            publication_year: candidate.publication_year,
+            author_display: compact_text_preview(&candidate.author_display, 120),
+            doi_present: candidate.doi_normalized.is_some(),
+            open_access_status: candidate
+                .open_access_status
+                .as_deref()
+                .map(|value| compact_text_preview(value, 40))
+                .filter(|value| !value.is_empty()),
+            planned_role: planned_role.clone(),
+            evidence_kind: evidence_pack_assembly_plan_item_evidence_kind(&candidate_status)
+                .to_string(),
+            metadata_completeness: evidence_pack_assembly_plan_item_metadata_completeness(&candidate)
+                .to_string(),
+            citation_readiness: evidence_pack_assembly_plan_item_citation_readiness(
+                &candidate,
+                &candidate_status,
+            )
+            .to_string(),
+            assembly_readiness: evidence_pack_assembly_plan_item_status_label(&candidate_status)
+                .to_string(),
+            assembly_reasons: evidence_pack_assembly_plan_item_reasons(&candidate, &candidate_status),
+            limitations: candidate.limitations.clone(),
+            dedup_key: candidate_key.clone(),
+            summary: evidence_pack_assembly_plan_item_summary(&candidate, &planned_role),
+        };
+        planned_items.push(plan_item);
+    }
+
+    let status = if normalized_query.is_empty() {
+        ScholarChatEvidencePackAssemblyPlanStatus::Blocked
+    } else if input_candidate_count == 0 {
+        ScholarChatEvidencePackAssemblyPlanStatus::NoCandidates
+    } else if planned_items.is_empty() {
+        ScholarChatEvidencePackAssemblyPlanStatus::NoCandidates
+    } else if planned_items.iter().any(|item| {
+        !matches!(
+            item.candidate_status,
+            ScholarChatOpenAlexEvidenceCandidateStatus::Ready
+        )
+    }) {
+        ScholarChatEvidencePackAssemblyPlanStatus::NeedsReview
+    } else {
+        ScholarChatEvidencePackAssemblyPlanStatus::AssemblyPreviewReady
+    };
+
+    let candidate_limit_reached = skipped_candidates
+        .iter()
+        .any(|item| item.skip_reason == "candidate_limit_reached");
+    let skipped_candidate_count = skipped_candidates.len();
+    let blockers = evidence_pack_assembly_plan_blockers(&status, invalid_candidate_count, planned_items.len());
+    let warnings = evidence_pack_assembly_plan_warnings(
+        &skipped_candidates,
+        candidate_limit_reached,
+        include_needs_review_candidates,
+        include_blocked_candidates,
+    );
+    let next_required_actions = evidence_pack_assembly_plan_next_required_actions(
+        &status,
+        include_needs_review_candidates,
+        include_blocked_candidates,
+        candidate_limit_reached,
+    );
+    let summary = evidence_pack_assembly_plan_summary(
+        &status,
+        &normalized_query,
+        input_candidate_count,
+        planned_items.len(),
+        skipped_candidate_count,
+        max_pack_items,
+        candidate_limit_reached,
+    );
+
+    Ok(ScholarChatEvidencePackAssemblyPlanPreview {
+        status,
+        normalized_query,
+        input_candidate_count,
+        planned_item_count: planned_items.len(),
+        skipped_candidate_count,
+        blocked_candidate_count,
+        needs_review_candidate_count,
+        ready_candidate_count,
+        max_pack_items,
+        candidate_limit_reached,
+        planned_items,
+        skipped_candidates,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        preview_only: true,
+        assembly_plan_only: true,
+        metadata_only: true,
+        no_evidence_pack_created: true,
+        no_citation_emitted: true,
+        no_provider_execution: true,
+        no_retrieval_execution: true,
+        no_network_call: true,
+        no_http_client: true,
+        no_url_building: true,
+        no_api_key_read: true,
+        no_environment_read: true,
+        no_cache_write: true,
+        no_metadata_record_write: true,
+        no_registry_status_change: true,
+        no_audit_write: true,
+        no_artifact_write: true,
+        no_literature_review_created: true,
+        no_answer_generated: true,
+        no_model_loading: true,
+        no_runtime_inference: true,
+        no_llm_call: true,
+        no_scraping: true,
+        no_paywall_bypass: true,
+        no_authenticated_library_access: true,
+    })
+}
+
 const OPENALEX_EVIDENCE_CANDIDATE_CONVERSION_PREVIEW_LIMIT: usize = 10;
 const OPENALEX_EVIDENCE_CANDIDATE_CONVERSION_PREVIEW_MAX_LIMIT: usize = 25;
 
@@ -32182,7 +32808,7 @@ fn main() {
         let imports_end = source[imports_start..].find("};").unwrap() + imports_start + 2;
         let imports = &source[imports_start..imports_end];
 
-        let expected: [(&str, &str, &str, &str); 14] = [
+        let expected: [(&str, &str, &str, &str); 15] = [
             (
                 "preview_scholar_chat_scientific_discipline_registry",
                 "ScholarChatScientificDisciplineRegistryPreviewRequest",
@@ -32267,6 +32893,12 @@ fn main() {
                 "ScholarChatScientificMetadataProviderRequestPreview",
                 "preview_scholar_chat_scientific_metadata_provider_request_impl(root, request)",
             ),
+            (
+                "preview_scholar_chat_evidence_pack_assembly_plan",
+                "ScholarChatEvidencePackAssemblyPlanPreviewRequest",
+                "ScholarChatEvidencePackAssemblyPlanPreview",
+                "preview_scholar_chat_evidence_pack_assembly_plan_impl(root, request)",
+            ),
         ];
 
         let mut previous_position = None;
@@ -32332,6 +32964,16 @@ fn main() {
             scientific_metadata_provider_config_position < scientific_metadata_query_plan_position,
             "scientific metadata query plan preview should follow scientific metadata provider config preview"
         );
+        let scientific_metadata_provider_request_position = handler
+            .find("preview_scholar_chat_scientific_metadata_provider_request")
+            .unwrap();
+        let evidence_pack_assembly_plan_position = handler
+            .find("preview_scholar_chat_evidence_pack_assembly_plan")
+            .unwrap();
+        assert!(
+            scientific_metadata_provider_request_position < evidence_pack_assembly_plan_position,
+            "evidence pack assembly plan preview should follow scientific metadata provider request preview"
+        );
         for runtime_command in [
             "preview_scholar_chat_runtime_answer_pipeline_gate",
             "preview_scholar_chat_runtime_diagnostic_bridge",
@@ -32351,6 +32993,10 @@ fn main() {
             handler.find("preview_scholar_chat_runtime_diagnostic_bridge")
         {
             assert!(
+                evidence_pack_assembly_plan_position < runtime_diagnostic_bridge_position,
+                "evidence pack assembly plan preview should appear before runtime diagnostic bridge"
+            );
+            assert!(
                 scientific_metadata_query_plan_position < runtime_diagnostic_bridge_position,
                 "scientific metadata query plan preview should appear before runtime diagnostic bridge"
             );
@@ -32369,6 +33015,7 @@ fn main() {
         assert!(handler.contains("preview_scholar_chat_scientific_paper_literature_review_plan"));
         assert!(handler.contains("preview_scholar_chat_scientific_metadata_execution_boundary"));
         assert!(handler.contains("preview_scholar_chat_scientific_metadata_provider_config"));
+        assert!(handler.contains("preview_scholar_chat_evidence_pack_assembly_plan"));
     }
 
     #[test]
@@ -39070,6 +39717,133 @@ fn main() {
         assert!(preview.no_llm_call);
     }
 
+    fn openalex_evidence_candidate_input_preview(
+        item_index: usize,
+        candidate_status: ScholarChatOpenAlexEvidenceCandidateStatus,
+        stable_record_key: &str,
+        title: &str,
+        publication_year: Option<u16>,
+        doi_normalized: Option<&str>,
+        source_label: &str,
+    ) -> ScholarChatOpenAlexEvidenceCandidateInputPreview {
+        let title_normalized = normalize_scientific_topic_text(title);
+        let evidence_candidate_hint = match &candidate_status {
+            ScholarChatOpenAlexEvidenceCandidateStatus::Ready => "metadata_only_candidate",
+            ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview => "needs_title_review",
+            ScholarChatOpenAlexEvidenceCandidateStatus::Blocked => "needs_title_review",
+        }
+        .to_string();
+        let is_safe_for_evidence_candidate = matches!(
+            &candidate_status,
+            ScholarChatOpenAlexEvidenceCandidateStatus::Ready
+        );
+        let limitations = match &candidate_status {
+            ScholarChatOpenAlexEvidenceCandidateStatus::Ready => {
+                vec!["citation_check_later".to_string()]
+            }
+            ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview => {
+                vec!["metadata_review_required".to_string()]
+            }
+            ScholarChatOpenAlexEvidenceCandidateStatus::Blocked => {
+                vec!["blocked_incomplete_metadata".to_string()]
+            }
+        };
+        let candidate_status_label = match &candidate_status {
+            ScholarChatOpenAlexEvidenceCandidateStatus::Ready => "Ready",
+            ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview => "NeedsReview",
+            ScholarChatOpenAlexEvidenceCandidateStatus::Blocked => "Blocked",
+        };
+        ScholarChatOpenAlexEvidenceCandidateInputPreview {
+            item_index,
+            candidate_status,
+            stable_record_key: stable_record_key.to_string(),
+            provider_id: "openalex".to_string(),
+            source_record_kind: "work".to_string(),
+            title: title.to_string(),
+            title_normalized: if title_normalized.is_empty() {
+                title.to_string()
+            } else {
+                title_normalized
+            },
+            source_label: source_label.to_string(),
+            publication_year,
+            publication_year_label: publication_year.map(|year| year.to_string()),
+            doi_normalized: doi_normalized.map(|value| value.to_string()),
+            author_display: "Ada Lovelace".to_string(),
+            concept_display: "Psychology".to_string(),
+            topic_display: "Scientific metadata".to_string(),
+            open_access_status: Some("gold".to_string()),
+            evidence_candidate_hint,
+            quality_signal_summary: "synthetic evidence candidate preview".to_string(),
+            is_safe_for_evidence_candidate,
+            selection_hints: vec![format!("stable_record_key={stable_record_key}")],
+            limitations,
+            summary: format!(
+                "OpenAlex record {} is {} for future Evidence Pack conversion later.",
+                stable_record_key, candidate_status_label
+            ),
+        }
+    }
+
+    fn evidence_pack_assembly_plan_request(
+        normalized_query: &str,
+        candidate_items: Vec<ScholarChatOpenAlexEvidenceCandidateInputPreview>,
+        max_pack_items: Option<usize>,
+        include_blocked_candidates: bool,
+        include_needs_review_candidates: bool,
+    ) -> ScholarChatEvidencePackAssemblyPlanPreviewRequest {
+        ScholarChatEvidencePackAssemblyPlanPreviewRequest {
+            normalized_query: normalized_query.to_string(),
+            candidate_items,
+            max_pack_items,
+            include_blocked_candidates: Some(include_blocked_candidates),
+            include_needs_review_candidates: Some(include_needs_review_candidates),
+            requested_citation_style: None,
+        }
+    }
+
+    fn assert_evidence_pack_assembly_plan_output_is_path_free(
+        preview: &ScholarChatEvidencePackAssemblyPlanPreview,
+        forbidden_fragments: &[&str],
+    ) {
+        let debug = format!("{preview:?}");
+        let json = serde_json::to_string_pretty(preview).unwrap();
+        for forbidden in forbidden_fragments {
+            assert!(!debug.contains(forbidden), "{forbidden}");
+            assert!(!json.contains(forbidden), "{forbidden}");
+        }
+    }
+
+    fn assert_evidence_pack_assembly_plan_boundary_flags(
+        preview: &ScholarChatEvidencePackAssemblyPlanPreview,
+    ) {
+        assert!(preview.preview_only);
+        assert!(preview.assembly_plan_only);
+        assert!(preview.metadata_only);
+        assert!(preview.no_evidence_pack_created);
+        assert!(preview.no_citation_emitted);
+        assert!(preview.no_provider_execution);
+        assert!(preview.no_retrieval_execution);
+        assert!(preview.no_network_call);
+        assert!(preview.no_http_client);
+        assert!(preview.no_url_building);
+        assert!(preview.no_api_key_read);
+        assert!(preview.no_environment_read);
+        assert!(preview.no_cache_write);
+        assert!(preview.no_metadata_record_write);
+        assert!(preview.no_registry_status_change);
+        assert!(preview.no_audit_write);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_literature_review_created);
+        assert!(preview.no_answer_generated);
+        assert!(preview.no_model_loading);
+        assert!(preview.no_runtime_inference);
+        assert!(preview.no_llm_call);
+        assert!(preview.no_scraping);
+        assert!(preview.no_paywall_bypass);
+        assert!(preview.no_authenticated_library_access);
+    }
+
     fn assert_openalex_evidence_candidate_conversion_item_contract(
         item: &ScholarChatOpenAlexEvidenceCandidateInputPreview,
         expected_status: ScholarChatOpenAlexEvidenceCandidateStatus,
@@ -41159,6 +41933,262 @@ fn main() {
                 "literature_review_item",
             ],
         );
+        assert_eq!(before_entries, count_entries_recursively(temp.path()));
+        assert!(!temp.path().join(".aegis").exists());
+    }
+
+    #[test]
+    fn scholar_chat_evidence_pack_assembly_plan_preview_reports_statuses_and_stays_preview_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let before_entries = count_entries_recursively(temp.path());
+
+        let ready_primary = openalex_evidence_candidate_input_preview(
+            1,
+            ScholarChatOpenAlexEvidenceCandidateStatus::Ready,
+            "openalex:W-PRIMARY",
+            "Zeta Study",
+            Some(2023),
+            Some("10.1000/zeta"),
+            "OpenAlex record",
+        );
+        let ready_secondary = openalex_evidence_candidate_input_preview(
+            2,
+            ScholarChatOpenAlexEvidenceCandidateStatus::Ready,
+            "openalex:W-SECONDARY",
+            "Alpha Study",
+            Some(2024),
+            Some("10.1000/alpha"),
+            "OpenAlex record",
+        );
+        let needs_review = openalex_evidence_candidate_input_preview(
+            3,
+            ScholarChatOpenAlexEvidenceCandidateStatus::NeedsReview,
+            "openalex:W-REVIEW",
+            "Review Study",
+            Some(2021),
+            None,
+            "OpenAlex record",
+        );
+        let blocked = openalex_evidence_candidate_input_preview(
+            4,
+            ScholarChatOpenAlexEvidenceCandidateStatus::Blocked,
+            "openalex:W-BLOCKED",
+            "Blocked Study",
+            None,
+            None,
+            "OpenAlex record",
+        );
+
+        let blocked_preview = preview_scholar_chat_evidence_pack_assembly_plan(
+            temp.path().to_path_buf(),
+            evidence_pack_assembly_plan_request("", vec![ready_primary.clone()], Some(10), false, false),
+        )
+        .unwrap();
+        assert_eq!(
+            blocked_preview.status,
+            ScholarChatEvidencePackAssemblyPlanStatus::Blocked
+        );
+        assert_eq!(
+            blocked_preview.blockers,
+            vec!["normalized_query_missing".to_string()]
+        );
+        assert_eq!(blocked_preview.planned_item_count, 1);
+        assert_eq!(blocked_preview.ready_candidate_count, 1);
+        assert_eq!(blocked_preview.skipped_candidate_count, 0);
+        assert_evidence_pack_assembly_plan_boundary_flags(&blocked_preview);
+        assert_evidence_pack_assembly_plan_output_is_path_free(
+            &blocked_preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                ".aegis",
+                "http://",
+                "https://",
+                "api_key=",
+                "token=",
+                "bearer ",
+                "host=",
+                "provider_url",
+            ],
+        );
+
+        let no_candidates_preview = preview_scholar_chat_evidence_pack_assembly_plan(
+            temp.path().to_path_buf(),
+            evidence_pack_assembly_plan_request("Scientific synthesis", vec![], Some(10), false, false),
+        )
+        .unwrap();
+        assert_eq!(
+            no_candidates_preview.status,
+            ScholarChatEvidencePackAssemblyPlanStatus::NoCandidates
+        );
+        assert_eq!(
+            no_candidates_preview.blockers,
+            vec!["no_plannable_candidate_items".to_string()]
+        );
+        assert_eq!(no_candidates_preview.planned_item_count, 0);
+        assert_eq!(no_candidates_preview.skipped_candidate_count, 0);
+        assert_evidence_pack_assembly_plan_boundary_flags(&no_candidates_preview);
+        assert_evidence_pack_assembly_plan_output_is_path_free(
+            &no_candidates_preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                ".aegis",
+                "http://",
+                "https://",
+                "api_key=",
+                "token=",
+                "bearer ",
+                "host=",
+                "provider_url",
+            ],
+        );
+
+        let needs_review_preview = preview_scholar_chat_evidence_pack_assembly_plan(
+            temp.path().to_path_buf(),
+            evidence_pack_assembly_plan_request(
+                "Scientific synthesis",
+                vec![ready_primary.clone(), needs_review.clone(), blocked.clone()],
+                Some(10),
+                false,
+                true,
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            needs_review_preview.status,
+            ScholarChatEvidencePackAssemblyPlanStatus::NeedsReview
+        );
+        assert_eq!(needs_review_preview.planned_item_count, 2);
+        assert_eq!(needs_review_preview.ready_candidate_count, 1);
+        assert_eq!(needs_review_preview.needs_review_candidate_count, 1);
+        assert_eq!(needs_review_preview.blocked_candidate_count, 1);
+        assert!(needs_review_preview
+            .warnings
+            .iter()
+            .any(|value| value.contains("needs-review candidate previews were included")));
+        assert!(needs_review_preview
+            .next_required_actions
+            .iter()
+            .any(|value| value.contains("Review candidate metadata gaps")));
+        assert_evidence_pack_assembly_plan_boundary_flags(&needs_review_preview);
+        assert_evidence_pack_assembly_plan_output_is_path_free(
+            &needs_review_preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                ".aegis",
+                "http://",
+                "https://",
+                "api_key=",
+                "token=",
+                "bearer ",
+                "host=",
+                "provider_url",
+            ],
+        );
+
+        let ready_preview = preview_scholar_chat_evidence_pack_assembly_plan(
+            temp.path().to_path_buf(),
+            evidence_pack_assembly_plan_request(
+                "Scientific synthesis",
+                vec![ready_primary.clone(), ready_secondary.clone()],
+                Some(100),
+                false,
+                false,
+            ),
+        )
+        .unwrap();
+        let ready_preview_repeat = preview_scholar_chat_evidence_pack_assembly_plan(
+            temp.path().to_path_buf(),
+            evidence_pack_assembly_plan_request(
+                "Scientific synthesis",
+                vec![ready_primary.clone(), ready_secondary.clone()],
+                Some(100),
+                false,
+                false,
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            ready_preview.status,
+            ScholarChatEvidencePackAssemblyPlanStatus::AssemblyPreviewReady
+        );
+        assert_eq!(ready_preview, ready_preview_repeat);
+        assert_eq!(ready_preview.planned_item_count, 2);
+        assert_eq!(ready_preview.skipped_candidate_count, 0);
+        assert!(!ready_preview.candidate_limit_reached);
+        assert_eq!(ready_preview.planned_items[0].source_candidate_key, "openalex:W-SECONDARY");
+        assert_eq!(ready_preview.planned_items[1].source_candidate_key, "openalex:W-PRIMARY");
+        assert_eq!(ready_preview.planned_items[0].planned_role, "primary_metadata_candidate");
+        assert_eq!(ready_preview.planned_items[1].planned_role, "supporting_metadata_candidate");
+        assert_eq!(
+            ready_preview.planned_items[0].assembly_readiness,
+            "ready_for_future_pack_input"
+        );
+        assert_eq!(
+            ready_preview.planned_items[1].assembly_readiness,
+            "ready_for_future_pack_input"
+        );
+        assert_evidence_pack_assembly_plan_boundary_flags(&ready_preview);
+        assert_evidence_pack_assembly_plan_output_is_path_free(
+            &ready_preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                ".aegis",
+                "http://",
+                "https://",
+                "api_key=",
+                "token=",
+                "bearer ",
+                "host=",
+                "provider_url",
+            ],
+        );
+
+        let capped_preview = preview_scholar_chat_evidence_pack_assembly_plan(
+            temp.path().to_path_buf(),
+            evidence_pack_assembly_plan_request(
+                "Scientific synthesis",
+                vec![
+                    ready_primary.clone(),
+                    ready_secondary.clone(),
+                    ready_primary.clone(),
+                ],
+                Some(2),
+                false,
+                false,
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            capped_preview.status,
+            ScholarChatEvidencePackAssemblyPlanStatus::AssemblyPreviewReady
+        );
+        assert!(capped_preview.candidate_limit_reached);
+        assert_eq!(capped_preview.planned_item_count, 2);
+        assert_eq!(capped_preview.skipped_candidate_count, 1);
+        assert_eq!(
+            capped_preview.skipped_candidates[0].skip_reason,
+            "candidate_limit_reached"
+        );
+        assert!(capped_preview
+            .warnings
+            .iter()
+            .any(|value| value.contains("candidate_limit_reached")));
+        assert_evidence_pack_assembly_plan_boundary_flags(&capped_preview);
+        assert_evidence_pack_assembly_plan_output_is_path_free(
+            &capped_preview,
+            &[
+                temp.path().to_string_lossy().as_ref(),
+                ".aegis",
+                "http://",
+                "https://",
+                "api_key=",
+                "token=",
+                "bearer ",
+                "host=",
+                "provider_url",
+            ],
+        );
+
         assert_eq!(before_entries, count_entries_recursively(temp.path()));
         assert!(!temp.path().join(".aegis").exists());
     }
