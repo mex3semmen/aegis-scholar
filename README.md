@@ -18,6 +18,7 @@ Implemented or visible today:
 - first-run source import readiness guidance for empty local corpora
 - source workflow action hints for the manual register -> extract -> chunk -> retrieval -> Evidence Pack path
 - chat-first Scholar Chat agentic workflow planning preview
+- consent-gated Scholar Chat execution readiness preview for later workflow steps
 - runtime diagnostic previews and execution candidates for developer use
 
 ## What AEGIS Scholar is

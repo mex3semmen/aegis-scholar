@@ -116,6 +116,50 @@ type ScholarChatAgenticWorkflowPlanPreview = {
   no_audit_write: boolean;
 };
 
+type ScholarChatAgenticWorkflowExecutionGateStatus = "blocked" | "needs_review" | "execution_ready_later";
+
+type ScholarChatAgenticWorkflowExecutionGateDecision =
+  | "blocked"
+  | "needs_context"
+  | "needs_consent"
+  | "ready_later"
+  | "no_action_available";
+
+type ScholarChatAgenticWorkflowFutureAction =
+  | "register_source_later"
+  | "extract_text_later"
+  | "chunk_source_later"
+  | "inspect_retrieval_later"
+  | "build_evidence_pack_later"
+  | "inspect_evidence_pack_later"
+  | "ask_local_sources_later"
+  | "no_action_available";
+
+type ScholarChatAgenticWorkflowExecutionGatePreview = {
+  status: ScholarChatAgenticWorkflowExecutionGateStatus;
+  planned_intent: ScholarChatAgenticWorkflowIntent;
+  gate_decision: ScholarChatAgenticWorkflowExecutionGateDecision;
+  consent_required: boolean;
+  user_consent_present: boolean;
+  allowed_future_action: ScholarChatAgenticWorkflowFutureAction;
+  blocked_reason: string;
+  blockers: string[];
+  warnings: string[];
+  required_local_context: string[];
+  planned_steps: string[];
+  next_required_actions: string[];
+  safety_invariants: string[];
+  selected_source_ids: string[];
+  selected_source_count: number;
+  execution_allowed_now: boolean;
+  preview_only: boolean;
+  no_filesystem_write: boolean;
+  no_backend_mutation: boolean;
+  no_runtime_execution: boolean;
+  no_llm_call: boolean;
+  no_network_call: boolean;
+};
+
 type ScholarChatRetrievalCandidate = {
   source_id: string;
   version_id: string;
@@ -1985,6 +2029,10 @@ export default function App() {
   const [scholarChatError, setScholarChatError] = createSignal<string | null>(null);
   const [scholarChatValidationError, setScholarChatValidationError] = createSignal<string | null>(null);
   const [scholarChatLoading, setScholarChatLoading] = createSignal(false);
+  const [scholarChatExecutionGatePreview, setScholarChatExecutionGatePreview] = createSignal<ScholarChatAgenticWorkflowExecutionGatePreview | null>(null);
+  const [scholarChatExecutionGateError, setScholarChatExecutionGateError] = createSignal<string | null>(null);
+  const [scholarChatExecutionGateValidationError, setScholarChatExecutionGateValidationError] = createSignal<string | null>(null);
+  const [scholarChatExecutionGateLoading, setScholarChatExecutionGateLoading] = createSignal(false);
   const [scholarChatSourceContext, setScholarChatSourceContext] = createSignal<RegisteredSource[]>([]);
   const [scholarChatSourceContextLoading, setScholarChatSourceContextLoading] = createSignal(false);
   const [scholarChatSourceContextError, setScholarChatSourceContextError] = createSignal<string | null>(null);
@@ -3107,6 +3155,42 @@ export default function App() {
       setScholarChatError(sanitizeBackendError(err));
     } finally {
       setScholarChatLoading(false);
+    }
+  }
+
+  async function previewScholarChatAgenticWorkflowExecutionGate() {
+    const trimmedPrompt = scholarChatPrompt().trim();
+    if (!trimmedPrompt) {
+      setScholarChatExecutionGatePreview(null);
+      setScholarChatExecutionGateError(null);
+      setScholarChatExecutionGateValidationError("Prompt is required to preview Scholar Chat execution readiness.");
+      return;
+    }
+    if (scholarChatExecutionGateLoading()) {
+      return;
+    }
+    setScholarChatExecutionGateLoading(true);
+    setScholarChatExecutionGateError(null);
+    setScholarChatExecutionGateValidationError(null);
+    setScholarChatExecutionGatePreview(null);
+    try {
+      const result = await invoke<ScholarChatAgenticWorkflowExecutionGatePreview>("preview_scholar_chat_agentic_workflow_execution_gate", {
+        root: ".",
+        request: {
+          scholar_chat_request: {
+            prompt: trimmedPrompt,
+            mode: scholarChatMode(),
+            grounding_policy: scholarChatGroundingPolicy(),
+            selected_source_ids: selectedScholarChatSourceIds(),
+          },
+          user_consent_present: false,
+        },
+      });
+      setScholarChatExecutionGatePreview(result);
+    } catch (err) {
+      setScholarChatExecutionGateError(sanitizeBackendError(err));
+    } finally {
+      setScholarChatExecutionGateLoading(false);
     }
   }
 
@@ -4408,6 +4492,7 @@ export default function App() {
               onChange={(event) => {
                 setScholarChatMode(event.currentTarget.value as ScholarChatMode);
                 setScholarChatPreview(null);
+                setScholarChatExecutionGatePreview(null);
                 clearScholarChatPromptPackPreview();
                 clearScholarChatDraftInferencePreview();
                 clearScholarChatGroundedAnswerBuildIntentPreview();
@@ -4425,6 +4510,7 @@ export default function App() {
               onChange={(event) => {
                 setScholarChatGroundingPolicy(event.currentTarget.value as GroundingPolicy);
                 setScholarChatPreview(null);
+                setScholarChatExecutionGatePreview(null);
                 clearScholarChatPromptPackPreview();
                 clearScholarChatDraftInferencePreview();
                 clearScholarChatGroundedAnswerBuildIntentPreview();
@@ -4461,6 +4547,7 @@ export default function App() {
                           onChange={() => {
                             toggleScholarChatSourceContext(item.source_id);
                             setScholarChatPreview(null);
+                            setScholarChatExecutionGatePreview(null);
                           }}
                         />
                         <strong> {item.title || item.source_id}</strong>
@@ -4477,6 +4564,131 @@ export default function App() {
           {scholarChatSourceContext().length > 0 ? renderSourceWorkflowActionHints() : null}
           <p class="muted">{scholarChatSelectedSourceIdsSummary()}</p>
         </div>
+        <div class="artifact-overview">
+          <h3>Next step</h3>
+          <p class="muted">
+            Preview-only execution gate for the chat workflow plan. It shows the next safe step without starting execution.
+          </p>
+          <div class="hero-actions">
+            <button onClick={previewScholarChatAgenticWorkflowExecutionGate} disabled={scholarChatExecutionGateLoading()}>
+              {scholarChatExecutionGateLoading() ? "Checking..." : "Check next step"}
+            </button>
+          </div>
+          {scholarChatExecutionGateValidationError() && <p class="error">{scholarChatExecutionGateValidationError()}</p>}
+          {scholarChatExecutionGateError() && <p class="error">{scholarChatExecutionGateError()}</p>}
+          {scholarChatExecutionGatePreview() ? (
+            <>
+              {renderMetricGrid([
+                { label: "Status", value: formatSnakeCaseLabel(scholarChatExecutionGatePreview()!.status) },
+                { label: "Gate decision", value: formatSnakeCaseLabel(scholarChatExecutionGatePreview()!.gate_decision) },
+                { label: "Allowed future action", value: formatSnakeCaseLabel(scholarChatExecutionGatePreview()!.allowed_future_action) },
+                { label: "Consent needed", value: scholarChatExecutionGatePreview()!.consent_required ? "yes" : "no" },
+              ])}
+              {scholarChatExecutionGatePreview()!.blocked_reason ? (
+                <p>
+                  <strong>Blocked reason:</strong> {scholarChatExecutionGatePreview()!.blocked_reason}
+                </p>
+              ) : null}
+              {scholarChatExecutionGatePreview()!.next_required_actions.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Next required action</h4>
+                  <ul>
+                    {scholarChatExecutionGatePreview()!.next_required_actions.map((action) => (
+                      <li>{action}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              <details class="muted">
+                <summary>Execution gate details</summary>
+                <div class="contract-meta">
+                  <div>
+                    <span>Planned intent</span>
+                    <strong>{formatSnakeCaseLabel(scholarChatExecutionGatePreview()!.planned_intent)}</strong>
+                  </div>
+                  <div>
+                    <span>Selected sources</span>
+                    <strong>{scholarChatExecutionGatePreview()!.selected_source_count}</strong>
+                  </div>
+                  <div>
+                    <span>Execution allowed now</span>
+                    <strong>{scholarChatExecutionGatePreview()!.execution_allowed_now ? "yes" : "no"}</strong>
+                  </div>
+                  <div>
+                    <span>User consent present</span>
+                    <strong>{scholarChatExecutionGatePreview()!.user_consent_present ? "yes" : "no"}</strong>
+                  </div>
+                  <div>
+                    <span>Preview only</span>
+                    <strong>{scholarChatExecutionGatePreview()!.preview_only ? "yes" : "no"}</strong>
+                  </div>
+                </div>
+                <p>
+                  <strong>Required local context:</strong>{" "}
+                  {scholarChatExecutionGatePreview()!.required_local_context.map((item) => formatSnakeCaseLabel(item)).join(", ") || "none"}
+                </p>
+                <h4>Planned steps</h4>
+                <ul>
+                  {scholarChatExecutionGatePreview()!.planned_steps.map((step) => (
+                    <li>{step}</li>
+                  ))}
+                </ul>
+                <div class="contract-meta">
+                  {scholarChatExecutionGatePreview()!.safety_invariants.map((item) => (
+                    <div>
+                      <span>Safety</span>
+                      <strong>{formatSnakeCaseLabel(item)}</strong>
+                    </div>
+                  ))}
+                </div>
+                <div class="contract-meta">
+                  <div>
+                    <span>No filesystem write</span>
+                    <strong>{scholarChatExecutionGatePreview()!.no_filesystem_write ? "yes" : "no"}</strong>
+                  </div>
+                  <div>
+                    <span>No backend mutation</span>
+                    <strong>{scholarChatExecutionGatePreview()!.no_backend_mutation ? "yes" : "no"}</strong>
+                  </div>
+                  <div>
+                    <span>No runtime execution</span>
+                    <strong>{scholarChatExecutionGatePreview()!.no_runtime_execution ? "yes" : "no"}</strong>
+                  </div>
+                  <div>
+                    <span>No LLM call</span>
+                    <strong>{scholarChatExecutionGatePreview()!.no_llm_call ? "yes" : "no"}</strong>
+                  </div>
+                  <div>
+                    <span>No network call</span>
+                    <strong>{scholarChatExecutionGatePreview()!.no_network_call ? "yes" : "no"}</strong>
+                  </div>
+                </div>
+              </details>
+              {scholarChatExecutionGatePreview()!.blockers.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Blockers</h4>
+                  <ul>
+                    {scholarChatExecutionGatePreview()!.blockers.map((blocker) => (
+                      <li>{blocker}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {scholarChatExecutionGatePreview()!.warnings.length > 0 ? (
+                <div class="warning-box">
+                  <h4>Warnings</h4>
+                  <ul>
+                    {scholarChatExecutionGatePreview()!.warnings.map((warning) => (
+                      <li>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p>No Scholar Chat execution gate preview loaded yet.</p>
+          )}
+        </div>
         <label>
           Prompt
           <textarea
@@ -4486,6 +4698,7 @@ export default function App() {
               setScholarChatPrompt(event.currentTarget.value);
               setScholarChatValidationError(null);
               setScholarChatPreview(null);
+              setScholarChatExecutionGatePreview(null);
               clearScholarChatPromptPackPreview();
               clearScholarChatDraftInferencePreview();
               clearScholarChatGroundedAnswerBuildIntentPreview();
