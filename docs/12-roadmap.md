@@ -10,7 +10,7 @@ This roadmap now has a clear split between implemented foundations, preview-heav
 | Diagnostic / preview-heavy product shell | Scholar Chat and Scientific Retrieval preview surfaces, read-only diagnostics, and contract previews |
 | Runtime diagnostics | local runtime health, invocation planning, capability, probe-readiness, smoke-readiness, and developer bridge/result/pipeline-gate previews |
 | OpenAlex metadata execution slice | guarded OpenAlex-only execution slice plus normalized result, cache/write gate, evidence-candidate conversion, and assembly-plan previews |
-| Current Phase 119 | frontend-first first-run source import readiness UI |
+| Current Phase 120 | frontend-first source workflow action hints |
 | Known missing product workflows | actual source import wizard, scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 | Recommended next product slices | actual source import wizard, scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 
@@ -18,6 +18,7 @@ Phase 116 remains backend-only, preview-only, and in-memory. It does not add Evi
 Phase 117.0 adds a backend-only Local Evidence Pack Creation MVP. It uses existing local source/retrieval/evidence data and managed Evidence Pack storage, stays deterministic and path-safe, and does not add network access, model/runtime/LLM behavior, or answer generation.
 Phase 118.0 adds a backend-only PDF Text Extraction MVP. It supports local PDFs when a text layer is present, preserves page-level locators, reuses the existing extraction-report / source-registry / corpus-layout contracts, and stays OCR-free and preview-only. It does not add OCR, web requests, scraping, downloads, connectors, source import, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
 Phase 119.0 adds a frontend-first first-run source import readiness UI. It surfaces the empty local-source state with concise next-step guidance and supported-source notes, including PDF text-layer extraction support, and it stays guidance-only. It does not add a drag-and-drop import flow, automatic source import, OCR, web requests, scraping, downloads, connectors, source import behavior, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
+Phase 120.0 adds a frontend-first source workflow action hints pass. It tightens the copy around the manual pipeline after source registration or selection, including extraction, chunking, retrieval preview, and Evidence Pack preview guidance, and it stays guidance-only. It does not add automatic orchestration, drag-and-drop import, OCR, broad PDF ingestion, web requests, scraping, downloads, connectors, source import behavior, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
 
 ## Phase 0 — Documentation baseline
 
