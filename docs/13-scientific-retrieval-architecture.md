@@ -52,7 +52,6 @@ The current system is a mixed preview / execution stack:
 - not implemented as answer generation:
   - answer generation
   - citation emission
-  - Evidence Pack creation
   - Literature Review creation
 
 Local scientific models and corpus data must remain outside Git in user-controlled storage until explicit app-managed storage is implemented.
@@ -373,3 +372,4 @@ Phase 114.1 is frontend/docs guard hardening for the read-only OpenAlex panel. I
 Phase 115.0 is a backend-only OpenAlex metadata to Evidence Candidate conversion preview. It composes the normalized OpenAlex metadata result contract, derives deterministic candidate-input previews, stays preview-only and in-memory, and does not add execution, cache/write, Evidence Pack, citation, Literature Review, answer, retrieval, runtime, or LLM behavior.
 Phase 115.1 hardens that metadata-to-evidence-candidate boundary with backend/docs guard tests for the existing conversion preview, keeping it preview-only and free of execution, writes, Evidence Pack creation, citations, answers, retrieval, runtime, or LLM behavior.
 Phase 116.0 is a backend-only Evidence Candidate to Evidence Pack Assembly Plan Preview. It composes the OpenAlex Evidence Candidate conversion preview and only plans later pack-item selection, ordering, grouping, caps, skips, and readiness boundaries. It stays preview-only and in-memory, and does not add Evidence Pack creation, citations, writes, retrieval execution, provider expansion, model/runtime/LLM behavior, or answer generation.
+Phase 117.0 is a backend-only Local Evidence Pack Creation MVP. It uses existing local source/retrieval/evidence data and the managed Evidence Pack storage path, stays deterministic and path-safe, and does not add network access, model/runtime/LLM behavior, or answer generation.

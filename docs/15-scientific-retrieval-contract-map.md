@@ -25,8 +25,8 @@ User Query
 -> OpenAlex metadata to Evidence Candidate conversion preview
 -> OpenAlex GUI integration readiness contract
 -> Evidence Pack assembly plan preview
+-> Local Evidence Pack creation MVP
 -> future Evidence Pack conversion contract
--> future Evidence Pack creation
 -> future Literature Review / Final Answer
 ```
 
@@ -54,10 +54,18 @@ Current execution and preview stages:
 - OpenAlex cache/write gate preview
 - OpenAlex metadata to Evidence Candidate conversion preview
 - Evidence Pack assembly plan preview
+- Local Evidence Pack creation MVP
+
+### Managed Evidence Pack creation
+
+| Command | Current role | Intended GUI usage | Status | No-op boundary summary |
+| --- | --- | --- | --- | --- |
+| `build_evidence_pack` | Creates a deterministic local Evidence Pack from local source/retrieval/evidence data. | Local Evidence Pack creation MVP. | Managed local creation | No network, no model/runtime/LLM, no OpenAlex. |
+| `get_evidence_pack` | Reads an existing managed Evidence Pack. | Evidence Pack inspection. | Managed read-back | No writes. |
+| `list_evidence_packs` | Lists managed Evidence Pack metadata. | Evidence Pack inspection. | Managed read-back | No writes. |
 
 Later execution stages:
 
-- future Evidence Pack creation
 - future Literature Review / Final Answer
 
 ## Command catalog
