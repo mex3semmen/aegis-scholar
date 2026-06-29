@@ -1,6 +1,8 @@
 import { JSX } from "solid-js";
 
 export default function ScholarChatWorkspace(props: any): JSX.Element {
+  const hasTranscript = props.transcript.length > 0;
+
   function renderTranscriptMessage(message: any) {
     if (message.role === "user") {
       return (
@@ -206,79 +208,87 @@ export default function ScholarChatWorkspace(props: any): JSX.Element {
   }
 
   return (
-    <section class="card workspace-panel chat-workspace" id="scholar-chat" data-workspace="scholar_chat">
-      <h2>Scholar Chat</h2>
-      <p class="muted">
-        Start with a question. Scholar Chat previews the local workflow, keeps execution gated, and surfaces diagnostics only when you need them.
-      </p>
-      <div class="chat-surface">
-        {props.transcript.length === 0 ? (
-          <div class="assistant-card chat-welcome-card">
-            <p class="eyebrow">Scholar Chat</p>
-            <h3>Your local research workspace starts here</h3>
-            <p>
-              Ask a question about a paper, lecture, method, or thesis task. The app will preview the next safe local workflow step without turning preview into execution.
-            </p>
-            <div class="chat-suggestion-grid" aria-label="Prompt suggestions">
-              {props.suggestions.map((item: any) => (
-                <button class="chat-suggestion-chip" onClick={() => props.onApplySuggestion(item.prompt)}>
-                  <span>{item.label}</span>
-                  <small>{item.prompt}</small>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        <div class="chat-transcript" aria-label="Scholar Chat transcript" aria-live="polite">
-          {props.transcript.map((message: any) => renderTranscriptMessage(message))}
-        </div>
-
-        <p class="chat-inline-note muted">
-          {props.selectedSourceSummary} Open Sources when you want to adjust source readiness or selection.
+    <section class="chat-workspace" id="scholar-chat" data-workspace="scholar_chat">
+      <div class="chat-workspace-header">
+        <p class="eyebrow">Scholar Chat</p>
+        <h2>Ask, preview, and stay local</h2>
+        <p class="muted">
+          Preview the next safe local workflow step. Execution stays gated, and deeper diagnostics stay out of the way.
         </p>
+      </div>
 
-        <div class="chat-composer">
-          <label class="composer-field">
-            Prompt
-            <textarea
-              rows={5}
-              value={props.prompt}
-              onInput={(event) => props.onPromptInput(event.currentTarget.value)}
-              placeholder="Ask Scholar Chat about a paper, lecture, method, or thesis problem..."
-            />
-          </label>
-          {props.validationError ? <p class="error">{props.validationError}</p> : null}
-          {props.error ? <p class="error">{props.error}</p> : null}
-          <div class="composer-actions">
-            <button class="primary-action" onClick={props.onPreviewPlan} disabled={props.previewLoading}>
-              {props.previewLoading ? "Previewing..." : "Preview plan"}
-            </button>
-            <button class="secondary-action" onClick={props.onCheckNextStep} disabled={props.executionGateLoading}>
-              {props.executionGateLoading ? "Checking..." : "Check next step"}
-            </button>
-          </div>
-          <details class="planning-options">
-            <summary>Advanced planning options</summary>
-            <div class="form-row">
-              <label>
-                Mode
-                <select value={props.mode} onChange={(event) => props.onModeChange(event.currentTarget.value)}>
-                  {props.modes.map((item: any) => (
-                    <option value={item.value}>{item.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Grounding policy
-                <select value={props.groundingPolicy} onChange={(event) => props.onGroundingPolicyChange(event.currentTarget.value)}>
-                  {props.groundingPolicies.map((item: any) => (
-                    <option value={item.value}>{item.label}</option>
-                  ))}
-                </select>
-              </label>
+      <div class="chat-column">
+        <div class="chat-surface">
+          {!hasTranscript ? (
+            <div class="chat-welcome-card">
+              <div class="chat-welcome-copy">
+                <h3>Your local research workspace starts here</h3>
+                <p>
+                  Ask a paper, lecture, method, or thesis question. Scholar Chat will preview the next local workflow step without turning preview into execution.
+                </p>
+              </div>
+              <div class="chat-suggestion-grid" aria-label="Prompt suggestions">
+                {props.suggestions.map((item: any) => (
+                  <button class="chat-suggestion-chip" onClick={() => props.onApplySuggestion(item.prompt)}>
+                    <span>{item.label}</span>
+                    <small>{item.prompt}</small>
+                  </button>
+                ))}
+              </div>
             </div>
-          </details>
+          ) : null}
+
+          {hasTranscript ? (
+            <div class="chat-transcript" aria-label="Scholar Chat transcript" aria-live="polite">
+              {props.transcript.map((message: any) => renderTranscriptMessage(message))}
+            </div>
+          ) : null}
+
+          <div class="chat-composer" aria-label="Scholar Chat composer">
+            <label class="composer-field">
+              Prompt
+              <textarea
+                rows={5}
+                value={props.prompt}
+                onInput={(event) => props.onPromptInput(event.currentTarget.value)}
+                placeholder="Ask Scholar Chat about a paper, lecture, method, or thesis problem..."
+              />
+            </label>
+            {props.validationError ? <p class="error">{props.validationError}</p> : null}
+            {props.error ? <p class="error">{props.error}</p> : null}
+            <div class="composer-actions">
+              <button class="primary-action" onClick={props.onPreviewPlan} disabled={props.previewLoading}>
+                {props.previewLoading ? "Previewing..." : "Preview plan"}
+              </button>
+              <button class="secondary-action" onClick={props.onCheckNextStep} disabled={props.executionGateLoading}>
+                {props.executionGateLoading ? "Checking..." : "Check next step"}
+              </button>
+            </div>
+            <p class="chat-inline-note muted">
+              {props.selectedSourceSummary} Open Sources when you want to adjust source readiness or selection.
+            </p>
+            <details class="planning-options">
+              <summary>Advanced planning options</summary>
+              <div class="form-row">
+                <label>
+                  Mode
+                  <select value={props.mode} onChange={(event) => props.onModeChange(event.currentTarget.value)}>
+                    {props.modes.map((item: any) => (
+                      <option value={item.value}>{item.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Grounding policy
+                  <select value={props.groundingPolicy} onChange={(event) => props.onGroundingPolicyChange(event.currentTarget.value)}>
+                    {props.groundingPolicies.map((item: any) => (
+                      <option value={item.value}>{item.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </details>
+          </div>
         </div>
       </div>
     </section>
