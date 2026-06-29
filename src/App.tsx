@@ -1,5 +1,9 @@
 import { createSignal, onMount, Setter } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import WorkspaceShell from "./workspaces/WorkspaceShell";
+import ScholarChatWorkspace from "./workspaces/ScholarChatWorkspace";
+import SourcesWorkspace from "./workspaces/SourcesWorkspace";
+import EvidencePacksWorkspace from "./workspaces/EvidencePacksWorkspace";
 
 type CorpusStatus = {
   source_count: number;
@@ -2985,25 +2989,6 @@ export default function App() {
     ]);
   }
 
-  function appendScholarChatSystemTranscriptMessage(content: string) {
-    const trimmed = content.trim();
-    if (!trimmed) {
-      return;
-    }
-    setScholarChatTranscript((current) => [
-      ...current,
-      {
-        id: nextScholarChatTranscriptId(),
-        role: "system",
-        kind: "system",
-        prompt: scholarChatPrompt().trim(),
-        title: "System",
-        content: trimmed,
-        created_at: Date.now(),
-      },
-    ]);
-  }
-
   function recordScholarChatWorkflowPreview(prompt: string, result: ScholarChatAgenticWorkflowPlanPreview) {
     ensureScholarChatUserTranscriptMessage(prompt);
     updateScholarChatTranscriptMessage({
@@ -3030,212 +3015,6 @@ export default function App() {
       created_at: Date.now(),
       execution_gate_preview: result,
     });
-  }
-
-  function renderScholarChatTranscriptMessage(message: ScholarChatTranscriptMessage) {
-    if (message.role === "user") {
-      return (
-        <div class="chat-transcript-message user-message">
-          <p class="chat-message-label">You</p>
-          <p>{message.content}</p>
-        </div>
-      );
-    }
-
-    if (message.kind === "workflow_preview" && message.workflow_preview) {
-      const preview = message.workflow_preview;
-      return (
-        <div class="assistant-card chat-transcript-card">
-          <p class="chat-message-label">AEGIS</p>
-          <h3>Workflow preview</h3>
-          <p class="chat-message-summary">{preview.summary}</p>
-          <p class="chat-message-summary">
-            It recognized this as {formatSnakeCaseLabel(preview.recognized_intent)} and will stay preview-only.
-          </p>
-          <div class="chat-message-actions">
-            {preview.next_required_actions.length > 0 ? <p><strong>Next:</strong> {preview.next_required_actions[0]}</p> : null}
-            {preview.blockers.length > 0 ? <p><strong>Blocker:</strong> {preview.blockers[0]}</p> : null}
-            {preview.warnings.length > 0 ? <p><strong>Note:</strong> {preview.warnings[0]}</p> : null}
-          </div>
-          <details class="chat-transcript-details">
-            <summary>Preview details</summary>
-            {renderMetricGrid([
-              { label: "Selected sources", value: preview.selected_source_count },
-              { label: "Execution allowed", value: preview.execution_allowed ? "yes" : "no" },
-              { label: "Preview only", value: preview.preview_only ? "yes" : "no" },
-            ])}
-            <p><strong>Prompt:</strong> {preview.normalized_prompt}</p>
-            <div class="contract-meta">
-              <div>
-                <span>Required local context</span>
-                <strong>{preview.required_local_context.map((item) => formatSnakeCaseLabel(item)).join(", ") || "none"}</strong>
-              </div>
-            </div>
-            <h4>Planned steps</h4>
-            <ul>
-              {preview.planned_steps.map((step) => (
-                <li>{step}</li>
-              ))}
-            </ul>
-            {preview.next_required_actions.length > 1 ? (
-              <div class="warning-box">
-                <h4>Additional next actions</h4>
-                <ul>
-                  {preview.next_required_actions.slice(1).map((action) => (
-                    <li>{action}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {preview.blockers.length > 1 ? (
-              <div class="warning-box">
-                <h4>Additional blockers</h4>
-                <ul>
-                  {preview.blockers.slice(1).map((blocker) => (
-                    <li>{blocker}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {preview.warnings.length > 1 ? (
-              <div class="warning-box">
-                <h4>Additional warnings</h4>
-                <ul>
-                  {preview.warnings.slice(1).map((warning) => (
-                    <li>{warning}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </details>
-        </div>
-      );
-    }
-
-    if (message.kind === "execution_gate" && message.execution_gate_preview) {
-      const gate = message.execution_gate_preview;
-      return (
-        <div class="assistant-card chat-transcript-card">
-          <p class="chat-message-label">AEGIS</p>
-          <h3>Safe next step</h3>
-          <p class="chat-message-summary">
-            {gate.blocked_reason || "The next safe step is ready to review."}
-          </p>
-          <p class="chat-message-summary">
-            {formatSnakeCaseLabel(gate.gate_decision)} for {formatSnakeCaseLabel(gate.allowed_future_action)}.
-          </p>
-          <div class="chat-message-actions">
-            {gate.next_required_actions.length > 0 ? <p><strong>Next:</strong> {gate.next_required_actions[0]}</p> : null}
-            {gate.blockers.length > 0 ? <p><strong>Blocker:</strong> {gate.blockers[0]}</p> : null}
-            {gate.warnings.length > 0 ? <p><strong>Note:</strong> {gate.warnings[0]}</p> : null}
-          </div>
-          <details class="chat-transcript-details">
-            <summary>Gate details</summary>
-            {renderMetricGrid([
-              { label: "Status", value: formatSnakeCaseLabel(gate.status) },
-              { label: "Consent needed", value: gate.consent_required ? "yes" : "no" },
-              { label: "Preview only", value: gate.preview_only ? "yes" : "no" },
-            ])}
-            <p>
-              <strong>Required local context:</strong>{" "}
-              {gate.required_local_context.map((item) => formatSnakeCaseLabel(item)).join(", ") || "none"}
-            </p>
-            <h4>Planned steps</h4>
-            <ul>
-              {gate.planned_steps.map((step) => (
-                <li>{step}</li>
-              ))}
-            </ul>
-            <div class="contract-meta">
-              <div>
-                <span>Planned intent</span>
-                <strong>{formatSnakeCaseLabel(gate.planned_intent)}</strong>
-              </div>
-              <div>
-                <span>Selected sources</span>
-                <strong>{gate.selected_source_count}</strong>
-              </div>
-              <div>
-                <span>Execution allowed now</span>
-                <strong>{gate.execution_allowed_now ? "yes" : "no"}</strong>
-              </div>
-              <div>
-                <span>User consent present</span>
-                <strong>{gate.user_consent_present ? "yes" : "no"}</strong>
-              </div>
-            </div>
-            <div class="contract-meta">
-              {gate.safety_invariants.map((item) => (
-                <div>
-                  <span>Safety</span>
-                  <strong>{formatSnakeCaseLabel(item)}</strong>
-                </div>
-              ))}
-            </div>
-            <div class="contract-meta">
-              <div>
-                <span>No filesystem write</span>
-                <strong>{gate.no_filesystem_write ? "yes" : "no"}</strong>
-              </div>
-              <div>
-                <span>No backend mutation</span>
-                <strong>{gate.no_backend_mutation ? "yes" : "no"}</strong>
-              </div>
-              <div>
-                <span>No runtime execution</span>
-                <strong>{gate.no_runtime_execution ? "yes" : "no"}</strong>
-              </div>
-              <div>
-                <span>No LLM call</span>
-                <strong>{gate.no_llm_call ? "yes" : "no"}</strong>
-              </div>
-              <div>
-                <span>No network call</span>
-                <strong>{gate.no_network_call ? "yes" : "no"}</strong>
-              </div>
-            </div>
-            {gate.next_required_actions.length > 1 ? (
-              <div class="warning-box">
-                <h4>Additional next actions</h4>
-                <ul>
-                  {gate.next_required_actions.slice(1).map((action) => (
-                    <li>{action}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {gate.blockers.length > 1 ? (
-              <div class="warning-box">
-                <h4>Additional blockers</h4>
-                <ul>
-                  {gate.blockers.slice(1).map((blocker) => (
-                    <li>{blocker}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {gate.warnings.length > 1 ? (
-              <div class="warning-box">
-                <h4>Additional warnings</h4>
-                <ul>
-                  {gate.warnings.slice(1).map((warning) => (
-                    <li>{warning}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </details>
-        </div>
-      );
-    }
-
-    return (
-      <div class="assistant-card chat-transcript-card">
-        <p class="chat-message-label">AEGIS</p>
-        <h3>{message.title}</h3>
-        <p>{message.content}</p>
-      </div>
-    );
   }
 
   function clearScholarChatGroundedAnswerBuildRequestPreview() {
@@ -4834,183 +4613,66 @@ export default function App() {
     }
   }
 
+  const activeWorkspaceItem = () => WORKSPACE_SECTIONS.find((item) => item.value === activeWorkspace());
+
   return (
-    <main class="app-shell" data-active-workspace={activeWorkspace()}>
-      <aside class="workspace-nav" aria-label="Workspace navigation">
-        <p class="eyebrow">Workspaces</p>
-        <div class="workspace-nav-list">
-          {WORKSPACE_SECTIONS.map((item) => (
-            <button
-              classList={{ active: activeWorkspace() === item.value }}
-              onClick={() => activateWorkspace(item.value)}
-            >
-              <span>{item.label}</span>
-              <small>{item.description}</small>
-            </button>
-          ))}
-        </div>
-      </aside>
+    <WorkspaceShell
+      activeWorkspace={activeWorkspace()}
+      activeLabel={activeWorkspaceItem()?.label ?? "Scholar Chat"}
+      activeDescription={activeWorkspaceItem()?.description ?? "Chat-first academic workflow"}
+      workspaceSections={WORKSPACE_SECTIONS}
+      onActivate={(workspace) => activateWorkspace(workspace as WorkspaceSection)}
+    >
+      <div class="workspace-stack">
+        <SourcesWorkspace
+        status={status()}
+        statusError={statusError()}
+        sourceContextLoading={scholarChatSourceContextLoading()}
+        sourceContextError={scholarChatSourceContextError()}
+        sourceContext={scholarChatSourceContext()}
+        sourceContextSelectedIds={scholarChatSourceContextSelectedIds()}
+        renderFirstRunSourceReadiness={renderFirstRunSourceReadiness}
+        renderSourceWorkflowActionHints={renderSourceWorkflowActionHints}
+        selectedSourceSummary={scholarChatSelectedSourceIdsSummary()}
+        toggleSourceContext={toggleScholarChatSourceContext}
+        setScholarChatPreview={setScholarChatPreview}
+        setScholarChatExecutionGatePreview={setScholarChatExecutionGatePreview}
+        formatSnakeCaseLabel={formatSnakeCaseLabel}
+      />
 
-      <div class="workspace-content">
-        <section class="workspace-banner">
-          <p class="eyebrow">AEGIS Scholar</p>
-          <h1>{WORKSPACE_SECTIONS.find((item) => item.value === activeWorkspace())?.label ?? "Scholar Chat"}</h1>
-          <p class="muted">
-            {WORKSPACE_SECTIONS.find((item) => item.value === activeWorkspace())?.description ?? "Chat-first academic workflow"}
-          </p>
-        </section>
+      <ScholarChatWorkspace
+        transcript={scholarChatTranscript()}
+        suggestions={SCHOLAR_CHAT_PROMPT_SUGGESTIONS}
+        prompt={scholarChatPrompt()}
+        validationError={scholarChatValidationError()}
+        error={scholarChatError()}
+        previewLoading={scholarChatLoading()}
+        executionGateLoading={scholarChatExecutionGateLoading()}
+        selectedSourceSummary={scholarChatSelectedSourceIdsSummary()}
+        mode={scholarChatMode()}
+        groundingPolicy={scholarChatGroundingPolicy()}
+        modes={SCHOLAR_CHAT_MODES}
+        groundingPolicies={GROUNDING_POLICIES}
+        onApplySuggestion={applyScholarChatPromptSuggestion}
+        onPromptInput={(value: string) => {
+          setScholarChatPrompt(value);
+          resetScholarChatConversationPreviewState();
+        }}
+        onPreviewPlan={previewScholarChatAgenticWorkflowPlan}
+        onCheckNextStep={previewScholarChatAgenticWorkflowExecutionGate}
+        onModeChange={(value: string) => {
+          setScholarChatMode(value as ScholarChatMode);
+          resetScholarChatConversationPreviewState();
+        }}
+        onGroundingPolicyChange={(value: string) => {
+          setScholarChatGroundingPolicy(value as GroundingPolicy);
+          resetScholarChatConversationPreviewState();
+        }}
+        renderMetricGrid={renderMetricGrid}
+        formatSnakeCaseLabel={formatSnakeCaseLabel}
+      />
 
-        <section class="card workspace-panel" id="sources" data-workspace="sources">
-          <h2>Sources</h2>
-          <p class="muted">
-            Source registration and readiness are still early. This workspace keeps the corpus state visible while the import and readiness flow stays manual.
-          </p>
-          {status() ? (
-            <>
-              <pre>{JSON.stringify(status(), null, 2)}</pre>
-              {status()!.source_count === 0 ? (
-                <p class="muted">No local sources yet. See the source readiness panel below for supported source types and next steps.</p>
-              ) : null}
-            </>
-          ) : (
-            <p>No status loaded yet.</p>
-          )}
-          {statusError() && <p class="error">{statusError()}</p>}
-          <div class="compact-note">
-            <h3>Source context</h3>
-            <p class="muted">
-              No local sources selected. AEGIS can still preview the workflow, but grounded answers require sources.
-            </p>
-            {scholarChatSourceContextLoading() ? (
-              <p>Loading registered sources...</p>
-            ) : scholarChatSourceContextError() ? (
-              <p class="error">{scholarChatSourceContextError()}</p>
-            ) : scholarChatSourceContext().length === 0 ? (
-              renderFirstRunSourceReadiness()
-            ) : (
-              <>
-                <p class="muted">Selected source count: {scholarChatSourceContextSelectedIds().length}</p>
-                <ul class="final-answer-list-items">
-                  {scholarChatSourceContext().map((item) => (
-                    <li>
-                      <label class="final-answer-list-item">
-                        <span>
-                          <input
-                            type="checkbox"
-                            checked={scholarChatSourceContextSelectedIds().includes(item.source_id)}
-                            onChange={() => {
-                              toggleScholarChatSourceContext(item.source_id);
-                              setScholarChatPreview(null);
-                              setScholarChatExecutionGatePreview(null);
-                            }}
-                          />
-                          <strong> {item.title || item.source_id}</strong>
-                        </span>
-                        <small>
-                          source_id={item.source_id} | type={formatSnakeCaseLabel(item.source_type)} | version={item.version_id} | status={formatSnakeCaseLabel(item.ingestion_status)}
-                        </small>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {scholarChatSourceContext().length > 0 ? renderSourceWorkflowActionHints() : null}
-            <p class="muted">{scholarChatSelectedSourceIdsSummary()}</p>
-          </div>
-        </section>
-
-        <section class="card workspace-panel chat-workspace" id="scholar-chat" data-workspace="scholar_chat">
-          <h2>Scholar Chat</h2>
-          <p class="muted">
-            Start with a question. Scholar Chat previews the local workflow, keeps execution gated, and surfaces diagnostics only when you need them.
-          </p>
-          <div class="chat-surface">
-            {scholarChatTranscript().length === 0 ? (
-              <div class="assistant-card chat-welcome-card">
-                <p class="eyebrow">Scholar Chat</p>
-                <h3>Your local research workspace starts here</h3>
-                <p>
-                  Ask a question about a paper, lecture, method, or thesis task. The app will preview the next safe local workflow step without turning preview into execution.
-                </p>
-                <div class="chat-suggestion-grid" aria-label="Prompt suggestions">
-                  {SCHOLAR_CHAT_PROMPT_SUGGESTIONS.map((item) => (
-                    <button class="chat-suggestion-chip" onClick={() => applyScholarChatPromptSuggestion(item.prompt)}>
-                      <span>{item.label}</span>
-                      <small>{item.prompt}</small>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            <div class="chat-transcript" aria-label="Scholar Chat transcript" aria-live="polite">
-              {scholarChatTranscript().map((message) => renderScholarChatTranscriptMessage(message))}
-            </div>
-
-            <p class="chat-inline-note muted">
-              {scholarChatSelectedSourceIdsSummary()} Open Sources when you want to adjust source readiness or selection.
-            </p>
-
-            <div class="chat-composer">
-              <label class="composer-field">
-                Prompt
-                <textarea
-                  rows={5}
-                  value={scholarChatPrompt()}
-                  onInput={(event) => {
-                    setScholarChatPrompt(event.currentTarget.value);
-                    resetScholarChatConversationPreviewState();
-                  }}
-                  placeholder="Ask Scholar Chat about a paper, lecture, method, or thesis problem..."
-                />
-              </label>
-              {scholarChatValidationError() && <p class="error">{scholarChatValidationError()}</p>}
-              {scholarChatError() && <p class="error">{scholarChatError()}</p>}
-              <div class="composer-actions">
-                <button class="primary-action" onClick={previewScholarChatAgenticWorkflowPlan} disabled={scholarChatLoading()}>
-                  {scholarChatLoading() ? "Previewing..." : "Preview plan"}
-                </button>
-                <button class="secondary-action" onClick={previewScholarChatAgenticWorkflowExecutionGate} disabled={scholarChatExecutionGateLoading()}>
-                  {scholarChatExecutionGateLoading() ? "Checking..." : "Check next step"}
-                </button>
-              </div>
-              <details class="planning-options">
-                <summary>Advanced planning options</summary>
-                <div class="form-row">
-                  <label>
-                    Mode
-                    <select
-                      value={scholarChatMode()}
-                      onChange={(event) => {
-                        setScholarChatMode(event.currentTarget.value as ScholarChatMode);
-                        resetScholarChatConversationPreviewState();
-                      }}
-                    >
-                      {SCHOLAR_CHAT_MODES.map((item) => (
-                        <option value={item.value}>{item.label}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Grounding policy
-                    <select
-                      value={scholarChatGroundingPolicy()}
-                      onChange={(event) => {
-                        setScholarChatGroundingPolicy(event.currentTarget.value as GroundingPolicy);
-                        resetScholarChatConversationPreviewState();
-                      }}
-                    >
-                      {GROUNDING_POLICIES.map((item) => (
-                        <option value={item.value}>{item.label}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              </details>
-            </div>
-          </div>
-          <details class="advanced-panels">
+      <details class="advanced-panels">
             <summary>Advanced preview panels</summary>
         <div class="artifact-overview">
           <h3>Retrieval preview</h3>
@@ -8605,8 +8267,6 @@ export default function App() {
           )}
         </div>
         </details>
-      </section>
-
       <section class="card workspace-panel" id="developer-diagnostics" data-workspace="developer_diagnostics">
         <h2>Final answer inspector</h2>
         <p class="muted">
@@ -9218,59 +8878,14 @@ export default function App() {
             <p>Select an answer artifact source to load final answers.</p>
           )}
         </div>
-        <div class="artifact-overview workspace-panel" id="evidence-packs" data-workspace="evidence_packs">
-          <h3>Evidence packs</h3>
-          <p class="muted">Read-only evidence-pack metadata for the selected retrieval or answer-artifact source.</p>
-          {selectedEvidencePackSourceId() ? (
-            <>
-              <div class="hero-actions">
-                <button onClick={() => loadEvidencePacks()} disabled={evidencePacksLoading()}>
-                  {evidencePacksLoading() ? "Loading..." : "Load evidence packs"}
-                </button>
-              </div>
-              {evidencePacksError() && evidencePacksSourceId() === selectedEvidencePackSourceId() && (
-                <p class="error">{evidencePacksError()}</p>
-              )}
-              {evidencePacksSourceId() === selectedEvidencePackSourceId() ? (
-                evidencePacks() ? (
-                  <>
-                    <div class="contract-meta">
-                      <div><span>Source ID</span><strong>{selectedEvidencePackSourceId()}</strong></div>
-                      <div><span>Packs</span><strong>{evidencePacks()!.length}</strong></div>
-                    </div>
-                    {evidencePacks()!.length > 0 ? (
-                      <ul class="final-answer-list-items">
-                        {evidencePacks()!.map((item) => (
-                          <li>
-                            <div class="final-answer-list-item">
-                              <span>{item.evidence_pack_id}</span>
-                              <small>
-                                version={item.version_id} | created={item.created_at} | items={item.item_count} | results={item.result_count} | warnings={item.warning_count}
-                              </small>
-                              <small>
-                                query={item.query} | retrieval_index_version={item.retrieval_index_version} | pack_version={item.evidence_pack_version}
-                              </small>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p>No evidence packs listed yet for this source.</p>
-                    )}
-                  </>
-                ) : evidencePacksLoading() ? (
-                  <p>Loading evidence packs...</p>
-                ) : evidencePacksError() ? null : (
-                  <p>No evidence packs loaded yet for this source.</p>
-                )
-              ) : (
-                <p>No evidence packs loaded yet for this source.</p>
-              )}
-            </>
-          ) : (
-            <p>Select a retrieval or answer-artifact source to load evidence packs.</p>
-          )}
-        </div>
+        <EvidencePacksWorkspace
+          selectedEvidencePackSourceId={selectedEvidencePackSourceId()}
+          loadEvidencePacks={loadEvidencePacks}
+          evidencePacksLoading={evidencePacksLoading()}
+          evidencePacksError={evidencePacksError()}
+          evidencePacksSourceId={evidencePacksSourceId()}
+          evidencePacks={evidencePacks()}
+        />
         <div class="artifact-overview">
           <h3>Retrieval index</h3>
           <p class="muted">Read-only retrieval metadata for the source ID above.</p>
@@ -9462,6 +9077,6 @@ export default function App() {
         )}
       </section>
       </div>
-    </main>
+    </WorkspaceShell>
   );
 }
