@@ -2570,6 +2570,31 @@ export default function App() {
       .join(" ");
   }
 
+  function renderFirstRunSourceReadiness() {
+    return (
+      <div class="warning-box">
+        <h4>No local sources yet</h4>
+        <p>Register a local source to extract text, create chunks, build retrieval indexes, and later create Evidence Packs.</p>
+        <div class="contract-meta">
+          <div>
+            <span>Supported now</span>
+            <strong>Markdown / text notes, PDF text-layer extraction</strong>
+          </div>
+          <div>
+            <span>Not yet</span>
+            <strong>OCR for scanned PDFs, drag-and-drop import, automatic literature sync</strong>
+          </div>
+        </div>
+        <h4>Next actions</h4>
+        <ul>
+          <li>Use the existing source registration flow if available.</li>
+          <li>Check corpus status.</li>
+          <li>Then run extraction, chunking, and retrieval.</li>
+        </ul>
+      </div>
+    );
+  }
+
   function toggleScholarChatSourceContext(sourceId: string) {
     setScholarChatSourceContextTouched(true);
     setScholarChatSourceContextSelectedIds((current) => {
@@ -4282,6 +4307,7 @@ export default function App() {
 
   onMount(() => {
     void loadScholarChatSourceContext();
+    void loadStatus();
   });
 
   return (
@@ -4301,7 +4327,12 @@ export default function App() {
       <section class="card">
         <h2>Corpus status</h2>
         {status() ? (
-          <pre>{JSON.stringify(status(), null, 2)}</pre>
+          <>
+            <pre>{JSON.stringify(status(), null, 2)}</pre>
+            {status()!.source_count === 0 ? (
+              <p class="muted">No local sources yet. See the source readiness panel below for supported source types and next steps.</p>
+            ) : null}
+          </>
         ) : (
           <p>No status loaded yet.</p>
         )}
@@ -4355,7 +4386,7 @@ export default function App() {
           ) : scholarChatSourceContextError() ? (
             <p class="error">{scholarChatSourceContextError()}</p>
           ) : scholarChatSourceContext().length === 0 ? (
-            <p>No registered sources yet.</p>
+            renderFirstRunSourceReadiness()
           ) : (
             <>
               <p class="muted">Selected source count: {scholarChatSourceContextSelectedIds().length}</p>

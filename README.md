@@ -14,6 +14,8 @@ Implemented or visible today:
 - preview-heavy Scholar Chat and Scientific Retrieval planning surfaces
 - OpenAlex-only metadata execution as a guarded execution slice
 - Phase 116 backend-only Evidence Pack Assembly Plan Preview
+- local PDF text-layer extraction MVP with page-level locators
+- first-run source import readiness guidance for empty local corpora
 - runtime diagnostic previews and execution candidates for developer use
 
 ## What AEGIS Scholar is
@@ -36,6 +38,7 @@ It does not yet provide:
 - full answer generation as the primary product workflow
 - semantic/vector retrieval as the main product workflow
 - scanned PDF OCR or broad PDF ingestion beyond text-layer extraction
+- a finished source import wizard or drag-and-drop import flow
 - finished Evidence Pack creation
 - citation emission
 - local LLM inference as a product workflow

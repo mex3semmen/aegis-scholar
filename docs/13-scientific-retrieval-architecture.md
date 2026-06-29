@@ -57,6 +57,9 @@ The current system is a mixed preview / execution stack:
 - implemented as extraction / input support:
   - local PDF text-layer extraction MVP with page-level locators
 
+- implemented as frontend readiness guidance:
+  - first-run source import readiness panel for empty local-source state
+
 Local scientific models and corpus data must remain outside Git in user-controlled storage until explicit app-managed storage is implemented.
 
 ## Phase 98.1
@@ -377,3 +380,4 @@ Phase 115.1 hardens that metadata-to-evidence-candidate boundary with backend/do
 Phase 116.0 is a backend-only Evidence Candidate to Evidence Pack Assembly Plan Preview. It composes the OpenAlex Evidence Candidate conversion preview and only plans later pack-item selection, ordering, grouping, caps, skips, and readiness boundaries. It stays preview-only and in-memory, and does not add Evidence Pack creation, citations, writes, retrieval execution, provider expansion, model/runtime/LLM behavior, or answer generation.
 Phase 117.0 is a backend-only Local Evidence Pack Creation MVP. It uses existing local source/retrieval/evidence data and the managed Evidence Pack storage path, stays deterministic and path-safe, and does not add network access, model/runtime/LLM behavior, or answer generation.
 Phase 118.0 adds a backend-only PDF Text Extraction MVP. It supports local PDFs when a text layer is present, preserves page-level locators, reuses the existing extraction-report / source-registry / corpus-layout contracts, and stays OCR-free and preview-only. It does not add OCR, web requests, scraping, downloads, connectors, source import, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
+Phase 119.0 adds a frontend-first first-run source import readiness UI. It surfaces the empty local-source state with concise next-step guidance and supported-source notes, including PDF text-layer extraction support, and it stays guidance-only. It does not add a drag-and-drop import flow, automatic source import, OCR, web requests, scraping, downloads, connectors, source import behavior, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
