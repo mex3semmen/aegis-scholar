@@ -305,17 +305,24 @@ button:disabled {
   scroll-margin-top: 1rem;
 }
 
-.app-shell[data-active-workspace="scholar_chat"] .workspace-content > [data-workspace]:not([data-workspace="scholar_chat"]),
-.app-shell[data-active-workspace="sources"] .workspace-content > [data-workspace]:not([data-workspace="sources"]),
-.app-shell[data-active-workspace="evidence_packs"] .workspace-content > [data-workspace]:not([data-workspace="evidence_packs"]),
-.app-shell[data-active-workspace="developer_diagnostics"] .workspace-content > [data-workspace]:not([data-workspace="developer_diagnostics"]) {
+.workspace-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.app-shell[data-active-workspace="scholar_chat"] .workspace-content > .workspace-stack > [data-workspace]:not([data-workspace="scholar_chat"]),
+.app-shell[data-active-workspace="sources"] .workspace-content > .workspace-stack > [data-workspace]:not([data-workspace="sources"]),
+.app-shell[data-active-workspace="evidence_packs"] .workspace-content > .workspace-stack > [data-workspace]:not([data-workspace="evidence_packs"]),
+.app-shell[data-active-workspace="developer_diagnostics"] .workspace-content > .workspace-stack > [data-workspace]:not([data-workspace="developer_diagnostics"]) {
   display: none;
 }
 
-.app-shell[data-active-workspace="scholar_chat"] .workspace-content > [data-workspace="scholar_chat"],
-.app-shell[data-active-workspace="sources"] .workspace-content > [data-workspace="sources"],
-.app-shell[data-active-workspace="evidence_packs"] .workspace-content > [data-workspace="evidence_packs"],
-.app-shell[data-active-workspace="developer_diagnostics"] .workspace-content > [data-workspace="developer_diagnostics"] {
+.app-shell[data-active-workspace="scholar_chat"] .workspace-content > .workspace-stack > [data-workspace="scholar_chat"],
+.app-shell[data-active-workspace="sources"] .workspace-content > .workspace-stack > [data-workspace="sources"],
+.app-shell[data-active-workspace="evidence_packs"] .workspace-content > .workspace-stack > [data-workspace="evidence_packs"],
+.app-shell[data-active-workspace="developer_diagnostics"] .workspace-content > .workspace-stack > [data-workspace="developer_diagnostics"] {
   display: grid;
 }
 
