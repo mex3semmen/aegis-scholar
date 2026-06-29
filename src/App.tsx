@@ -2574,7 +2574,7 @@ export default function App() {
     return (
       <div class="warning-box">
         <h4>No local sources yet</h4>
-        <p>Register a local source to extract text, create chunks, build retrieval indexes, and later create Evidence Packs.</p>
+        <p>Register a local source to begin the manual pipeline. AEGIS Scholar can then extract text, create chunks, build retrieval indexes, and later create Evidence Packs.</p>
         <div class="contract-meta">
           <div>
             <span>Supported now</span>
@@ -2591,6 +2591,23 @@ export default function App() {
           <li>Check corpus status.</li>
           <li>Then run extraction, chunking, and retrieval.</li>
         </ul>
+      </div>
+    );
+  }
+
+  function renderSourceWorkflowActionHints() {
+    return (
+      <div class="warning-box">
+        <h4>Manual source workflow</h4>
+        <p>Use this path after registering or selecting a source. The app does not automate the pipeline yet.</p>
+        <ol>
+          <li><strong>Register a local source</strong> - Markdown / text notes and PDF text-layer extraction are supported now.</li>
+          <li><strong>Extract text</strong> - scanned PDF OCR is not supported yet.</li>
+          <li><strong>Chunk the source</strong> - keep source locators and provenance intact.</li>
+          <li><strong>Build / inspect retrieval</strong> - preview retrieval candidates and retrieval index health.</li>
+          <li><strong>Build / read Evidence Packs</strong> - where supported by the current source and preview flow.</li>
+        </ol>
+        <p class="muted">Broad PDF ingestion beyond text-layer extraction is not yet supported.</p>
       </div>
     );
   }
@@ -4411,6 +4428,7 @@ export default function App() {
               </ul>
             </>
           )}
+          {scholarChatSourceContext().length > 0 ? renderSourceWorkflowActionHints() : null}
           <p class="muted">{scholarChatSelectedSourceIdsSummary()}</p>
         </div>
         <label>
