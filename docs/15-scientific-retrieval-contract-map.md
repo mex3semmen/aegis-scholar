@@ -24,6 +24,7 @@ User Query
 -> OpenAlex cache/write gate preview
 -> OpenAlex metadata to Evidence Candidate conversion preview
 -> OpenAlex GUI integration readiness contract
+-> Evidence Pack assembly plan preview
 -> future Evidence Pack conversion contract
 -> future Evidence Pack creation
 -> future Literature Review / Final Answer
@@ -102,6 +103,7 @@ Future execution stages:
 | `run_scholar_chat_openalex_metadata_execution_slice` | Executes the consent-gated OpenAlex-only metadata execution slice. | OpenAlex execution panel. | Future execution candidate | OpenAlex only; disabled by default; explicit developer/advanced action; no writes by default. |
 | `preview_scholar_chat_openalex_metadata_cache_write_gate` | Plans cache scope, retention, deduplication, and future record/audit write boundaries from normalized OpenAlex execution output. | OpenAlex cache/write gate preview panel. | GUI-ready preview | No cache writes, no record writes, no audit writes. |
 | `preview_scholar_chat_openalex_evidence_candidate_conversion` | Converts normalized OpenAlex execution records into deterministic evidence-candidate input previews. | OpenAlex evidence candidate conversion panel. | GUI-ready preview | No execution, no writes. |
+| `preview_scholar_chat_evidence_pack_assembly_plan` | Plans future Evidence Pack assembly from deterministic evidence-candidate input previews. | Evidence Pack assembly plan panel. | GUI-ready preview | No Evidence Pack creation, no citations, no writes. |
 
 ### OpenAlex GUI integration readiness
 
@@ -110,6 +112,7 @@ Phase 114.0 adds the first frontend read-only OpenAlex metadata panel scaffold. 
 Phase 114.1 hardens the read-only OpenAlex panel boundaries. It keeps only provider request preview wired, keeps execution and cache/write unwired, adds a visible boundary checklist, and does not add any backend, dependency, or product behavior.
 Phase 115.0 is a backend-only OpenAlex metadata to Evidence Candidate conversion preview. It composes the normalized OpenAlex metadata result contract, derives deterministic candidate-input previews, stays preview-only and in-memory, and does not add execution, cache/write, Evidence Pack, citation, Literature Review, answer, retrieval, runtime, or LLM behavior.
 Phase 115.1 hardens the conversion preview boundary with guard tests for command surface, safety flags, deterministic caps/order, and no output leakage. It adds no new command and no behavior beyond guards.
+Phase 116.0 is a backend-only Evidence Candidate to Evidence Pack Assembly Plan Preview. It composes the OpenAlex Evidence Candidate conversion preview and only plans later pack-item selection, ordering, grouping, caps, skips, and readiness boundaries. It stays preview-only and in-memory, and does not add Evidence Pack creation, citations, writes, retrieval execution, provider expansion, model/runtime/LLM behavior, or answer generation.
 
 Reference:
 
