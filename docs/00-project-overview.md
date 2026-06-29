@@ -1,16 +1,14 @@
 # 00 - Project Overview
 
-## What AEGIS Scholar is
-
 AEGIS Scholar is a Windows-first, local-first academic knowledge workspace for source-grounded retrieval, evidence planning, provenance, and long-term project memory.
 
-## Target product vision
+The repository already provides source registration and Source Registry management, extraction and chunking, retrieval and Evidence Pack contracts, PDF text-layer extraction, and preview-first Scholar Chat and scientific retrieval surfaces with read-only diagnostics and guarded execution slices.
 
-The intended product is a disciplined local knowledge system for scientific work. It should support Scholar Chat, source-grounded evidence workflows, academic writing support, course study, and later broader scientific workflows.
+It is not yet a finished chat product or a broad ingestion / answer-generation system. OCR, polished import UX, and production automation remain future work.
 
 ## Current implementation status
 
-The repository is past the foundational phase and has working backend contracts for source handling, extraction, chunking, retrieval, evidence artifacts, and several preview surfaces.
+The repository is past the foundational phase and has working backend contracts for source handling, extraction, chunking, retrieval, evidence artifacts, answer-artifact contracts, and several preview surfaces.
 
 ## Current user-facing reality
 
@@ -18,10 +16,10 @@ Today the app is still not a finished chat product.
 
 What users can realistically expect is:
 
-- local source registration and source registry workflows
+- local source registration and Source Registry workflows
 - extraction and chunking support for local corpus material
-- retrieval and evidence-pack related backend contracts
-- preview-heavy Scholar Chat and scientific retrieval surfaces
+- retrieval, evidence, and answer-artifact backend contracts
+- preview-first Scholar Chat and scientific retrieval surfaces
 - first-run guidance for empty or not-yet-populated local corpora
 - PDF text-layer extraction support when a text layer exists
 - manual, guided workflow hints for the register -> extract -> chunk -> retrieval -> Evidence Pack path
@@ -35,15 +33,16 @@ Backend capabilities currently include:
 - extraction report handling and locator preservation
 - chunk generation and retrieval artifact contracts
 - Evidence Pack storage and preview/planning support
+- answer-artifact contracts and inspectors
 - preview and gated execution surfaces for scientific metadata workflows
 - guarded OpenAlex-only metadata execution as a narrow slice
-- local runtime and model boundary scaffolding for later phases
+- local runtime / LLM boundary scaffolding for later phases
 
 ## What is deliberately preview-only
 
 Several areas are intentionally not full product workflows yet:
 
-- Scholar Chat planning and execution gating
+- Scholar Chat planning and execution-gate surfaces
 - scientific retrieval planning
 - metadata connector planning
 - Evidence Pack assembly planning
@@ -60,7 +59,7 @@ AEGIS Scholar does not yet provide:
 - OCR
 - broad PDF ingestion beyond text-layer extraction
 - semantic/vector retrieval as the main product workflow
-- final answer generation as a production workflow
+- a finished answer-generation workflow
 - automatic agent execution
 - general-purpose coding-agent behavior
 - broad model-runtime integration
@@ -90,4 +89,3 @@ Then use the older architecture and contract docs for detail:
 3. continue tightening Scholar Chat planner/gate behavior as preview-only until execution is ready
 4. improve diagnostics and source-oriented orientation for new contributors
 5. keep the docs synchronized with phase and capability changes
-

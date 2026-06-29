@@ -9,18 +9,18 @@ It is a controlled scientific retrieval pipeline for disciplined local-first wor
 - source selection
 - query planning
 - local and external evidence planning
-- evidence pack preparation
+- Evidence Pack preparation
 - Scholar Chat support
 - Scientific Paper Mode support
 - Course Mode support
 
-The architecture is designed to support preview-first rollout phases before any execution or answer-writing behavior is enabled.
+The architecture is designed to support preview-first rollout phases before any broader execution or answer-writing behavior is enabled.
 
 For a compact external orientation layer, see `docs/01-architecture-overview.md` and `docs/00-project-overview.md`.
 
 ## Current State
 
-The current system is a mixed preview / execution stack:
+The current system is a mixed preview / guarded execution / diagnostic stack:
 
 - implemented as preview / planning / DTO surface:
   - scientific query understanding preview
@@ -29,14 +29,17 @@ The current system is a mixed preview / execution stack:
   - local literature index preview
   - course literature registry preview
   - metadata connector preview surfaces
-  - scientific evidence pack preview
-  - scientific paper mode literature review preview
+  - Scientific Evidence Pack preview
+  - Scientific Paper Mode literature review preview
   - scientific metadata execution boundary, provider config, query plan, and provider request previews
   - OpenAlex evidence-candidate conversion preview
   - Evidence Pack assembly plan preview
 - implemented as limited execution:
   - guarded OpenAlex-only metadata execution slice
   - normalized OpenAlex metadata result contract for GUI and later planning
+- implemented as answer-artifact contracts and inspectors:
+  - answer draft, grounded answer, and final answer contract surfaces
+  - answer artifact overview, health, issue, and export bundle diagnostics
 - not implemented as production execution:
   - broad provider execution
   - automatic literature search
@@ -51,8 +54,8 @@ The current system is a mixed preview / execution stack:
   - BM25 retrieval
   - vector retrieval
   - retrieval-driven answer synthesis
-- not implemented as answer generation:
-  - answer generation
+- not implemented as production answer generation:
+  - finished answer-generation workflow
   - citation emission
   - Literature Review creation
 
@@ -89,9 +92,10 @@ User query
 → External metadata search plan
 → Ranking / deduplication plan
 → Evidence Pack plan
-→ Scholar Chat / Scientific Paper Mode / Course Mode response
+→ Scholar Chat / Scientific Paper Mode / Course Mode response surface
 
 Early phases remain preview-only until explicitly changed.
+Diagnostics are exposed because many of these contracts are intentionally inspectable before automation is enabled.
 
 ## Discipline Graph
 
