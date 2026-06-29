@@ -1584,6 +1584,7 @@ Phase 113.0 is a docs-only OpenAlex Metadata GUI Integration Readiness Contract.
 Phase 114.0 adds a read-only OpenAlex metadata GUI scaffold. It surfaces `preview_scholar_chat_scientific_metadata_provider_request` in a developer / advanced panel, keeps execution and cache/write as diagnostics only, and does not add a write button, provider execution, writes, Evidence Pack creation, Literature Review creation, answer generation, or provider expansion.
 Phase 114.1 is frontend/docs guard hardening for the read-only OpenAlex panel. It clarifies that only the provider request preview is wired, keeps execution and cache/write unwired, and adds no backend, dependency, or product behavior.
 Phase 115.0 is a backend-only OpenAlex metadata to Evidence Candidate conversion preview. It composes the normalized OpenAlex metadata result contract, derives deterministic candidate-input previews, stays preview-only and in-memory, and does not add execution, cache/write, Evidence Pack, citation, Literature Review, answer, retrieval, runtime, or LLM behavior.
+Phase 115.1 hardens the OpenAlex Evidence Candidate conversion preview with guard tests for command surface, safety flags, deterministic caps/order, and no output leakage. It remains backend/docs only and does not add frontend, dependencies, provider execution, writes, Evidence Pack/citations/answers, retrieval, runtime, or LLM behavior.
 
 ## Phase 11 — Obsidian Export
 
