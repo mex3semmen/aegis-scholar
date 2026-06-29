@@ -78,6 +78,8 @@ The next implementation sequence should be:
 4. Phase 131: Evidence Pack workspace MVP
 5. Phase 132: Developer diagnostics mode
 
+Phase 128 now exists as the app shell/navigation skeleton. Scholar Chat is the default workspace, while Sources, Evidence Packs, and Developer Diagnostics remain available as secondary areas.
+
 ## Acceptance Criteria For Future UX Work
 
 Future UX work should satisfy these checks:
