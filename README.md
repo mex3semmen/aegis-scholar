@@ -4,22 +4,24 @@
 
 AEGIS Scholar is a Windows-first, local-first academic Scholar Chat workspace for source-grounded retrieval, evidence planning, provenance, and long-term project memory.
 
+Project knowledge base: `docs/00-project-overview.md`, `docs/01-architecture-overview.md`, `docs/02-phase-index.md`, and `docs/03-github-wiki-outline.md`.
+
 ## Current implementation status
 
-AEGIS Scholar currently emphasizes preview-heavy Scholar Chat and Scientific Retrieval surfaces. The app has read-only diagnostic panels, preview contracts, and a narrow set of consent-gated execution slices, but it is not yet a finished product chat app.
+AEGIS Scholar currently emphasizes preview-first Scholar Chat and Scientific Retrieval surfaces. The app has read-only diagnostic panels, preview contracts, and a narrow set of consent-gated execution slices, but it is not yet a finished product chat app.
 
 Implemented or visible today:
 
-- local corpus, source registry, retrieval, evidence, and answer-artifact contracts
-- preview-heavy Scholar Chat and Scientific Retrieval planning surfaces
+- local corpus, Source Registry, retrieval, evidence, and answer-artifact contracts
+- preview-first Scholar Chat and Scientific Retrieval planning surfaces
 - OpenAlex-only metadata execution as a guarded execution slice
 - Phase 116 backend-only Evidence Pack Assembly Plan Preview
 - local PDF text-layer extraction MVP with page-level locators
 - first-run source import readiness guidance for empty local corpora
 - source workflow action hints for the manual register -> extract -> chunk -> retrieval -> Evidence Pack path
-- chat-first Scholar Chat agentic workflow planning preview
-- consent-gated Scholar Chat execution readiness preview for later workflow steps
-- runtime diagnostic previews and execution candidates for developer use
+- Scholar Chat agentic workflow planning preview
+- Scholar Chat execution-gate preview for later workflow steps
+- runtime diagnostic previews and guarded execution candidates for developer use
 
 ## What AEGIS Scholar is
 
@@ -38,7 +40,7 @@ AEGIS Scholar is not yet a finished product chat app.
 
 It does not yet provide:
 
-- full answer generation as the primary product workflow
+- a finished answer-generation workflow
 - semantic/vector retrieval as the main product workflow
 - scanned PDF OCR or broad PDF ingestion beyond text-layer extraction
 - a finished source import wizard or drag-and-drop import flow
@@ -53,7 +55,7 @@ AEGIS Scholar is:
 
 - local-first and source-grounded
 - designed around Corpus Authority, source identity, locators, and provenance
-- preview-heavy today, with read-only diagnostics and narrow guarded execution slices
+- preview-first today, with read-only diagnostics and narrow guarded execution slices
 - intended to support Scholar Chat, Scientific Paper Mode, Course Mode, and later MINT expansion
 
 AEGIS Scholar is not:

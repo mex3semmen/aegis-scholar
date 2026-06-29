@@ -12,7 +12,7 @@ The UI is not a general shell. It should only call Tauri commands.
 
 ## Tauri command boundary
 
-All authority-bearing actions flow through Tauri commands. This boundary is where the frontend requests:
+All authority-bearing actions flow through Tauri commands. This boundary is where the frontend asks for:
 
 - source registration
 - metadata updates
@@ -27,7 +27,7 @@ The frontend must not bypass Rust for filesystem authority, source identity, or 
 The Rust backend is the authority and workflow layer. The main module families currently include:
 
 - corpus authority
-- source registry
+- Source Registry
 - source metadata
 - path validation
 - extraction
@@ -37,7 +37,7 @@ The Rust backend is the authority and workflow layer. The main module families c
 - locators
 - audit
 - local runtime supervision scaffolding
-- scholar chat planner/gate previews
+- Scholar Chat planner and execution-gate previews
 
 ## Source registry
 
@@ -82,7 +82,7 @@ It exists to support disciplined search and ranking over registered local materi
 
 Evidence Packs are source-grounded bundles prepared before synthesis.
 
-They are part of the evidence pipeline, not the final answer layer.
+They are preparatory artifacts, not the final answer layer.
 
 ## Scholar Chat planner and gate previews
 
@@ -95,17 +95,19 @@ These components:
 - remain non-executing
 - do not claim automatic orchestration
 
-## Runtime / LLM boundary
+These surfaces are inspectable diagnostics, not autonomous execution.
+
+## Local runtime / LLM boundary
 
 Model runtime and local LLM execution are later concerns.
 
-The architecture keeps the runtime boundary separate from authority, retrieval, and evidence preparation. The model may reason over curated local context, but it is not the source of truth.
+The architecture keeps the local runtime / LLM boundary separate from authority, retrieval, and evidence preparation. The model may reason over curated local context, but it is not the source of truth.
 
 ## Diagnostics vs product workflow
 
 The repository contains both diagnostic surfaces and product-flow surfaces.
 
-Diagnostics are useful for developers and reviewers, but they are not the final user experience.
+Diagnostics exist because many contracts are intentionally inspectable before automation. They are useful for developers and reviewers, but they are not the final user experience.
 
 ## Data and write boundaries
 
@@ -122,8 +124,7 @@ Key boundaries:
 This repository uses preview, gate, and execution language deliberately.
 
 - preview means the system is planning or describing a future action
-- gate means the system is deciding whether a future action is allowed or needs consent
+- gate means the system is deciding whether a future action is allowed, blocked, or needs consent
 - execution means the action actually happens
 
 That distinction should stay visible in documentation and in the product surface.
-

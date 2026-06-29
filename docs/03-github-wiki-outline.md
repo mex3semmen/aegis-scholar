@@ -1,6 +1,8 @@
 # 03 - GitHub Wiki Outline
 
-This is a proposed GitHub Wiki structure for external reviewers and collaborators.
+This is a proposed GitHub Wiki structure for external reviewers, collaborators, and future wiki editors.
+
+Repo docs remain the source of truth; the wiki is a later mirror, not a separate spec.
 
 ## Wiki Home
 
@@ -16,7 +18,7 @@ This is a proposed GitHub Wiki structure for external reviewers and collaborator
 
 ## Current Capabilities
 
-- Purpose: describe what works today and what is intentionally preview-only
+- Purpose: describe what works today, what is preview-only, and what is still gated
 - Mirror from: `docs/00-project-overview.md`, `docs/02-phase-index.md`
 - Audience: user-facing
 
@@ -40,13 +42,13 @@ This is a proposed GitHub Wiki structure for external reviewers and collaborator
 
 ## Scholar Chat
 
-- Purpose: summarize the chat-first workflow, planner preview, and current limitations
+- Purpose: summarize the chat-first workflow, planner preview, execution gate, and current limitations
 - Mirror from: `docs/12-roadmap.md`, `docs/13-scientific-retrieval-architecture.md`
 - Audience: user-facing
 
 ## Source Handling
 
-- Purpose: explain source identity, metadata validation, hashing, and registry rules
+- Purpose: explain Source Registry identity, metadata validation, hashing, and registry rules
 - Mirror from: `docs/03-corpus-authority.md`, `docs/07-ingestion-locators.md`
 - Audience: maintainer-facing
 
@@ -58,11 +60,11 @@ This is a proposed GitHub Wiki structure for external reviewers and collaborator
 
 ## Evidence Packs
 
-- Purpose: explain the evidence bundle contract and how it relates to answers
+- Purpose: explain the Evidence Pack contract and how it relates to answers
 - Mirror from: `docs/10-literature-rag-evidence.md`, `docs/01-architecture-overview.md`
 - Audience: developer-facing
 
-## Runtime / LLM Boundary
+## Local Runtime / LLM Boundary
 
 - Purpose: document the separation between local authority, runtime supervision, and model execution
 - Mirror from: `docs/01-architecture-overview.md`, `docs/02-target-architecture.md`
@@ -91,4 +93,3 @@ This is a proposed GitHub Wiki structure for external reviewers and collaborator
 Repo docs remain the source of truth.
 
 The GitHub Wiki can be manually populated from these docs now, or synced later if the documentation process is formalized.
-
