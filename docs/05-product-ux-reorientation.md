@@ -78,7 +78,7 @@ The next implementation sequence should be:
 4. Phase 131: Evidence Pack workspace MVP
 5. Phase 132: Developer diagnostics mode
 
-Phase 128 now exists as the app shell/navigation skeleton. Phase 129.1 is the focused workspace-rendering polish pass that turns the shell from dashboard-like navigation into workspace-specific rendering. Scholar Chat is the primary conversational workspace, and Sources, Evidence Packs, and Developer Diagnostics remain secondary areas.
+Phase 128 now exists as the app shell/navigation skeleton. Phase 129.1 is the focused workspace-rendering polish pass that turns the shell from dashboard-like navigation into workspace-specific rendering. Phase 130.0 is the chat product surface refinement pass that makes Scholar Chat feel more assistant-like while keeping preview and gate behavior intact. Scholar Chat is the primary conversational workspace, and Sources, Evidence Packs, and Developer Diagnostics remain secondary areas.
 
 ## Acceptance Criteria For Future UX Work
 

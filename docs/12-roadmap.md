@@ -15,6 +15,7 @@ This roadmap now has a clear split between implemented foundations, preview-firs
 | Current Phase 128.0 | app shell / navigation skeleton |
 | Current Phase 129.0 | chat-first UX polish |
 | Current Phase 129.1 | focused workspace rendering refinement |
+| Current Phase 130.0 | chat product surface refinement |
 | Known missing product workflows | actual source import wizard, scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 | Recommended next product slices | actual source import wizard, scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 
@@ -26,6 +27,7 @@ Phase 127.0 is the docs-only product UX reorientation plan on the current featur
 Phase 128.0 is the frontend-only app shell/navigation skeleton. It makes Scholar Chat the default workspace, keeps Sources, Evidence Packs, and Developer Diagnostics accessible, and does not change backend behavior.
 Phase 129.0 is the frontend-only chat-first UX polish pass. It makes the Scholar Chat composer more central, keeps previews and gates intact, and does not add backend behavior.
 Phase 129.1 is the frontend-only focused workspace-rendering refinement. It replaces long default scrolling with active workspace rendering while keeping preview and diagnostic functionality reachable.
+Phase 130.0 is the frontend-only chat product surface refinement. It makes Scholar Chat feel more assistant-like, keeps preview and gate behavior intact, and keeps diagnostics secondary.
 Phase 116 remains backend-only, preview-only, and in-memory. It does not add Evidence Pack creation, citations, writes, retrieval execution, provider expansion, runtime/model/LLM behavior, or answer generation.
 Phase 117.0 adds a backend-only Local Evidence Pack Creation MVP. It uses existing local source/retrieval/evidence data and managed Evidence Pack storage, stays deterministic and path-safe, and does not add network access, model/runtime/LLM behavior, or answer generation.
 Phase 118.0 adds a backend-only PDF Text Extraction MVP. It supports local PDFs when a text layer is present, preserves page-level locators, reuses the existing extraction-report / source-registry / corpus-layout contracts, and stays OCR-free and preview-only. It does not add OCR, web requests, scraping, downloads, connectors, source import, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
