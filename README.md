@@ -2,23 +2,53 @@
 
 **AEGIS = Agentic Evidence & Grounded Intelligence System**
 
-AEGIS Scholar is a Windows-first, local-first academic Scholar Chat workspace for literature memory, discipline-grounded RAG, evidence packs, study workflows, scientific writing support, statistics/method support and long-term academic project memory.
+AEGIS Scholar is a Windows-first, local-first academic Scholar Chat workspace for source-grounded retrieval, evidence planning, provenance, and long-term project memory.
 
-This repository contains the **v0.7 Research Foundation Edition** plus an evolving Tauri v2, Solid/Vite and Rust foundation. The current app still exposes many read-only diagnostic surfaces, but the v1 product target is a ChatGPT/Claude/Codex-like academic prompt workspace grounded in local sources.
+## Current implementation status
+
+AEGIS Scholar currently emphasizes preview-heavy Scholar Chat and Scientific Retrieval surfaces. The app has read-only diagnostic panels, preview contracts, and a narrow set of consent-gated execution slices, but it is not yet a finished product chat app.
+
+Implemented or visible today:
+
+- local corpus, source registry, retrieval, evidence, and answer-artifact contracts
+- preview-heavy Scholar Chat and Scientific Retrieval planning surfaces
+- OpenAlex-only metadata execution as a guarded execution slice
+- Phase 116 backend-only Evidence Pack Assembly Plan Preview
+- runtime diagnostic previews and execution candidates for developer use
+
+## What AEGIS Scholar is
+
+- a local academic Scholar Chat workspace
+- a literature memory and source-grounded retrieval system
+- a prompt interface over registered local sources, retrieval planning, evidence planning, and provenance
+- a modular skill system for academic workflows
+- a discipline system for psychology, statistics, mathematics, and later broader MINT domains
+- a Tauri v2 + Rust authority desktop app
+- a Solid 1.x + Vite desktop UI
+- a local model runtime path for later phases, behind explicit boundary gates
+
+## What it is not yet
+
+AEGIS Scholar is not yet a finished product chat app.
+
+It does not yet provide:
+
+- full answer generation as the primary product workflow
+- semantic/vector retrieval as the main product workflow
+- PDF extraction MVP
+- finished Evidence Pack creation
+- citation emission
+- local LLM inference as a product workflow
+- share/export workflows unless explicitly documented as implemented elsewhere
 
 ## Product stance
 
 AEGIS Scholar is:
 
-- a local academic Scholar Chat workspace
-- a literature memory and source-grounded RAG system
-- a prompt interface over registered local sources, retrieval, evidence packs and provenance
-- a modular skill system for academic workflows
-- a discipline system for psychology, statistics, mathematics and later broader MINT domains
-- a Tauri v2 + Rust authority desktop app
-- a Solid 1.x + Vite desktop UI
-- a llama.cpp-controlled local model runtime later
-- a corpus, skill, retrieval, evidence and audit system under `.aegis/`
+- local-first and source-grounded
+- designed around Corpus Authority, source identity, locators, and provenance
+- preview-heavy today, with read-only diagnostics and narrow guarded execution slices
+- intended to support Scholar Chat, Scientific Paper Mode, Course Mode, and later MINT expansion
 
 AEGIS Scholar is not:
 
@@ -31,7 +61,7 @@ AEGIS Scholar is not:
 - a hidden autonomous execution layer
 - a self-trained universal science LLM
 
-AEGIS may support code only where code is part of scientific work: statistics scripts, reproducible analysis, teaching examples, notebooks or documentation.
+AEGIS may support code only where code is part of scientific work: statistics scripts, reproducible analysis, teaching examples, notebooks, or documentation.
 
 ## Core architecture rule
 
@@ -39,9 +69,9 @@ AEGIS may support code only where code is part of scientific work: statistics sc
 selected context -> prompt -> source registry -> extraction -> chunks -> retrieval -> evidence pack -> grounded answer or skill output
 ```
 
-The model must not answer from anonymous context blobs when external or uploaded material is involved. Scientific output must keep source identity, locators and evidence provenance.
+The model must not answer from anonymous context blobs when external or uploaded material is involved. Scientific output must keep source identity, locators, and evidence provenance.
 
-Local memory is not model training. It is a curated local corpus and project memory used for retrieval, evidence packs and source grounding. The LLM is a reasoning and formulation engine, not the source of truth for scientific claims.
+Local memory is not model training. It is a curated local corpus and project memory used for retrieval, evidence packs, and source grounding. The LLM is a reasoning and formulation engine, not the source of truth for scientific claims.
 
 Default answer policy:
 
@@ -55,11 +85,11 @@ Default answer policy:
 ## Non-negotiables
 
 1. Scientific claims based on sources must be source-grounded.
-2. Corpus Authority owns source identity, metadata, versions, locators and ingestion state.
+2. Corpus Authority owns source identity, metadata, versions, locators, and ingestion state.
 3. Skills are declarative contracts, not hidden prompt dumps.
 4. Retrieval is a separate plane behind adapters.
 5. Evidence Packs are created before synthesis for source-grounded answers.
-6. Rust owns local authority later: filesystem, source registry, audit, process supervision and safe mutation.
+6. Rust owns local authority later: filesystem, source registry, audit, process supervision, and safe mutation.
 7. Frontend never executes shell commands directly.
 8. Workspace automation is a support layer, not the product core.
 9. Pi remains an external developer tool.
@@ -90,6 +120,18 @@ If you are trying to orient yourself quickly:
 - retrieval and evidence packs: `docs/06-retrieval-architecture.md`, `docs/10-literature-rag-evidence.md`
 - current roadmap and closed review blocks: `docs/12-roadmap.md`
 
+## Developer verification
+
+Use the script when you want the standard local checks:
+
+```text
+scripts/verify.ps1
+scripts/verify.ps1 -Fast
+scripts/verify.ps1 -BackendOnly
+```
+
+The script runs the same verification chain used by CI.
+
 Standard verification:
 
 ```text
@@ -101,21 +143,16 @@ cargo check --manifest-path .\src-tauri\Cargo.toml
 git diff --check
 ```
 
-You can run the same checks with `scripts/verify.ps1`.
-Modes: `scripts/verify.ps1 -Fast` or `scripts/verify.ps1 -BackendOnly`.
-GitHub Actions runs the same runner on push and pull_request.
-You can launch it from the repo root or from another directory by using the script path.
-
-Closed contract areas:
+## Closed contract areas
 
 - export bundle inspector stack
 - answer/evidence contract hardening
 - retrieval/evidence-pack review block
 - source/chunk metadata review slice
 
-Current product direction:
+## Current direction
 
-- Scholar Chat request contract and chat shell work, using existing local-first retrieval and evidence boundaries
+Current product work emphasizes Scholar Chat request contracts, preview-heavy scientific retrieval surfaces, and narrow guarded execution slices, while keeping local-first retrieval, evidence planning, and path-free diagnostics intact.
 
 ## Initial skills
 
@@ -155,4 +192,4 @@ Use:
 prompts/codex-phase-1-corpus-authority.md
 ```
 
-Near-term product work should move toward a Scholar Chat request contract and shell while preserving source identity, local-first retrieval, evidence packs and path-free diagnostics. It must not implement model runtime, embeddings, answer synthesis, browser automation, Pi/MCP integration or coding-agent behavior until those phases are explicitly selected.
+Near-term product work should move toward a Scholar Chat request contract and shell while preserving source identity, local-first retrieval, evidence packs, and path-free diagnostics. It must not implement model runtime, embeddings, answer synthesis, browser automation, Pi/MCP integration, or coding-agent behavior until those phases are explicitly selected.

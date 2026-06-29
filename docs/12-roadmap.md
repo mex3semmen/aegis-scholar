@@ -1,5 +1,21 @@
 # 12 — Roadmap
 
+## Status overview
+
+This roadmap now has a clear split between implemented foundations, preview-heavy product shells, guarded execution slices, and later product workflows.
+
+| Area | Current status |
+| --- | --- |
+| Completed foundations | corpus authority, source registry, extraction, chunking, retrieval, evidence packs, skills, and answer-artifact inspectors |
+| Diagnostic / preview-heavy product shell | Scholar Chat and Scientific Retrieval preview surfaces, read-only diagnostics, and contract previews |
+| Runtime diagnostics | local runtime health, invocation planning, capability, probe-readiness, smoke-readiness, and developer bridge/result/pipeline-gate previews |
+| OpenAlex metadata execution slice | guarded OpenAlex-only execution slice plus normalized result, cache/write gate, evidence-candidate conversion, and assembly-plan previews |
+| Current Phase 116 | backend-only Evidence Candidate to Evidence Pack Assembly Plan Preview |
+| Known missing product workflows | Local Evidence Pack creation MVP, PDF text extraction MVP, first-run source import flow, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
+| Recommended next product slices | Local Evidence Pack creation MVP, PDF text extraction MVP, first-run source import flow, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
+
+Phase 116 remains backend-only, preview-only, and in-memory. It does not add Evidence Pack creation, citations, writes, retrieval execution, provider expansion, runtime/model/LLM behavior, or answer generation.
+
 ## Phase 0 — Documentation baseline
 
 Status: done.
