@@ -75,6 +75,7 @@ Later execution stages:
 | Command | Current role | Intended GUI usage | Status | No-op boundary summary |
 | --- | --- | --- | --- | --- |
 | `preview_scholar_chat_request` | Normalizes prompt, mode, grounding policy, and selected source context. | Main Scholar Chat entry preview. | GUI-ready preview | No generation, retrieval execution, or writes. |
+| `preview_scholar_chat_agentic_workflow_plan` | Classifies chat prompt intent into a local workflow plan and next steps. | Chat-first workflow planner. | GUI-ready preview | No execution or writes. |
 | `preview_scholar_chat_answer_readiness` | Explains whether a future answer path could proceed. | Readiness panel. | GUI-ready preview | No answer generation; diagnostic only. |
 | `preview_scholar_chat_draft_inference` | Describes the draft-inference boundary. | Advanced diagnostic panel. | GUI-ready preview | No runtime execution or model calls. |
 | `preview_scholar_chat_draft_grounding_inspection` | Inspects draft text against local evidence. | Draft grounding inspection panel. | GUI-ready preview | No grounded answer, Evidence Pack, or persistence. |

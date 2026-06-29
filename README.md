@@ -17,6 +17,7 @@ Implemented or visible today:
 - local PDF text-layer extraction MVP with page-level locators
 - first-run source import readiness guidance for empty local corpora
 - source workflow action hints for the manual register -> extract -> chunk -> retrieval -> Evidence Pack path
+- chat-first Scholar Chat agentic workflow planning preview
 - runtime diagnostic previews and execution candidates for developer use
 
 ## What AEGIS Scholar is

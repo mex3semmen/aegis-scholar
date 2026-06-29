@@ -77,6 +77,45 @@ type ScholarChatResponse = {
   warnings: string[];
 };
 
+type ScholarChatAgenticWorkflowPlanStatus = "blocked" | "needs_review" | "plan_ready_later";
+
+type ScholarChatAgenticWorkflowIntent =
+  | "source_registration_needed"
+  | "extract_text"
+  | "chunk_source"
+  | "build_or_inspect_retrieval"
+  | "build_evidence_pack"
+  | "inspect_evidence_pack"
+  | "ask_local_sources"
+  | "explain_blocker"
+  | "unknown_or_unsupported";
+
+type ScholarChatAgenticWorkflowPlanPreview = {
+  status: ScholarChatAgenticWorkflowPlanStatus;
+  recognized_intent: ScholarChatAgenticWorkflowIntent;
+  normalized_prompt: string;
+  mode: ScholarChatMode;
+  grounding_policy: GroundingPolicy;
+  selected_source_ids: string[];
+  selected_source_count: number;
+  required_local_context: string[];
+  planned_steps: string[];
+  blockers: string[];
+  warnings: string[];
+  next_required_actions: string[];
+  summary: string;
+  execution_allowed: boolean;
+  preview_only: boolean;
+  no_runtime_execution: boolean;
+  no_llm_call: boolean;
+  no_answer_generated: boolean;
+  no_evidence_pack_built: boolean;
+  no_persistence: boolean;
+  no_artifact_write: boolean;
+  no_registry_status_change: boolean;
+  no_audit_write: boolean;
+};
+
 type ScholarChatRetrievalCandidate = {
   source_id: string;
   version_id: string;
@@ -1942,7 +1981,7 @@ export default function App() {
   const [scholarChatPrompt, setScholarChatPrompt] = createSignal("");
   const [scholarChatMode, setScholarChatMode] = createSignal<ScholarChatMode>("lecture_learning");
   const [scholarChatGroundingPolicy, setScholarChatGroundingPolicy] = createSignal<GroundingPolicy>("local_first");
-  const [scholarChatPreview, setScholarChatPreview] = createSignal<ScholarChatResponse | null>(null);
+  const [scholarChatPreview, setScholarChatPreview] = createSignal<ScholarChatAgenticWorkflowPlanPreview | null>(null);
   const [scholarChatError, setScholarChatError] = createSignal<string | null>(null);
   const [scholarChatValidationError, setScholarChatValidationError] = createSignal<string | null>(null);
   const [scholarChatLoading, setScholarChatLoading] = createSignal(false);
@@ -2597,9 +2636,9 @@ export default function App() {
 
   function renderSourceWorkflowActionHints() {
     return (
-      <div class="warning-box">
-        <h4>Manual source workflow</h4>
-        <p>Use this path after registering or selecting a source. The app does not automate the pipeline yet.</p>
+      <details class="muted">
+        <summary>Manual source workflow hints</summary>
+        <p>Use this help text after registering or selecting a source. The chat workflow plan above remains the primary entry point.</p>
         <ol>
           <li><strong>Register a local source</strong> - Markdown / text notes and PDF text-layer extraction are supported now.</li>
           <li><strong>Extract text</strong> - scanned PDF OCR is not supported yet.</li>
@@ -2607,8 +2646,8 @@ export default function App() {
           <li><strong>Build / inspect retrieval</strong> - preview retrieval candidates and retrieval index health.</li>
           <li><strong>Build / read Evidence Packs</strong> - where supported by the current source and preview flow.</li>
         </ol>
-        <p class="muted">Broad PDF ingestion beyond text-layer extraction is not yet supported.</p>
-      </div>
+        <p>Broad PDF ingestion beyond text-layer extraction is not yet supported.</p>
+      </details>
     );
   }
 
@@ -3038,12 +3077,12 @@ export default function App() {
     await loadFinalAnswerByIds(sourceId().trim(), finalAnswerMetadata.final_answer_id);
   }
 
-  async function previewScholarChatRequest() {
+  async function previewScholarChatAgenticWorkflowPlan() {
     const trimmedPrompt = scholarChatPrompt().trim();
     if (!trimmedPrompt) {
       setScholarChatPreview(null);
       setScholarChatError(null);
-      setScholarChatValidationError("Prompt is required to preview a Scholar Chat request.");
+      setScholarChatValidationError("Prompt is required to preview a Scholar Chat workflow plan.");
       return;
     }
     if (scholarChatLoading()) {
@@ -3054,7 +3093,7 @@ export default function App() {
     setScholarChatValidationError(null);
     setScholarChatPreview(null);
     try {
-      const result = await invoke<ScholarChatResponse>("preview_scholar_chat_request", {
+      const result = await invoke<ScholarChatAgenticWorkflowPlanPreview>("preview_scholar_chat_agentic_workflow_plan", {
         root: ".",
         request: {
           prompt: trimmedPrompt,
@@ -4359,7 +4398,7 @@ export default function App() {
       <section class="card">
         <h2>Scholar Chat</h2>
         <p class="muted">
-          Preview-only request shell for the future local-first Scholar Chat workflow. It can preview grounding plans and retrieval candidates from existing local data, but it does not run answer generation, model calls, or Evidence Pack builds.
+          Preview-only request shell for the future chat-first Scholar Chat workflow. It previews a local workflow plan from the prompt and selected source context, but it does not run answer generation, model calls, or Evidence Pack builds.
         </p>
         <div class="form-row">
           <label>
@@ -4368,8 +4407,10 @@ export default function App() {
               value={scholarChatMode()}
               onChange={(event) => {
                 setScholarChatMode(event.currentTarget.value as ScholarChatMode);
+                setScholarChatPreview(null);
                 clearScholarChatPromptPackPreview();
                 clearScholarChatDraftInferencePreview();
+                clearScholarChatGroundedAnswerBuildIntentPreview();
               }}
             >
               {SCHOLAR_CHAT_MODES.map((item) => (
@@ -4383,8 +4424,10 @@ export default function App() {
               value={scholarChatGroundingPolicy()}
               onChange={(event) => {
                 setScholarChatGroundingPolicy(event.currentTarget.value as GroundingPolicy);
+                setScholarChatPreview(null);
                 clearScholarChatPromptPackPreview();
                 clearScholarChatDraftInferencePreview();
+                clearScholarChatGroundedAnswerBuildIntentPreview();
               }}
             >
               {GROUNDING_POLICIES.map((item) => (
@@ -4396,7 +4439,7 @@ export default function App() {
         <div class="artifact-overview">
           <h3>Source context</h3>
           <p class="muted">
-            Choose Scholar Chat source IDs to scope the preview. Existing diagnostic source selection remains a fallback until you set Scholar Chat context.
+            Choose Scholar Chat source IDs to scope the planner. Existing diagnostic source selection remains a fallback until you set Scholar Chat context.
           </p>
           {scholarChatSourceContextLoading() ? (
             <p>Loading registered sources...</p>
@@ -4410,12 +4453,15 @@ export default function App() {
               <ul class="final-answer-list-items">
                 {scholarChatSourceContext().map((item) => (
                   <li>
-                    <label class="final-answer-list-item">
+            <label class="final-answer-list-item">
                       <span>
                         <input
                           type="checkbox"
                           checked={scholarChatSourceContextSelectedIds().includes(item.source_id)}
-                          onChange={() => toggleScholarChatSourceContext(item.source_id)}
+                          onChange={() => {
+                            toggleScholarChatSourceContext(item.source_id);
+                            setScholarChatPreview(null);
+                          }}
                         />
                         <strong> {item.title || item.source_id}</strong>
                       </span>
@@ -4439,6 +4485,7 @@ export default function App() {
             onInput={(event) => {
               setScholarChatPrompt(event.currentTarget.value);
               setScholarChatValidationError(null);
+              setScholarChatPreview(null);
               clearScholarChatPromptPackPreview();
               clearScholarChatDraftInferencePreview();
               clearScholarChatGroundedAnswerBuildIntentPreview();
@@ -4449,33 +4496,57 @@ export default function App() {
         {scholarChatValidationError() && <p class="error">{scholarChatValidationError()}</p>}
         {scholarChatError() && <p class="error">{scholarChatError()}</p>}
         <div class="hero-actions">
-          <button onClick={previewScholarChatRequest} disabled={scholarChatLoading()}>
-            {scholarChatLoading() ? "Previewing..." : "Preview grounding plan"}
+          <button onClick={previewScholarChatAgenticWorkflowPlan} disabled={scholarChatLoading()}>
+            {scholarChatLoading() ? "Previewing..." : "Preview workflow plan"}
           </button>
         </div>
         {scholarChatPreview() ? (
           <div class="artifact-overview">
-            <h3>Preview result</h3>
+            <h3>Workflow plan</h3>
+            <p class="muted">
+              Chat-first workflow planning preview only. It interprets the prompt as a local action plan and does not execute extraction, chunking, retrieval, Evidence Pack work, or answer generation.
+            </p>
             {renderMetricGrid([
-              { label: "Status", value: scholarChatPreview()!.status },
-              { label: "Mode", value: scholarChatPreview()!.mode },
-              { label: "Grounding policy", value: scholarChatPreview()!.grounding_policy },
+              { label: "Status", value: formatSnakeCaseLabel(scholarChatPreview()!.status) },
+              { label: "Recognized intent", value: formatSnakeCaseLabel(scholarChatPreview()!.recognized_intent) },
               { label: "Selected sources", value: scholarChatPreview()!.selected_source_count },
+              { label: "Execution allowed", value: scholarChatPreview()!.execution_allowed ? "yes" : "no" },
+              { label: "Preview only", value: scholarChatPreview()!.preview_only ? "yes" : "no" },
             ])}
             <p><strong>Prompt:</strong> {scholarChatPreview()!.normalized_prompt}</p>
-            <p>{scholarChatPreview()!.grounding_plan.summary}</p>
+            <p>{scholarChatPreview()!.summary}</p>
             <div class="contract-meta">
-              <div><span>Retrieval would run</span><strong>{scholarChatPreview()!.grounding_plan.retrieval_would_run ? "yes" : "no"}</strong></div>
-              <div><span>Evidence Pack required</span><strong>{scholarChatPreview()!.grounding_plan.evidence_pack_would_be_required ? "yes" : "no"}</strong></div>
-              <div><span>Model knowledge allowed</span><strong>{scholarChatPreview()!.grounding_plan.model_knowledge_allowed ? "yes" : "no"}</strong></div>
-              <div><span>External adapters</span><strong>{scholarChatPreview()!.grounding_plan.external_adapters_available ? "available" : "not available"}</strong></div>
+              <div>
+                <span>Required local context</span>
+                <strong>{scholarChatPreview()!.required_local_context.map((item) => formatSnakeCaseLabel(item)).join(", ") || "none"}</strong>
+              </div>
             </div>
-            <h4>Plan steps</h4>
+            <h4>Planned steps</h4>
             <ul>
-              {scholarChatPreview()!.grounding_plan.steps.map((step) => (
+              {scholarChatPreview()!.planned_steps.map((step) => (
                 <li>{step}</li>
               ))}
             </ul>
+            {scholarChatPreview()!.next_required_actions.length > 0 ? (
+              <div class="warning-box">
+                <h4>Next required actions</h4>
+                <ul>
+                  {scholarChatPreview()!.next_required_actions.map((action) => (
+                    <li>{action}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {scholarChatPreview()!.blockers.length > 0 ? (
+              <div class="warning-box">
+                <h4>Blockers</h4>
+                <ul>
+                  {scholarChatPreview()!.blockers.map((blocker) => (
+                    <li>{blocker}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             {scholarChatPreview()!.warnings.length > 0 ? (
               <div class="warning-box">
                 <h4>Warnings</h4>
@@ -4488,7 +4559,7 @@ export default function App() {
             ) : null}
           </div>
         ) : (
-          <p>No Scholar Chat preview loaded yet.</p>
+          <p>No Scholar Chat workflow plan preview loaded yet.</p>
         )}
         <div class="artifact-overview">
           <h3>Retrieval preview</h3>

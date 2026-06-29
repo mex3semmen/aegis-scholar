@@ -97,6 +97,7 @@ use scholar_chat::{
     run_scholar_chat_openalex_metadata_execution_slice as run_scholar_chat_openalex_metadata_execution_slice_impl,
     preview_scholar_chat_grounded_answer_write_eligibility as preview_scholar_chat_grounded_answer_write_eligibility_impl,
     preview_scholar_chat_request as preview_scholar_chat_request_impl,
+    preview_scholar_chat_agentic_workflow_plan as preview_scholar_chat_agentic_workflow_plan_impl,
     preview_scholar_chat_evidence_plan as preview_scholar_chat_evidence_plan_impl,
     preview_scholar_chat_prompt_pack as preview_scholar_chat_prompt_pack_impl,
     preview_scholar_chat_retrieval as preview_scholar_chat_retrieval_impl,
@@ -115,6 +116,7 @@ use scholar_chat::{
     ScholarChatGroundedAnswerBuildRequestPreviewRequest,
     ScholarChatGroundedAnswerWriteEligibilityPreview,
     ScholarChatGroundedDraftReadinessPreview,
+    ScholarChatAgenticWorkflowPlanPreview,
     ScholarChatRuntimeDiagnosticBridgePreview,
     ScholarChatRuntimeDiagnosticBridgePreviewRequest,
     ScholarChatRuntimeDiagnosticResultPreview,
@@ -366,6 +368,15 @@ fn export_answer_artifacts(root: String, export_root: String) -> Result<AnswerAr
 #[tauri::command]
 fn preview_scholar_chat_request(root: String, request: ScholarChatRequest) -> Result<ScholarChatResponse, String> {
     preview_scholar_chat_request_impl(root, request)
+        .map_err(to_user_error)
+}
+
+#[tauri::command]
+fn preview_scholar_chat_agentic_workflow_plan(
+    root: String,
+    request: ScholarChatRequest,
+) -> Result<ScholarChatAgenticWorkflowPlanPreview, String> {
+    preview_scholar_chat_agentic_workflow_plan_impl(root, request)
         .map_err(to_user_error)
 }
 
@@ -809,6 +820,7 @@ pub fn run() {
             inspect_answer_artifact_export_bundle,
             export_answer_artifacts,
             preview_scholar_chat_request,
+            preview_scholar_chat_agentic_workflow_plan,
             preview_scholar_chat_answer_readiness,
             preview_scholar_chat_draft_inference,
             preview_scholar_chat_draft_grounding_inspection,
