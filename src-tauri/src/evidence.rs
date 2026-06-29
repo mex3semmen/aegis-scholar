@@ -65,22 +65,13 @@ impl EvidenceService {
     }
 
     pub fn build_evidence_pack(&self, source_id: &str, query: &str, max_results: usize) -> AegisResult<EvidencePack> {
-        self.paths.ensure_layout()?;
+        validate_evidence_pack_build_inputs(source_id, query, max_results)?;
+        let registry = SourceRegistry::load(&self.paths.registry_path())?;
+        let record = registry.get_source(source_id)?;
         let result = (|| -> AegisResult<EvidencePack> {
-            if source_id.trim().is_empty() {
-                return Err(AegisError::EvidencePackInputMissing);
-            }
-            if max_results == 0 {
-                return Err(AegisError::EvidencePackInvalidLimit);
-            }
-            if query.trim().is_empty() {
-                return Err(AegisError::EvidencePackQueryEmpty);
-            }
             let retrieval = RetrievalService::new(self.paths.root.clone());
             let response = retrieval.search_source(source_id, query, max_results)?;
             let index = retrieval.read_index(source_id)?;
-            let registry = SourceRegistry::load(&self.paths.registry_path())?;
-            let record = registry.get_source(source_id)?;
             let items = response
                 .results
                 .iter()
@@ -218,6 +209,17 @@ impl EvidenceService {
         let event = AuditEvent::new(event_type, Some(source_id.to_string()), Some(version_id.to_string()), summary);
         append_audit_event(&self.paths.audit_events_path(), &event)
     }
+}
+
+fn validate_evidence_pack_build_inputs(source_id: &str, query: &str, max_results: usize) -> AegisResult<()> {
+    validate_source_id(source_id)?;
+    if max_results == 0 {
+        return Err(AegisError::EvidencePackInvalidLimit);
+    }
+    if query.trim().is_empty() {
+        return Err(AegisError::EvidencePackQueryEmpty);
+    }
+    Ok(())
 }
 
 fn evidence_item_from_result(result: &RetrievalResult) -> EvidenceItem {
@@ -387,6 +389,10 @@ mod tests {
         }
     }
 
+    fn assert_no_corpus_layout(temp: &std::path::Path) {
+        assert!(!temp.join(".aegis").exists());
+    }
+
     #[test]
     fn build_and_read_evidence_pack_round_trip() {
         let temp = tempfile::tempdir().unwrap();
@@ -408,13 +414,46 @@ mod tests {
         let audit = fs::read_to_string(crate::corpus_paths::CorpusPaths::new(temp.path().to_path_buf()).audit_events_path()).unwrap();
         assert!(audit.contains("evidence_pack_built"));
         assert!(audit.lines().all(|line| serde_json::from_str::<serde_json::Value>(line).is_ok()));
+        let debug = format!("{pack:?}");
+        let json = serde_json::to_string_pretty(&pack).unwrap();
+        assert!(!debug.contains(temp.path().to_string_lossy().as_ref()));
+        assert!(!json.contains(temp.path().to_string_lossy().as_ref()));
     }
 
     #[test]
-    fn evidence_pack_rejects_empty_query() {
+    fn evidence_pack_rejects_empty_query_before_filesystem_access() {
         let temp = tempfile::tempdir().unwrap();
         let service = EvidenceService::new(temp.path().to_path_buf());
         assert!(matches!(service.build_evidence_pack("src_demo", "", 1), Err(AegisError::EvidencePackQueryEmpty)));
+        assert_no_corpus_layout(temp.path());
+    }
+
+    #[test]
+    fn evidence_pack_rejects_empty_and_traversal_like_source_ids_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        let service = EvidenceService::new(temp.path().to_path_buf());
+        assert!(matches!(service.build_evidence_pack("", "alpha", 1), Err(AegisError::EvidencePackInputMissing)));
+        assert!(matches!(service.build_evidence_pack("..", "alpha", 1), Err(AegisError::EvidencePackInvalidId)));
+        assert!(matches!(service.build_evidence_pack("../evil", "alpha", 1), Err(AegisError::EvidencePackInvalidId)));
+        assert!(matches!(service.build_evidence_pack("evil/pack", "alpha", 1), Err(AegisError::EvidencePackInvalidId)));
+        assert!(matches!(service.build_evidence_pack("evil\\pack", "alpha", 1), Err(AegisError::EvidencePackInvalidId)));
+        assert_no_corpus_layout(temp.path());
+    }
+
+    #[test]
+    fn evidence_pack_rejects_invalid_limit_before_filesystem_access() {
+        let temp = tempfile::tempdir().unwrap();
+        let service = EvidenceService::new(temp.path().to_path_buf());
+        assert!(matches!(service.build_evidence_pack("src_demo", "alpha", 0), Err(AegisError::EvidencePackInvalidLimit)));
+        assert_no_corpus_layout(temp.path());
+    }
+
+    #[test]
+    fn evidence_pack_rejects_missing_source_without_creating_layout() {
+        let temp = tempfile::tempdir().unwrap();
+        let service = EvidenceService::new(temp.path().to_path_buf());
+        assert!(matches!(service.build_evidence_pack("src_demo", "alpha", 1), Err(AegisError::SourceNotFound(_))));
+        assert_no_corpus_layout(temp.path());
     }
 
     #[test]
@@ -489,7 +528,7 @@ mod tests {
         let source_id = prepare_index(&temp.path().to_path_buf());
         let service = EvidenceService::new(temp.path().to_path_buf());
         let first = service.build_evidence_pack(&source_id, "alpha", 5).unwrap();
-        let second = service.build_evidence_pack(&source_id, "beta", 5).unwrap();
+        let second = service.build_evidence_pack(&source_id, "alpha beta", 5).unwrap();
 
         let listed = service.list_evidence_packs(&source_id).unwrap();
         assert_eq!(listed.len(), 2);
