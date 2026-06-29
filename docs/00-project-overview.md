@@ -6,6 +6,8 @@ The repository already provides source registration and Source Registry manageme
 
 It is not yet a finished chat product or a broad ingestion / answer-generation system. OCR, polished import UX, and production automation remain future work.
 
+For the next product-direction step, see `docs/05-product-ux-reorientation.md`.
+
 ## Current implementation status
 
 The repository is past the foundational phase and has working backend contracts for source handling, extraction, chunking, retrieval, evidence artifacts, answer-artifact contracts, and several preview surfaces.

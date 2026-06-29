@@ -109,6 +109,8 @@ The repository contains both diagnostic surfaces and product-flow surfaces.
 
 Diagnostics exist because many contracts are intentionally inspectable before automation. They are useful for developers and reviewers, but they are not the final user experience.
 
+Future UI work should keep diagnostics available but secondary to the main Scholar Chat and research workflow surfaces.
+
 ## Data and write boundaries
 
 Key boundaries:

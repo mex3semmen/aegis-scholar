@@ -5,6 +5,7 @@ This is a proposed GitHub Wiki structure for external reviewers, collaborators, 
 Repo docs remain the source of truth; the wiki is a later mirror, not a separate spec.
 
 For the operational copy guide and manual export checklist, see `docs/04-wiki-export-prep.md`.
+For the product UX direction plan that should inform future wiki wording, see `docs/05-product-ux-reorientation.md`.
 
 This page stays the conceptual outline for the wiki page set.
 
