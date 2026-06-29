@@ -1521,6 +1521,91 @@ type LocalModelRuntimeHealthPreview = {
   warnings: LocalModelRuntimeHealthWarning[];
 };
 
+type ManagedLlamaServerLaunchPlanStatus = "blocked" | "launch_ready_later";
+type ManagedLlamaServerLifecycleStatus =
+  | "not_started"
+  | "starting"
+  | "running"
+  | "stopped"
+  | "failed"
+  | "blocked"
+  | "already_running";
+type ManagedLlamaServerHealthStatus = "not_started" | "loading" | "ready" | "unreachable" | "failed";
+
+type ManagedLlamaServerNotice = {
+  kind: string;
+  message: string;
+};
+
+type ManagedLlamaServerLaunchPlanRequest = {
+  executable_path: string | null;
+  model_path: string | null;
+  host: string | null;
+  port: number | null;
+  alias: string | null;
+  context_window: number | null;
+  gpu_layers: number | null;
+};
+
+type ManagedLlamaServerStartRequest = {
+  allow_server_start: boolean;
+  launch_plan_request: ManagedLlamaServerLaunchPlanRequest;
+};
+
+type ManagedLlamaServerLaunchPlanPreview = {
+  status: ManagedLlamaServerLaunchPlanStatus;
+  executable_path_present: boolean;
+  model_path_present: boolean;
+  executable_is_file: boolean;
+  model_is_file: boolean;
+  model_extension_valid: boolean;
+  safe_executable_file_name?: string | null;
+  safe_model_file_name?: string | null;
+  host: string;
+  port: number;
+  alias: string;
+  context_window: number;
+  gpu_layers: number;
+  blockers: ManagedLlamaServerNotice[];
+  warnings: ManagedLlamaServerNotice[];
+  next_required_actions: string[];
+  summary: string;
+  preview_only: boolean;
+  no_process_spawn: boolean;
+  no_model_output_used: boolean;
+  no_answer_generation: boolean;
+  no_persistence: boolean;
+  no_artifact_write: boolean;
+  no_lan_binding_by_default: boolean;
+  no_auto_start_on_launch: boolean;
+};
+
+type ManagedLlamaServerStatusPreview = {
+  lifecycle_status: ManagedLlamaServerLifecycleStatus;
+  health_status: ManagedLlamaServerHealthStatus;
+  host?: string | null;
+  port?: number | null;
+  alias?: string | null;
+  process_id?: number | null;
+  exit_code?: number | null;
+  safe_executable_file_name?: string | null;
+  safe_model_file_name?: string | null;
+  health_url?: string | null;
+  response_body_preview: string;
+  response_body_truncated: boolean;
+  blockers: ManagedLlamaServerNotice[];
+  warnings: ManagedLlamaServerNotice[];
+  next_required_actions: string[];
+  summary: string;
+  preview_only: boolean;
+  no_process_spawn: boolean;
+  no_model_output_used: boolean;
+  no_answer_generation: boolean;
+  no_persistence: boolean;
+  no_artifact_write: boolean;
+  no_lan_binding_by_default: boolean;
+};
+
 type LocalRuntimeInvocationPlanStatus =
   | "not_configured"
   | "blocked"
@@ -2211,6 +2296,22 @@ export default function App() {
   const [localRuntimeContextWindow, setLocalRuntimeContextWindow] = createSignal("4096");
   const [localRuntimeGpuLayers, setLocalRuntimeGpuLayers] = createSignal("0");
   const [localRuntimeTemperature, setLocalRuntimeTemperature] = createSignal("0.2");
+  const [managedLlamaServerExecutablePath, setManagedLlamaServerExecutablePath] = createSignal("E:\\llama.cpp\\b9842-cpu\\llama-server.exe");
+  const [managedLlamaServerModelPath, setManagedLlamaServerModelPath] = createSignal("E:\\gemma4-v2-Q4_K_M\\gemma4-v2-Q4_K_M.gguf");
+  const [managedLlamaServerHost, setManagedLlamaServerHost] = createSignal("127.0.0.1");
+  const [managedLlamaServerPort, setManagedLlamaServerPort] = createSignal("48921");
+  const [managedLlamaServerAlias, setManagedLlamaServerAlias] = createSignal("aegis-local-gemma");
+  const [managedLlamaServerContextWindow, setManagedLlamaServerContextWindow] = createSignal("4096");
+  const [managedLlamaServerGpuLayers, setManagedLlamaServerGpuLayers] = createSignal("0");
+  const [managedLlamaServerAllowStart, setManagedLlamaServerAllowStart] = createSignal(false);
+  const [managedLlamaServerLaunchPreview, setManagedLlamaServerLaunchPreview] = createSignal<ManagedLlamaServerLaunchPlanPreview | null>(null);
+  const [managedLlamaServerLaunchLoading, setManagedLlamaServerLaunchLoading] = createSignal(false);
+  const [managedLlamaServerLaunchError, setManagedLlamaServerLaunchError] = createSignal<string | null>(null);
+  const [managedLlamaServerLaunchHasRun, setManagedLlamaServerLaunchHasRun] = createSignal(false);
+  const [managedLlamaServerStatusPreview, setManagedLlamaServerStatusPreview] = createSignal<ManagedLlamaServerStatusPreview | null>(null);
+  const [managedLlamaServerStatusLoading, setManagedLlamaServerStatusLoading] = createSignal(false);
+  const [managedLlamaServerStatusError, setManagedLlamaServerStatusError] = createSignal<string | null>(null);
+  const [managedLlamaServerStatusHasRun, setManagedLlamaServerStatusHasRun] = createSignal(false);
   const [localRuntimeAdapterExecutablePath, setLocalRuntimeAdapterExecutablePath] = createSignal("");
   const [localRuntimeAdapterModelPath, setLocalRuntimeAdapterModelPath] = createSignal("");
   const [localRuntimeAdapterModelFamily, setLocalRuntimeAdapterModelFamily] = createSignal("");
@@ -2717,6 +2818,14 @@ export default function App() {
     return "No Scholar Chat source context selected; preview will be unscoped.";
   }
 
+  function managedLlamaServerReadinessSummary() {
+    const status = managedLlamaServerStatusPreview();
+    if (!status) {
+      return "Managed llama-server setup stays in Developer Diagnostics. Scholar Chat still does not use local model output as a final answer.";
+    }
+    return `Managed llama-server: ${formatSnakeCaseLabel(status.health_status)} / ${formatSnakeCaseLabel(status.lifecycle_status)}. Scholar Chat still does not use local model output as a final answer.`;
+  }
+
   function formatSnakeCaseLabel(value: string) {
     return value
       .replace(/_/g, " ")
@@ -2814,6 +2923,163 @@ export default function App() {
     setLocalRuntimeHasRun(false);
     clearScholarChatAnswerReadinessPreview();
     clearScholarChatDraftInferencePreview();
+  }
+
+  function clearManagedLlamaServerLaunchPreview() {
+    setManagedLlamaServerLaunchPreview(null);
+    setManagedLlamaServerLaunchError(null);
+    setManagedLlamaServerLaunchHasRun(false);
+  }
+
+  function clearManagedLlamaServerStatusPreview() {
+    setManagedLlamaServerStatusPreview(null);
+    setManagedLlamaServerStatusError(null);
+    setManagedLlamaServerStatusHasRun(false);
+  }
+
+  function buildManagedLlamaServerLaunchPlanRequest(): ManagedLlamaServerLaunchPlanRequest | null {
+    const port = parseOptionalIntegerInput(
+      managedLlamaServerPort(),
+      "Managed llama-server port",
+      setManagedLlamaServerLaunchError,
+    );
+    const contextWindow = parseOptionalIntegerInput(
+      managedLlamaServerContextWindow(),
+      "Managed llama-server context window",
+      setManagedLlamaServerLaunchError,
+    );
+    const gpuLayers = parseOptionalIntegerInput(
+      managedLlamaServerGpuLayers(),
+      "Managed llama-server GPU layers",
+      setManagedLlamaServerLaunchError,
+    );
+
+    if (port === undefined || contextWindow === undefined || gpuLayers === undefined) {
+      return null;
+    }
+
+    return {
+      executable_path: normalizeOptionalTextInput(managedLlamaServerExecutablePath()),
+      model_path: normalizeOptionalTextInput(managedLlamaServerModelPath()),
+      host: normalizeOptionalTextInput(managedLlamaServerHost()),
+      port,
+      alias: normalizeOptionalTextInput(managedLlamaServerAlias()),
+      context_window: contextWindow,
+      gpu_layers: gpuLayers,
+    };
+  }
+
+  async function loadManagedLlamaServerStatus() {
+    if (managedLlamaServerStatusLoading()) {
+      return;
+    }
+
+    setManagedLlamaServerStatusLoading(true);
+    setManagedLlamaServerStatusError(null);
+    try {
+      const result = await invoke<ManagedLlamaServerStatusPreview>("inspect_managed_llama_server_status");
+      setManagedLlamaServerStatusPreview(result);
+      setManagedLlamaServerStatusHasRun(true);
+    } catch (err) {
+      setManagedLlamaServerStatusError(sanitizeBackendError(err));
+    } finally {
+      setManagedLlamaServerStatusLoading(false);
+    }
+  }
+
+  async function previewManagedLlamaServerLaunchPlan() {
+    if (managedLlamaServerLaunchLoading()) {
+      return;
+    }
+
+    const request = buildManagedLlamaServerLaunchPlanRequest();
+    if (!request) {
+      setManagedLlamaServerLaunchHasRun(true);
+      setManagedLlamaServerLaunchPreview(null);
+      return;
+    }
+
+    setManagedLlamaServerLaunchLoading(true);
+    setManagedLlamaServerLaunchError(null);
+    try {
+      const result = await invoke<ManagedLlamaServerLaunchPlanPreview>("preview_managed_llama_server_launch_plan", {
+        root: ".",
+        request,
+      });
+      setManagedLlamaServerLaunchPreview(result);
+      setManagedLlamaServerLaunchHasRun(true);
+    } catch (err) {
+      setManagedLlamaServerLaunchError(sanitizeBackendError(err));
+    } finally {
+      setManagedLlamaServerLaunchLoading(false);
+    }
+  }
+
+  async function startManagedLlamaServer() {
+    if (managedLlamaServerStatusLoading()) {
+      return;
+    }
+
+    const request = buildManagedLlamaServerLaunchPlanRequest();
+    if (!request) {
+      setManagedLlamaServerStatusHasRun(true);
+      setManagedLlamaServerStatusPreview(null);
+      return;
+    }
+
+    setManagedLlamaServerStatusLoading(true);
+    setManagedLlamaServerStatusError(null);
+    try {
+      const result = await invoke<ManagedLlamaServerStatusPreview>("start_managed_llama_server", {
+        root: ".",
+        request: {
+          allow_server_start: managedLlamaServerAllowStart(),
+          launch_plan_request: request,
+        } satisfies ManagedLlamaServerStartRequest,
+      });
+      setManagedLlamaServerStatusPreview(result);
+      setManagedLlamaServerStatusHasRun(true);
+    } catch (err) {
+      setManagedLlamaServerStatusError(sanitizeBackendError(err));
+    } finally {
+      setManagedLlamaServerStatusLoading(false);
+    }
+  }
+
+  async function checkManagedLlamaServerHealth() {
+    if (managedLlamaServerStatusLoading()) {
+      return;
+    }
+
+    setManagedLlamaServerStatusLoading(true);
+    setManagedLlamaServerStatusError(null);
+    try {
+      const result = await invoke<ManagedLlamaServerStatusPreview>("check_managed_llama_server_health");
+      setManagedLlamaServerStatusPreview(result);
+      setManagedLlamaServerStatusHasRun(true);
+    } catch (err) {
+      setManagedLlamaServerStatusError(sanitizeBackendError(err));
+    } finally {
+      setManagedLlamaServerStatusLoading(false);
+    }
+  }
+
+  async function stopManagedLlamaServer() {
+    if (managedLlamaServerStatusLoading()) {
+      return;
+    }
+
+    setManagedLlamaServerStatusLoading(true);
+    setManagedLlamaServerStatusError(null);
+    try {
+      const result = await invoke<ManagedLlamaServerStatusPreview>("stop_managed_llama_server");
+      setManagedLlamaServerStatusPreview(result);
+      setManagedLlamaServerStatusHasRun(true);
+    } catch (err) {
+      setManagedLlamaServerStatusError(sanitizeBackendError(err));
+    } finally {
+      setManagedLlamaServerStatusLoading(false);
+    }
   }
 
   function clearLocalRuntimeInvocationPreview() {
@@ -4601,6 +4867,7 @@ export default function App() {
   onMount(() => {
     void loadScholarChatSourceContext();
     void loadStatus();
+    void loadManagedLlamaServerStatus();
   });
 
   function activateWorkspace(workspace: WorkspaceSection) {
@@ -4643,11 +4910,7 @@ export default function App() {
         <ScholarChatWorkspace
           transcript={scholarChatTranscript()}
           suggestions={SCHOLAR_CHAT_PROMPT_SUGGESTIONS}
-          runtimeReadinessNote={
-            localRuntimePreview()
-              ? `Local model runtime: ${formatSnakeCaseLabel(localRuntimePreview()!.status)} preview. Configure the exact .gguf file and llama.cpp executable in Developer Diagnostics.`
-              : "Local model runtime setup stays in Developer Diagnostics. Configure the exact .gguf file and a llama.cpp executable there."
-          }
+          runtimeReadinessNote={managedLlamaServerReadinessSummary()}
           prompt={scholarChatPrompt()}
           validationError={scholarChatValidationError()}
           error={scholarChatError()}
@@ -6792,6 +7055,308 @@ export default function App() {
             )
           ) : (
             <p>No Scholar Chat runtime diagnostic result preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview runtime-setup-card">
+          <h3>Managed llama-server lifecycle</h3>
+          <p class="muted">
+            Backend-owned lifecycle preview and local launch control for llama-server. The server stays on localhost, remains consent-gated, and does not route output into Scholar Chat answers yet.
+          </p>
+          <ol class="runtime-sequence">
+            <li>Preview the managed launch plan.</li>
+            <li>Check the exact executable and `.gguf` model file.</li>
+            <li>Confirm explicit consent before starting the server.</li>
+            <li>Start the AEGIS-managed server on localhost.</li>
+            <li>Check `/health` and stop only the managed process when needed.</li>
+          </ol>
+          <div class="form-row">
+            <label>
+              Executable path
+              <input
+                type="text"
+                value={managedLlamaServerExecutablePath()}
+                onInput={(event) => {
+                  setManagedLlamaServerExecutablePath(event.currentTarget.value);
+                  clearManagedLlamaServerLaunchPreview();
+                  clearManagedLlamaServerStatusPreview();
+                }}
+                placeholder="E:\\llama.cpp\\b9842-cpu\\llama-server.exe"
+              />
+            </label>
+            <label>
+              Model path
+              <input
+                type="text"
+                value={managedLlamaServerModelPath()}
+                onInput={(event) => {
+                  setManagedLlamaServerModelPath(event.currentTarget.value);
+                  clearManagedLlamaServerLaunchPreview();
+                  clearManagedLlamaServerStatusPreview();
+                }}
+                placeholder="E:\\gemma4-v2-Q4_K_M\\gemma4-v2-Q4_K_M.gguf"
+              />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>
+              Host
+              <input
+                type="text"
+                value={managedLlamaServerHost()}
+                onInput={(event) => {
+                  setManagedLlamaServerHost(event.currentTarget.value);
+                  clearManagedLlamaServerLaunchPreview();
+                  clearManagedLlamaServerStatusPreview();
+                }}
+                placeholder="127.0.0.1"
+              />
+            </label>
+            <label>
+              Port
+              <input
+                type="number"
+                value={managedLlamaServerPort()}
+                onInput={(event) => {
+                  setManagedLlamaServerPort(event.currentTarget.value);
+                  clearManagedLlamaServerLaunchPreview();
+                  clearManagedLlamaServerStatusPreview();
+                }}
+                placeholder="48921"
+              />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>
+              Alias
+              <input
+                type="text"
+                value={managedLlamaServerAlias()}
+                onInput={(event) => {
+                  setManagedLlamaServerAlias(event.currentTarget.value);
+                  clearManagedLlamaServerLaunchPreview();
+                  clearManagedLlamaServerStatusPreview();
+                }}
+                placeholder="aegis-local-gemma"
+              />
+            </label>
+            <label>
+              Context window
+              <input
+                type="number"
+                value={managedLlamaServerContextWindow()}
+                onInput={(event) => {
+                  setManagedLlamaServerContextWindow(event.currentTarget.value);
+                  clearManagedLlamaServerLaunchPreview();
+                  clearManagedLlamaServerStatusPreview();
+                }}
+                placeholder="4096"
+              />
+            </label>
+            <label>
+              GPU layers
+              <input
+                type="number"
+                value={managedLlamaServerGpuLayers()}
+                onInput={(event) => {
+                  setManagedLlamaServerGpuLayers(event.currentTarget.value);
+                  clearManagedLlamaServerLaunchPreview();
+                  clearManagedLlamaServerStatusPreview();
+                }}
+                placeholder="0"
+              />
+            </label>
+            <label class="inline-field">
+              <input
+                type="checkbox"
+                checked={managedLlamaServerAllowStart()}
+                onChange={(event) => setManagedLlamaServerAllowStart(event.currentTarget.checked)}
+              />
+              I understand server start is consent-gated and local only.
+            </label>
+          </div>
+          <div class="hero-actions">
+            <button onClick={previewManagedLlamaServerLaunchPlan} disabled={managedLlamaServerLaunchLoading()}>
+              {managedLlamaServerLaunchLoading() ? "Previewing..." : "Preview managed launch plan"}
+            </button>
+            <button onClick={startManagedLlamaServer} disabled={managedLlamaServerStatusLoading() || !managedLlamaServerAllowStart()}>
+              {managedLlamaServerStatusLoading() ? "Starting..." : "Start managed server"}
+            </button>
+            <button onClick={checkManagedLlamaServerHealth} disabled={managedLlamaServerStatusLoading()}>
+              {managedLlamaServerStatusLoading() ? "Checking..." : "Check health"}
+            </button>
+            <button onClick={stopManagedLlamaServer} disabled={managedLlamaServerStatusLoading()}>
+              {managedLlamaServerStatusLoading() ? "Stopping..." : "Stop managed server"}
+            </button>
+            <button onClick={loadManagedLlamaServerStatus} disabled={managedLlamaServerStatusLoading()}>
+              {managedLlamaServerStatusLoading() ? "Refreshing..." : "Refresh status"}
+            </button>
+          </div>
+          <p class="muted">No Scholar Chat answer will use this output yet. The managed server stays secondary to the chat workflow.</p>
+          {managedLlamaServerLaunchError() && <p class="error">{managedLlamaServerLaunchError()}</p>}
+          {managedLlamaServerStatusError() && <p class="error">{managedLlamaServerStatusError()}</p>}
+          {managedLlamaServerLaunchLoading() ? (
+            <p>Previewing managed launch plan...</p>
+          ) : managedLlamaServerLaunchHasRun() ? (
+            managedLlamaServerLaunchPreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(managedLlamaServerLaunchPreview()!.status) },
+                  { label: "Executable present", value: managedLlamaServerLaunchPreview()!.executable_path_present ? "yes" : "no" },
+                  { label: "Executable is file", value: managedLlamaServerLaunchPreview()!.executable_is_file ? "yes" : "no" },
+                  { label: "Model present", value: managedLlamaServerLaunchPreview()!.model_path_present ? "yes" : "no" },
+                  { label: "Model is file", value: managedLlamaServerLaunchPreview()!.model_is_file ? "yes" : "no" },
+                  { label: "Model extension valid", value: managedLlamaServerLaunchPreview()!.model_extension_valid ? "yes" : "no" },
+                  { label: "Host", value: managedLlamaServerLaunchPreview()!.host },
+                  { label: "Port", value: managedLlamaServerLaunchPreview()!.port },
+                  { label: "Alias", value: managedLlamaServerLaunchPreview()!.alias },
+                  { label: "Context window", value: managedLlamaServerLaunchPreview()!.context_window },
+                  { label: "GPU layers", value: managedLlamaServerLaunchPreview()!.gpu_layers },
+                ])}
+                {managedLlamaServerLaunchPreview()!.safe_executable_file_name ? (
+                  <p><strong>Executable file name:</strong> {managedLlamaServerLaunchPreview()!.safe_executable_file_name}</p>
+                ) : null}
+                {managedLlamaServerLaunchPreview()!.safe_model_file_name ? (
+                  <p><strong>Model file name:</strong> {managedLlamaServerLaunchPreview()!.safe_model_file_name}</p>
+                ) : null}
+                <p><strong>Summary:</strong> {managedLlamaServerLaunchPreview()!.summary}</p>
+                <div class="contract-meta">
+                  <div><span>Preview only</span><strong>{managedLlamaServerLaunchPreview()!.preview_only ? "yes" : "no"}</strong></div>
+                  <div><span>No process spawn</span><strong>{managedLlamaServerLaunchPreview()!.no_process_spawn ? "yes" : "no"}</strong></div>
+                  <div><span>No model output used</span><strong>{managedLlamaServerLaunchPreview()!.no_model_output_used ? "yes" : "no"}</strong></div>
+                  <div><span>No answer generation</span><strong>{managedLlamaServerLaunchPreview()!.no_answer_generation ? "yes" : "no"}</strong></div>
+                  <div><span>No persistence</span><strong>{managedLlamaServerLaunchPreview()!.no_persistence ? "yes" : "no"}</strong></div>
+                  <div><span>No artifact write</span><strong>{managedLlamaServerLaunchPreview()!.no_artifact_write ? "yes" : "no"}</strong></div>
+                  <div><span>Localhost only</span><strong>{managedLlamaServerLaunchPreview()!.no_lan_binding_by_default ? "yes" : "no"}</strong></div>
+                  <div><span>No auto start on launch</span><strong>{managedLlamaServerLaunchPreview()!.no_auto_start_on_launch ? "yes" : "no"}</strong></div>
+                </div>
+                {managedLlamaServerLaunchPreview()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {managedLlamaServerLaunchPreview()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No launch blockers.</p>
+                )}
+                {managedLlamaServerLaunchPreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {managedLlamaServerLaunchPreview()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No launch warnings.</p>
+                )}
+                {managedLlamaServerLaunchPreview()!.next_required_actions.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Next required actions</h4>
+                    <ul>
+                      {managedLlamaServerLaunchPreview()!.next_required_actions.map((action) => (
+                        <li>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No next required actions.</p>
+                )}
+              </>
+            ) : (
+              <p>No managed launch plan preview loaded yet.</p>
+            )
+          ) : (
+            <p>No managed launch plan preview loaded yet.</p>
+          )}
+          {managedLlamaServerStatusLoading() ? (
+            <p>Updating managed llama-server status...</p>
+          ) : managedLlamaServerStatusHasRun() ? (
+            managedLlamaServerStatusPreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Lifecycle", value: formatSnakeCaseLabel(managedLlamaServerStatusPreview()!.lifecycle_status) },
+                  { label: "Health", value: formatSnakeCaseLabel(managedLlamaServerStatusPreview()!.health_status) },
+                  { label: "Host", value: managedLlamaServerStatusPreview()!.host ?? "missing" },
+                  { label: "Port", value: managedLlamaServerStatusPreview()!.port ?? "missing" },
+                  { label: "Alias", value: managedLlamaServerStatusPreview()!.alias ?? "missing" },
+                  { label: "Process ID", value: managedLlamaServerStatusPreview()!.process_id ?? "missing" },
+                  { label: "Exit code", value: managedLlamaServerStatusPreview()!.exit_code ?? "missing" },
+                  { label: "Executable file", value: managedLlamaServerStatusPreview()!.safe_executable_file_name ?? "missing" },
+                  { label: "Model file", value: managedLlamaServerStatusPreview()!.safe_model_file_name ?? "missing" },
+                  { label: "Health URL", value: managedLlamaServerStatusPreview()!.health_url ?? "missing" },
+                  { label: "Response body truncated", value: managedLlamaServerStatusPreview()!.response_body_truncated ? "yes" : "no" },
+                ])}
+                {managedLlamaServerStatusPreview()!.summary && <p><strong>Summary:</strong> {managedLlamaServerStatusPreview()!.summary}</p>}
+                {managedLlamaServerStatusPreview()!.response_body_preview ? (
+                  <p><strong>Health preview:</strong> {managedLlamaServerStatusPreview()!.response_body_preview}</p>
+                ) : null}
+                <div class="contract-meta">
+                  <div><span>Preview only</span><strong>{managedLlamaServerStatusPreview()!.preview_only ? "yes" : "no"}</strong></div>
+                  <div><span>No process spawn</span><strong>{managedLlamaServerStatusPreview()!.no_process_spawn ? "yes" : "no"}</strong></div>
+                  <div><span>No model output used</span><strong>{managedLlamaServerStatusPreview()!.no_model_output_used ? "yes" : "no"}</strong></div>
+                  <div><span>No answer generation</span><strong>{managedLlamaServerStatusPreview()!.no_answer_generation ? "yes" : "no"}</strong></div>
+                  <div><span>No persistence</span><strong>{managedLlamaServerStatusPreview()!.no_persistence ? "yes" : "no"}</strong></div>
+                  <div><span>No artifact write</span><strong>{managedLlamaServerStatusPreview()!.no_artifact_write ? "yes" : "no"}</strong></div>
+                  <div><span>Localhost only</span><strong>{managedLlamaServerStatusPreview()!.no_lan_binding_by_default ? "yes" : "no"}</strong></div>
+                </div>
+                {managedLlamaServerStatusPreview()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {managedLlamaServerStatusPreview()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No status blockers.</p>
+                )}
+                {managedLlamaServerStatusPreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {managedLlamaServerStatusPreview()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No status warnings.</p>
+                )}
+                {managedLlamaServerStatusPreview()!.next_required_actions.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Next required actions</h4>
+                    <ul>
+                      {managedLlamaServerStatusPreview()!.next_required_actions.map((action) => (
+                        <li>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No next required actions.</p>
+                )}
+              </>
+            ) : (
+              <p>No managed server status preview loaded yet.</p>
+            )
+          ) : (
+            <p>No managed server status preview loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview runtime-setup-card">

@@ -54,6 +54,7 @@ Secondary surfaces should still exist, but they should not dominate the first im
 - debug dumps
 - contract inspection views
 - developer-only diagnostics
+- managed llama-server lifecycle controls for local runtime startup, health checks, and stop actions
 
 These remain important for engineering and review, but they should be clearly separated from the main research workflow.
 
@@ -84,6 +85,7 @@ Phase 133.0 is the chat transcript interaction model implementation pass that ke
 Phase 134.0 is the chat UX interaction polish pass that makes the first viewport calmer, the composer more prominent, and the sidebar lighter while preserving the same preview and transcript behavior.
 Phase 135.0 is the local model runtime setup UX pass that keeps the model path and llama.cpp executable setup secondary, consent-gated, and diagnostics-only until future answer generation work exists.
 Phase 136.0 is the local runtime probe validation pass that sharpens the readiness, validation, version-probe, and smoke-diagnostic flow for an exact `.gguf` model file and llama.cpp executable without changing answer generation behavior.
+Phase 137.0 is the managed llama-server lifecycle pass that keeps backend-owned localhost startup, health, and stop controls visible in Developer Diagnostics while remaining preview-first and answer-generation-free.
 
 ## Acceptance Criteria For Future UX Work
 
