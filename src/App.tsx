@@ -87,6 +87,21 @@ const SCHOLAR_CHAT_PROMPT_SUGGESTIONS: { label: string; prompt: string }[] = [
   },
 ];
 
+type ScholarChatTranscriptRole = "user" | "assistant" | "system";
+type ScholarChatTranscriptKind = "prompt" | "workflow_preview" | "execution_gate" | "system";
+
+type ScholarChatTranscriptMessage = {
+  id: number;
+  role: ScholarChatTranscriptRole;
+  kind: ScholarChatTranscriptKind;
+  prompt: string;
+  title: string;
+  content: string;
+  created_at: number;
+  workflow_preview?: ScholarChatAgenticWorkflowPlanPreview;
+  execution_gate_preview?: ScholarChatAgenticWorkflowExecutionGatePreview;
+};
+
 const SCHOLAR_CHAT_MODES: { value: ScholarChatMode; label: string }[] = [
   { value: "lecture_learning", label: "Lecture learning" },
   { value: "thesis_writing", label: "Thesis writing" },
@@ -2099,6 +2114,7 @@ export default function App() {
   const [scholarChatPromptPackError, setScholarChatPromptPackError] = createSignal<string | null>(null);
   const [scholarChatPromptPackLoading, setScholarChatPromptPackLoading] = createSignal(false);
   const [scholarChatPromptPackHasRun, setScholarChatPromptPackHasRun] = createSignal(false);
+  const [scholarChatTranscript, setScholarChatTranscript] = createSignal<ScholarChatTranscriptMessage[]>([]);
   const [scholarChatScientificMetadataProviderRequestPreview, setScholarChatScientificMetadataProviderRequestPreview] = createSignal<ScholarChatScientificMetadataProviderRequestPreview | null>(null);
   const [scholarChatScientificMetadataProviderRequestError, setScholarChatScientificMetadataProviderRequestError] = createSignal<string | null>(null);
   const [scholarChatScientificMetadataProviderRequestValidationError, setScholarChatScientificMetadataProviderRequestValidationError] = createSignal<string | null>(null);
@@ -2930,6 +2946,298 @@ export default function App() {
     resetScholarChatConversationPreviewState();
   }
 
+  function nextScholarChatTranscriptId() {
+    return scholarChatTranscript().reduce((max, message) => Math.max(max, message.id), 0) + 1;
+  }
+
+  function updateScholarChatTranscriptMessage(message: ScholarChatTranscriptMessage) {
+    setScholarChatTranscript((current) => {
+      const index = current.findIndex((item) => item.kind === message.kind && item.prompt === message.prompt);
+      if (index >= 0) {
+        const next = [...current];
+        next[index] = message;
+        return next;
+      }
+      return [...current, message];
+    });
+  }
+
+  function ensureScholarChatUserTranscriptMessage(prompt: string) {
+    const normalizedPrompt = prompt.trim();
+    if (!normalizedPrompt) {
+      return;
+    }
+    const lastUserMessage = [...scholarChatTranscript()].reverse().find((item) => item.role === "user");
+    if (lastUserMessage && lastUserMessage.prompt === normalizedPrompt) {
+      return;
+    }
+    setScholarChatTranscript((current) => [
+      ...current,
+      {
+        id: nextScholarChatTranscriptId(),
+        role: "user",
+        kind: "prompt",
+        prompt: normalizedPrompt,
+        title: "You",
+        content: normalizedPrompt,
+        created_at: Date.now(),
+      },
+    ]);
+  }
+
+  function appendScholarChatSystemTranscriptMessage(content: string) {
+    const trimmed = content.trim();
+    if (!trimmed) {
+      return;
+    }
+    setScholarChatTranscript((current) => [
+      ...current,
+      {
+        id: nextScholarChatTranscriptId(),
+        role: "system",
+        kind: "system",
+        prompt: scholarChatPrompt().trim(),
+        title: "System",
+        content: trimmed,
+        created_at: Date.now(),
+      },
+    ]);
+  }
+
+  function recordScholarChatWorkflowPreview(prompt: string, result: ScholarChatAgenticWorkflowPlanPreview) {
+    ensureScholarChatUserTranscriptMessage(prompt);
+    updateScholarChatTranscriptMessage({
+      id: nextScholarChatTranscriptId(),
+      role: "assistant",
+      kind: "workflow_preview",
+      prompt,
+      title: "AEGIS",
+      content: result.summary,
+      created_at: Date.now(),
+      workflow_preview: result,
+    });
+  }
+
+  function recordScholarChatExecutionGatePreview(prompt: string, result: ScholarChatAgenticWorkflowExecutionGatePreview) {
+    ensureScholarChatUserTranscriptMessage(prompt);
+    updateScholarChatTranscriptMessage({
+      id: nextScholarChatTranscriptId(),
+      role: "assistant",
+      kind: "execution_gate",
+      prompt,
+      title: "AEGIS",
+      content: result.blocked_reason || "The next safe step is ready to review.",
+      created_at: Date.now(),
+      execution_gate_preview: result,
+    });
+  }
+
+  function renderScholarChatTranscriptMessage(message: ScholarChatTranscriptMessage) {
+    if (message.role === "user") {
+      return (
+        <div class="chat-transcript-message user-message">
+          <p class="chat-message-label">You</p>
+          <p>{message.content}</p>
+        </div>
+      );
+    }
+
+    if (message.kind === "workflow_preview" && message.workflow_preview) {
+      const preview = message.workflow_preview;
+      return (
+        <div class="assistant-card chat-transcript-card">
+          <p class="chat-message-label">AEGIS</p>
+          <h3>Workflow preview</h3>
+          <p class="chat-message-summary">{preview.summary}</p>
+          <p class="chat-message-summary">
+            It recognized this as {formatSnakeCaseLabel(preview.recognized_intent)} and will stay preview-only.
+          </p>
+          <div class="chat-message-actions">
+            {preview.next_required_actions.length > 0 ? <p><strong>Next:</strong> {preview.next_required_actions[0]}</p> : null}
+            {preview.blockers.length > 0 ? <p><strong>Blocker:</strong> {preview.blockers[0]}</p> : null}
+            {preview.warnings.length > 0 ? <p><strong>Note:</strong> {preview.warnings[0]}</p> : null}
+          </div>
+          <details class="chat-transcript-details">
+            <summary>Preview details</summary>
+            {renderMetricGrid([
+              { label: "Selected sources", value: preview.selected_source_count },
+              { label: "Execution allowed", value: preview.execution_allowed ? "yes" : "no" },
+              { label: "Preview only", value: preview.preview_only ? "yes" : "no" },
+            ])}
+            <p><strong>Prompt:</strong> {preview.normalized_prompt}</p>
+            <div class="contract-meta">
+              <div>
+                <span>Required local context</span>
+                <strong>{preview.required_local_context.map((item) => formatSnakeCaseLabel(item)).join(", ") || "none"}</strong>
+              </div>
+            </div>
+            <h4>Planned steps</h4>
+            <ul>
+              {preview.planned_steps.map((step) => (
+                <li>{step}</li>
+              ))}
+            </ul>
+            {preview.next_required_actions.length > 1 ? (
+              <div class="warning-box">
+                <h4>Additional next actions</h4>
+                <ul>
+                  {preview.next_required_actions.slice(1).map((action) => (
+                    <li>{action}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {preview.blockers.length > 1 ? (
+              <div class="warning-box">
+                <h4>Additional blockers</h4>
+                <ul>
+                  {preview.blockers.slice(1).map((blocker) => (
+                    <li>{blocker}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {preview.warnings.length > 1 ? (
+              <div class="warning-box">
+                <h4>Additional warnings</h4>
+                <ul>
+                  {preview.warnings.slice(1).map((warning) => (
+                    <li>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </details>
+        </div>
+      );
+    }
+
+    if (message.kind === "execution_gate" && message.execution_gate_preview) {
+      const gate = message.execution_gate_preview;
+      return (
+        <div class="assistant-card chat-transcript-card">
+          <p class="chat-message-label">AEGIS</p>
+          <h3>Safe next step</h3>
+          <p class="chat-message-summary">
+            {gate.blocked_reason || "The next safe step is ready to review."}
+          </p>
+          <p class="chat-message-summary">
+            {formatSnakeCaseLabel(gate.gate_decision)} for {formatSnakeCaseLabel(gate.allowed_future_action)}.
+          </p>
+          <div class="chat-message-actions">
+            {gate.next_required_actions.length > 0 ? <p><strong>Next:</strong> {gate.next_required_actions[0]}</p> : null}
+            {gate.blockers.length > 0 ? <p><strong>Blocker:</strong> {gate.blockers[0]}</p> : null}
+            {gate.warnings.length > 0 ? <p><strong>Note:</strong> {gate.warnings[0]}</p> : null}
+          </div>
+          <details class="chat-transcript-details">
+            <summary>Gate details</summary>
+            {renderMetricGrid([
+              { label: "Status", value: formatSnakeCaseLabel(gate.status) },
+              { label: "Consent needed", value: gate.consent_required ? "yes" : "no" },
+              { label: "Preview only", value: gate.preview_only ? "yes" : "no" },
+            ])}
+            <p>
+              <strong>Required local context:</strong>{" "}
+              {gate.required_local_context.map((item) => formatSnakeCaseLabel(item)).join(", ") || "none"}
+            </p>
+            <h4>Planned steps</h4>
+            <ul>
+              {gate.planned_steps.map((step) => (
+                <li>{step}</li>
+              ))}
+            </ul>
+            <div class="contract-meta">
+              <div>
+                <span>Planned intent</span>
+                <strong>{formatSnakeCaseLabel(gate.planned_intent)}</strong>
+              </div>
+              <div>
+                <span>Selected sources</span>
+                <strong>{gate.selected_source_count}</strong>
+              </div>
+              <div>
+                <span>Execution allowed now</span>
+                <strong>{gate.execution_allowed_now ? "yes" : "no"}</strong>
+              </div>
+              <div>
+                <span>User consent present</span>
+                <strong>{gate.user_consent_present ? "yes" : "no"}</strong>
+              </div>
+            </div>
+            <div class="contract-meta">
+              {gate.safety_invariants.map((item) => (
+                <div>
+                  <span>Safety</span>
+                  <strong>{formatSnakeCaseLabel(item)}</strong>
+                </div>
+              ))}
+            </div>
+            <div class="contract-meta">
+              <div>
+                <span>No filesystem write</span>
+                <strong>{gate.no_filesystem_write ? "yes" : "no"}</strong>
+              </div>
+              <div>
+                <span>No backend mutation</span>
+                <strong>{gate.no_backend_mutation ? "yes" : "no"}</strong>
+              </div>
+              <div>
+                <span>No runtime execution</span>
+                <strong>{gate.no_runtime_execution ? "yes" : "no"}</strong>
+              </div>
+              <div>
+                <span>No LLM call</span>
+                <strong>{gate.no_llm_call ? "yes" : "no"}</strong>
+              </div>
+              <div>
+                <span>No network call</span>
+                <strong>{gate.no_network_call ? "yes" : "no"}</strong>
+              </div>
+            </div>
+            {gate.next_required_actions.length > 1 ? (
+              <div class="warning-box">
+                <h4>Additional next actions</h4>
+                <ul>
+                  {gate.next_required_actions.slice(1).map((action) => (
+                    <li>{action}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {gate.blockers.length > 1 ? (
+              <div class="warning-box">
+                <h4>Additional blockers</h4>
+                <ul>
+                  {gate.blockers.slice(1).map((blocker) => (
+                    <li>{blocker}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {gate.warnings.length > 1 ? (
+              <div class="warning-box">
+                <h4>Additional warnings</h4>
+                <ul>
+                  {gate.warnings.slice(1).map((warning) => (
+                    <li>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </details>
+        </div>
+      );
+    }
+
+    return (
+      <div class="assistant-card chat-transcript-card">
+        <p class="chat-message-label">AEGIS</p>
+        <h3>{message.title}</h3>
+        <p>{message.content}</p>
+      </div>
+    );
+  }
+
   function clearScholarChatGroundedAnswerBuildRequestPreview() {
     setScholarChatGroundedAnswerBuildRequestPreview(null);
     setScholarChatGroundedAnswerBuildRequestError(null);
@@ -3215,6 +3523,7 @@ export default function App() {
         },
       });
       setScholarChatPreview(result);
+      recordScholarChatWorkflowPreview(trimmedPrompt, result);
     } catch (err) {
       setScholarChatError(sanitizeBackendError(err));
     } finally {
@@ -3251,6 +3560,7 @@ export default function App() {
         },
       });
       setScholarChatExecutionGatePreview(result);
+      recordScholarChatExecutionGatePreview(trimmedPrompt, result);
     } catch (err) {
       setScholarChatExecutionGateError(sanitizeBackendError(err));
     } finally {
@@ -4616,27 +4926,33 @@ export default function App() {
             Start with a question. Scholar Chat previews the local workflow, keeps execution gated, and surfaces diagnostics only when you need them.
           </p>
           <div class="chat-surface">
-            <div class="assistant-card chat-welcome-card">
-              <p class="eyebrow">Scholar Chat</p>
-              <h3>Your local research workspace starts here</h3>
-              <p>
-                Ask a question about a paper, lecture, method, or thesis task. The app will preview the next safe local workflow step without turning preview into execution.
-              </p>
-              <div class="chat-suggestion-grid" aria-label="Prompt suggestions">
-                {SCHOLAR_CHAT_PROMPT_SUGGESTIONS.map((item) => (
-                  <button class="chat-suggestion-chip" onClick={() => applyScholarChatPromptSuggestion(item.prompt)}>
-                    <span>{item.label}</span>
-                    <small>{item.prompt}</small>
-                  </button>
-                ))}
+            {scholarChatTranscript().length === 0 ? (
+              <div class="assistant-card chat-welcome-card">
+                <p class="eyebrow">Scholar Chat</p>
+                <h3>Your local research workspace starts here</h3>
+                <p>
+                  Ask a question about a paper, lecture, method, or thesis task. The app will preview the next safe local workflow step without turning preview into execution.
+                </p>
+                <div class="chat-suggestion-grid" aria-label="Prompt suggestions">
+                  {SCHOLAR_CHAT_PROMPT_SUGGESTIONS.map((item) => (
+                    <button class="chat-suggestion-chip" onClick={() => applyScholarChatPromptSuggestion(item.prompt)}>
+                      <span>{item.label}</span>
+                      <small>{item.prompt}</small>
+                    </button>
+                  ))}
+                </div>
               </div>
+            ) : null}
+
+            <div class="chat-transcript" aria-label="Scholar Chat transcript" aria-live="polite">
+              {scholarChatTranscript().map((message) => renderScholarChatTranscriptMessage(message))}
             </div>
 
+            <p class="chat-inline-note muted">
+              {scholarChatSelectedSourceIdsSummary()} Open Sources when you want to adjust source readiness or selection.
+            </p>
+
             <div class="chat-composer">
-              <div class="chat-empty-state">
-                <h3>Ask Scholar Chat</h3>
-                <p>Write a question, or use a suggestion to start a local workflow preview.</p>
-              </div>
               <label class="composer-field">
                 Prompt
                 <textarea
@@ -4693,196 +5009,6 @@ export default function App() {
                 </div>
               </details>
             </div>
-
-            <div class="chat-results">
-              {scholarChatPreview() ? (
-                <div class="assistant-card chat-response-card">
-                  <p class="eyebrow">Workflow preview</p>
-                  <h3>Planned local workflow</h3>
-                  <p class="muted">
-                    Chat-first workflow planning preview only. It interprets the prompt as a local action plan and does not execute extraction, chunking, retrieval, Evidence Pack work, or answer generation.
-                  </p>
-                  {renderMetricGrid([
-                    { label: "Status", value: formatSnakeCaseLabel(scholarChatPreview()!.status) },
-                    { label: "Recognized intent", value: formatSnakeCaseLabel(scholarChatPreview()!.recognized_intent) },
-                    { label: "Selected sources", value: scholarChatPreview()!.selected_source_count },
-                    { label: "Execution allowed", value: scholarChatPreview()!.execution_allowed ? "yes" : "no" },
-                    { label: "Preview only", value: scholarChatPreview()!.preview_only ? "yes" : "no" },
-                  ])}
-                  <p><strong>Prompt:</strong> {scholarChatPreview()!.normalized_prompt}</p>
-                  <p>{scholarChatPreview()!.summary}</p>
-                  <div class="contract-meta">
-                    <div>
-                      <span>Required local context</span>
-                      <strong>{scholarChatPreview()!.required_local_context.map((item) => formatSnakeCaseLabel(item)).join(", ") || "none"}</strong>
-                    </div>
-                  </div>
-                  <h4>Planned steps</h4>
-                  <ul>
-                    {scholarChatPreview()!.planned_steps.map((step) => (
-                      <li>{step}</li>
-                    ))}
-                  </ul>
-                  {scholarChatPreview()!.next_required_actions.length > 0 ? (
-                    <div class="warning-box">
-                      <h4>Next required actions</h4>
-                      <ul>
-                        {scholarChatPreview()!.next_required_actions.map((action) => (
-                          <li>{action}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                  {scholarChatPreview()!.blockers.length > 0 ? (
-                    <div class="warning-box">
-                      <h4>Blockers</h4>
-                      <ul>
-                        {scholarChatPreview()!.blockers.map((blocker) => (
-                          <li>{blocker}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                  {scholarChatPreview()!.warnings.length > 0 ? (
-                    <div class="warning-box">
-                      <h4>Warnings</h4>
-                      <ul>
-                        {scholarChatPreview()!.warnings.map((warning) => (
-                          <li>{warning}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {!scholarChatPreview() && !scholarChatExecutionGatePreview() ? (
-                <p class="chat-surface-note muted">
-                  Preview plan or check the next step to see assistant-style results here.
-                </p>
-              ) : null}
-
-              {scholarChatExecutionGatePreview() ? (
-                <div class="assistant-card chat-response-card">
-                  <p class="eyebrow">Execution gate</p>
-                  <h3>Safe next step</h3>
-                  <p class="muted">
-                    Preview-only execution gate for the chat workflow plan. It shows the next safe step without starting execution.
-                  </p>
-                  {scholarChatExecutionGateValidationError() && <p class="error">{scholarChatExecutionGateValidationError()}</p>}
-                  {scholarChatExecutionGateError() && <p class="error">{scholarChatExecutionGateError()}</p>}
-                  {renderMetricGrid([
-                    { label: "Status", value: formatSnakeCaseLabel(scholarChatExecutionGatePreview()!.status) },
-                    { label: "Gate decision", value: formatSnakeCaseLabel(scholarChatExecutionGatePreview()!.gate_decision) },
-                    { label: "Allowed future action", value: formatSnakeCaseLabel(scholarChatExecutionGatePreview()!.allowed_future_action) },
-                    { label: "Consent needed", value: scholarChatExecutionGatePreview()!.consent_required ? "yes" : "no" },
-                  ])}
-                  {scholarChatExecutionGatePreview()!.blocked_reason ? (
-                    <p>
-                      <strong>Blocked reason:</strong> {scholarChatExecutionGatePreview()!.blocked_reason}
-                    </p>
-                  ) : null}
-                  {scholarChatExecutionGatePreview()!.next_required_actions.length > 0 ? (
-                    <div class="warning-box">
-                      <h4>Next required action</h4>
-                      <ul>
-                        {scholarChatExecutionGatePreview()!.next_required_actions.map((action) => (
-                          <li>{action}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                  <details class="muted">
-                    <summary>Execution gate details</summary>
-                    <div class="contract-meta">
-                      <div>
-                        <span>Planned intent</span>
-                        <strong>{formatSnakeCaseLabel(scholarChatExecutionGatePreview()!.planned_intent)}</strong>
-                      </div>
-                      <div>
-                        <span>Selected sources</span>
-                        <strong>{scholarChatExecutionGatePreview()!.selected_source_count}</strong>
-                      </div>
-                      <div>
-                        <span>Execution allowed now</span>
-                        <strong>{scholarChatExecutionGatePreview()!.execution_allowed_now ? "yes" : "no"}</strong>
-                      </div>
-                      <div>
-                        <span>User consent present</span>
-                        <strong>{scholarChatExecutionGatePreview()!.user_consent_present ? "yes" : "no"}</strong>
-                      </div>
-                      <div>
-                        <span>Preview only</span>
-                        <strong>{scholarChatExecutionGatePreview()!.preview_only ? "yes" : "no"}</strong>
-                      </div>
-                    </div>
-                    <p>
-                      <strong>Required local context:</strong>{" "}
-                      {scholarChatExecutionGatePreview()!.required_local_context.map((item) => formatSnakeCaseLabel(item)).join(", ") || "none"}
-                    </p>
-                    <h4>Planned steps</h4>
-                    <ul>
-                      {scholarChatExecutionGatePreview()!.planned_steps.map((step) => (
-                        <li>{step}</li>
-                      ))}
-                    </ul>
-                    <div class="contract-meta">
-                      {scholarChatExecutionGatePreview()!.safety_invariants.map((item) => (
-                        <div>
-                          <span>Safety</span>
-                          <strong>{formatSnakeCaseLabel(item)}</strong>
-                        </div>
-                      ))}
-                    </div>
-                    <div class="contract-meta">
-                      <div>
-                        <span>No filesystem write</span>
-                        <strong>{scholarChatExecutionGatePreview()!.no_filesystem_write ? "yes" : "no"}</strong>
-                      </div>
-                      <div>
-                        <span>No backend mutation</span>
-                        <strong>{scholarChatExecutionGatePreview()!.no_backend_mutation ? "yes" : "no"}</strong>
-                      </div>
-                      <div>
-                        <span>No runtime execution</span>
-                        <strong>{scholarChatExecutionGatePreview()!.no_runtime_execution ? "yes" : "no"}</strong>
-                      </div>
-                      <div>
-                        <span>No LLM call</span>
-                        <strong>{scholarChatExecutionGatePreview()!.no_llm_call ? "yes" : "no"}</strong>
-                      </div>
-                      <div>
-                        <span>No network call</span>
-                        <strong>{scholarChatExecutionGatePreview()!.no_network_call ? "yes" : "no"}</strong>
-                      </div>
-                    </div>
-                  </details>
-                  {scholarChatExecutionGatePreview()!.blockers.length > 0 ? (
-                    <div class="warning-box">
-                      <h4>Blockers</h4>
-                      <ul>
-                        {scholarChatExecutionGatePreview()!.blockers.map((blocker) => (
-                          <li>{blocker}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                  {scholarChatExecutionGatePreview()!.warnings.length > 0 ? (
-                    <div class="warning-box">
-                      <h4>Warnings</h4>
-                      <ul>
-                        {scholarChatExecutionGatePreview()!.warnings.map((warning) => (
-                          <li>{warning}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-            <p class="chat-inline-note muted">
-              {scholarChatSelectedSourceIdsSummary()} Open Sources when you want to adjust source readiness or selection.
-            </p>
           </div>
           <details class="advanced-panels">
             <summary>Advanced preview panels</summary>

@@ -125,9 +125,10 @@ button:disabled {
 }
 
 .chat-surface {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
-  max-width: 980px;
+  max-width: 940px;
 }
 
 .chat-welcome-card {
@@ -178,6 +179,64 @@ button:disabled {
   gap: 1rem;
 }
 
+.chat-transcript {
+  display: grid;
+  gap: 0.9rem;
+  align-content: start;
+}
+
+.chat-transcript-message {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 76ch;
+}
+
+.user-message {
+  justify-self: end;
+  border: 1px solid rgba(96, 165, 250, 0.22);
+  border-radius: 18px 18px 6px 18px;
+  padding: 0.95rem 1rem;
+  background: rgba(30, 41, 59, 0.8);
+}
+
+.chat-transcript-card {
+  max-width: 100%;
+}
+
+.chat-message-label {
+  margin: 0;
+  color: #93c5fd;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.chat-message-summary {
+  margin: 0;
+  color: #dbeafe;
+}
+
+.chat-message-actions {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.chat-message-actions p {
+  margin: 0;
+}
+
+.chat-transcript-details {
+  border: 1px solid rgba(51, 65, 85, 0.45);
+  border-radius: 12px;
+  padding: 0.7rem 0.85rem;
+  background: rgba(2, 6, 23, 0.28);
+}
+
+.chat-transcript-details summary {
+  cursor: pointer;
+  color: #dbeafe;
+}
+
 .chat-response-card {
   display: grid;
   gap: 0.75rem;
@@ -196,6 +255,16 @@ button:disabled {
 .chat-surface-note {
   margin: 0;
   max-width: 58ch;
+}
+
+.chat-composer {
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  border-radius: 18px;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.52);
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 0.25rem;
 }
 
 .compact-note {
@@ -248,15 +317,6 @@ button:disabled {
 .app-shell[data-active-workspace="evidence_packs"] .workspace-content > [data-workspace="evidence_packs"],
 .app-shell[data-active-workspace="developer_diagnostics"] .workspace-content > [data-workspace="developer_diagnostics"] {
   display: grid;
-}
-
-.chat-composer {
-  border: 1px solid rgba(96, 165, 250, 0.18);
-  border-radius: 18px;
-  padding: 1rem;
-  background: rgba(2, 6, 23, 0.52);
-  display: grid;
-  gap: 0.9rem;
 }
 
 .chat-empty-state h3 {
