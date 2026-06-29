@@ -15,6 +15,8 @@ This is a compressed status index, not a full changelog.
 | Phase 126.0 | complete | wiki copy QA and publication checklist pass | `docs/04-wiki-export-prep.md`, `docs/03-github-wiki-outline.md` | repo docs remain authoritative; wiki publication is manual and mirror-only |
 | Phase 127.0 | complete | docs-only product UX reorientation plan | `docs/05-product-ux-reorientation.md`, `README.md`, `docs/00-project-overview.md`, `docs/01-architecture-overview.md`, `docs/12-roadmap.md` | repo docs remain authoritative; chat-first UX work is planned, not implemented |
 | Phase 128.0 | in progress | app shell / navigation skeleton | `src/App.tsx`, `src/styles.css`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | diagnostics stay available but secondary; backend behavior is unchanged |
+| Phase 129.0 | in progress | chat-first UX polish | `src/App.tsx`, `src/styles.css`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | composer-first layout is polish only; preview/gate behavior stays intact |
+| Phase 129.1 | in progress | focused workspace rendering refinement | `src/App.tsx`, `src/styles.css`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | active workspace rendering replaces long default scrolling; diagnostics stay reachable |
 | Phase 117.0 | implemented | local Evidence Pack creation MVP | Evidence Pack backend path and managed storage | integrate with broader product surfaces |
 | Phase 118.0 | implemented | PDF text-layer extraction MVP with page-level locators | extraction and locator handling | OCR and broad PDF ingestion remain out of scope |
 | Phase 119.0 | implemented | first-run source import readiness UI | frontend guidance surfaces | actual import wizard remains missing |

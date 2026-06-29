@@ -4491,7 +4491,7 @@ export default function App() {
   }
 
   return (
-    <main class="app-shell">
+    <main class="app-shell" data-active-workspace={activeWorkspace()}>
       <aside class="workspace-nav" aria-label="Workspace navigation">
         <p class="eyebrow">Workspaces</p>
         <div class="workspace-nav-list">
@@ -4508,19 +4508,12 @@ export default function App() {
       </aside>
 
       <div class="workspace-content">
-        <section class="hero">
+        <section class="workspace-banner">
           <p class="eyebrow">AEGIS Scholar</p>
-          <h1>Scientific knowledge OS</h1>
-          <p>
-            Minimal Phase 1 scaffold for Corpus Authority and Source Registry.
-            No RAG, no model runtime, no coding-agent behavior.
-          </p>
+          <h1>{WORKSPACE_SECTIONS.find((item) => item.value === activeWorkspace())?.label ?? "Scholar Chat"}</h1>
           <p class="muted">
-            The shell now orients around Scholar Chat first, with Sources, Evidence Packs, and Developer Diagnostics as secondary workspaces.
+            {WORKSPACE_SECTIONS.find((item) => item.value === activeWorkspace())?.description ?? "Chat-first academic workflow"}
           </p>
-          <div class="hero-actions">
-            <button onClick={loadStatus}>Check corpus status</button>
-          </div>
         </section>
 
         <section class="card workspace-panel" id="sources" data-workspace="sources">
@@ -4539,103 +4532,140 @@ export default function App() {
             <p>No status loaded yet.</p>
           )}
           {statusError() && <p class="error">{statusError()}</p>}
+          <div class="compact-note">
+            <h3>Source context</h3>
+            <p class="muted">
+              No local sources selected. AEGIS can still preview the workflow, but grounded answers require sources.
+            </p>
+            {scholarChatSourceContextLoading() ? (
+              <p>Loading registered sources...</p>
+            ) : scholarChatSourceContextError() ? (
+              <p class="error">{scholarChatSourceContextError()}</p>
+            ) : scholarChatSourceContext().length === 0 ? (
+              renderFirstRunSourceReadiness()
+            ) : (
+              <>
+                <p class="muted">Selected source count: {scholarChatSourceContextSelectedIds().length}</p>
+                <ul class="final-answer-list-items">
+                  {scholarChatSourceContext().map((item) => (
+                    <li>
+                      <label class="final-answer-list-item">
+                        <span>
+                          <input
+                            type="checkbox"
+                            checked={scholarChatSourceContextSelectedIds().includes(item.source_id)}
+                            onChange={() => {
+                              toggleScholarChatSourceContext(item.source_id);
+                              setScholarChatPreview(null);
+                              setScholarChatExecutionGatePreview(null);
+                            }}
+                          />
+                          <strong> {item.title || item.source_id}</strong>
+                        </span>
+                        <small>
+                          source_id={item.source_id} | type={formatSnakeCaseLabel(item.source_type)} | version={item.version_id} | status={formatSnakeCaseLabel(item.ingestion_status)}
+                        </small>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {scholarChatSourceContext().length > 0 ? renderSourceWorkflowActionHints() : null}
+            <p class="muted">{scholarChatSelectedSourceIdsSummary()}</p>
+          </div>
         </section>
 
         <section class="card workspace-panel" id="scholar-chat" data-workspace="scholar_chat">
           <h2>Scholar Chat</h2>
           <p class="muted">
-            Preview-only request shell for the future chat-first Scholar Chat workflow. It previews a local workflow plan from the prompt and selected source context, but it does not run answer generation, model calls, or Evidence Pack builds.
+            Ask about a lecture, paper, method, source, or thesis task. AEGIS previews a grounded workflow plan and keeps execution gated.
           </p>
-        <div class="form-row">
-          <label>
-            Mode
-            <select
-              value={scholarChatMode()}
-              onChange={(event) => {
-                setScholarChatMode(event.currentTarget.value as ScholarChatMode);
-                setScholarChatPreview(null);
-                setScholarChatExecutionGatePreview(null);
-                clearScholarChatPromptPackPreview();
-                clearScholarChatDraftInferencePreview();
-                clearScholarChatGroundedAnswerBuildIntentPreview();
-              }}
-            >
-              {SCHOLAR_CHAT_MODES.map((item) => (
-                <option value={item.value}>{item.label}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Grounding policy
-            <select
-              value={scholarChatGroundingPolicy()}
-              onChange={(event) => {
-                setScholarChatGroundingPolicy(event.currentTarget.value as GroundingPolicy);
-                setScholarChatPreview(null);
-                setScholarChatExecutionGatePreview(null);
-                clearScholarChatPromptPackPreview();
-                clearScholarChatDraftInferencePreview();
-                clearScholarChatGroundedAnswerBuildIntentPreview();
-              }}
-            >
-              {GROUNDING_POLICIES.map((item) => (
-                <option value={item.value}>{item.label}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div class="artifact-overview">
+          <div class="chat-composer">
+            <div class="chat-empty-state">
+              <h3>What do you want to investigate?</h3>
+              <p>Ask about a lecture, paper, method, source, or thesis task.</p>
+            </div>
+            <label class="composer-field">
+              Prompt
+              <textarea
+                rows={4}
+                value={scholarChatPrompt()}
+                onInput={(event) => {
+                  setScholarChatPrompt(event.currentTarget.value);
+                  setScholarChatValidationError(null);
+                  setScholarChatPreview(null);
+                  setScholarChatExecutionGatePreview(null);
+                  clearScholarChatPromptPackPreview();
+                  clearScholarChatDraftInferencePreview();
+                  clearScholarChatGroundedAnswerBuildIntentPreview();
+                }}
+                placeholder="Ask AEGIS about a paper, lecture, method, or thesis problem..."
+              />
+            </label>
+            {scholarChatValidationError() && <p class="error">{scholarChatValidationError()}</p>}
+            {scholarChatError() && <p class="error">{scholarChatError()}</p>}
+            <div class="composer-actions">
+              <button class="primary-action" onClick={previewScholarChatAgenticWorkflowPlan} disabled={scholarChatLoading()}>
+                {scholarChatLoading() ? "Previewing..." : "Preview plan"}
+              </button>
+              <button class="secondary-action" onClick={previewScholarChatAgenticWorkflowExecutionGate} disabled={scholarChatExecutionGateLoading()}>
+                {scholarChatExecutionGateLoading() ? "Checking..." : "Check next step"}
+              </button>
+            </div>
+            <details class="planning-options">
+              <summary>Planning options</summary>
+              <div class="form-row">
+                <label>
+                  Mode
+                  <select
+                    value={scholarChatMode()}
+                    onChange={(event) => {
+                      setScholarChatMode(event.currentTarget.value as ScholarChatMode);
+                      setScholarChatPreview(null);
+                      setScholarChatExecutionGatePreview(null);
+                      clearScholarChatPromptPackPreview();
+                      clearScholarChatDraftInferencePreview();
+                      clearScholarChatGroundedAnswerBuildIntentPreview();
+                    }}
+                  >
+                    {SCHOLAR_CHAT_MODES.map((item) => (
+                      <option value={item.value}>{item.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Grounding policy
+                  <select
+                    value={scholarChatGroundingPolicy()}
+                    onChange={(event) => {
+                      setScholarChatGroundingPolicy(event.currentTarget.value as GroundingPolicy);
+                      setScholarChatPreview(null);
+                      setScholarChatExecutionGatePreview(null);
+                      clearScholarChatPromptPackPreview();
+                      clearScholarChatDraftInferencePreview();
+                      clearScholarChatGroundedAnswerBuildIntentPreview();
+                    }}
+                  >
+                    {GROUNDING_POLICIES.map((item) => (
+                      <option value={item.value}>{item.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </details>
+          </div>
+        <div class="compact-note">
           <h3>Source context</h3>
           <p class="muted">
-            Choose Scholar Chat source IDs to scope the planner. Existing diagnostic source selection remains a fallback until you set Scholar Chat context.
+            No local sources selected. AEGIS can still preview the workflow, but grounded answers require sources.
           </p>
-          {scholarChatSourceContextLoading() ? (
-            <p>Loading registered sources...</p>
-          ) : scholarChatSourceContextError() ? (
-            <p class="error">{scholarChatSourceContextError()}</p>
-          ) : scholarChatSourceContext().length === 0 ? (
-            renderFirstRunSourceReadiness()
-          ) : (
-            <>
-              <p class="muted">Selected source count: {scholarChatSourceContextSelectedIds().length}</p>
-              <ul class="final-answer-list-items">
-                {scholarChatSourceContext().map((item) => (
-                  <li>
-            <label class="final-answer-list-item">
-                      <span>
-                        <input
-                          type="checkbox"
-                          checked={scholarChatSourceContextSelectedIds().includes(item.source_id)}
-                          onChange={() => {
-                            toggleScholarChatSourceContext(item.source_id);
-                            setScholarChatPreview(null);
-                            setScholarChatExecutionGatePreview(null);
-                          }}
-                        />
-                        <strong> {item.title || item.source_id}</strong>
-                      </span>
-                      <small>
-                        source_id={item.source_id} | type={formatSnakeCaseLabel(item.source_type)} | version={item.version_id} | status={formatSnakeCaseLabel(item.ingestion_status)}
-                      </small>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {scholarChatSourceContext().length > 0 ? renderSourceWorkflowActionHints() : null}
-          <p class="muted">{scholarChatSelectedSourceIdsSummary()}</p>
         </div>
-        <div class="artifact-overview">
+        <div class="compact-note">
           <h3>Next step</h3>
           <p class="muted">
             Preview-only execution gate for the chat workflow plan. It shows the next safe step without starting execution.
           </p>
-          <div class="hero-actions">
-            <button onClick={previewScholarChatAgenticWorkflowExecutionGate} disabled={scholarChatExecutionGateLoading()}>
-              {scholarChatExecutionGateLoading() ? "Checking..." : "Check next step"}
-            </button>
-          </div>
           {scholarChatExecutionGateValidationError() && <p class="error">{scholarChatExecutionGateValidationError()}</p>}
           {scholarChatExecutionGateError() && <p class="error">{scholarChatExecutionGateError()}</p>}
           {scholarChatExecutionGatePreview() ? (
@@ -4751,32 +4781,8 @@ export default function App() {
             <p>No Scholar Chat execution gate preview loaded yet.</p>
           )}
         </div>
-        <label>
-          Prompt
-          <textarea
-            rows={4}
-            value={scholarChatPrompt()}
-            onInput={(event) => {
-              setScholarChatPrompt(event.currentTarget.value);
-              setScholarChatValidationError(null);
-              setScholarChatPreview(null);
-              setScholarChatExecutionGatePreview(null);
-              clearScholarChatPromptPackPreview();
-              clearScholarChatDraftInferencePreview();
-              clearScholarChatGroundedAnswerBuildIntentPreview();
-            }}
-            placeholder="Ask about a lecture, paper, method, or thesis task..."
-          />
-        </label>
-        {scholarChatValidationError() && <p class="error">{scholarChatValidationError()}</p>}
-        {scholarChatError() && <p class="error">{scholarChatError()}</p>}
-        <div class="hero-actions">
-          <button onClick={previewScholarChatAgenticWorkflowPlan} disabled={scholarChatLoading()}>
-            {scholarChatLoading() ? "Previewing..." : "Preview workflow plan"}
-          </button>
-        </div>
         {scholarChatPreview() ? (
-          <div class="artifact-overview">
+          <div class="assistant-card workflow-preview">
             <h3>Workflow plan</h3>
             <p class="muted">
               Chat-first workflow planning preview only. It interprets the prompt as a local action plan and does not execute extraction, chunking, retrieval, Evidence Pack work, or answer generation.
@@ -4836,6 +4842,8 @@ export default function App() {
         ) : (
           <p>No Scholar Chat workflow plan preview loaded yet.</p>
         )}
+        <details class="advanced-panels">
+          <summary>Advanced preview panels</summary>
         <div class="artifact-overview">
           <h3>Retrieval preview</h3>
           <p class="muted">
@@ -8428,6 +8436,7 @@ export default function App() {
             <p>No llama.cpp smoke diagnostic preview loaded yet.</p>
           )}
         </div>
+        </details>
       </section>
 
       <section class="card workspace-panel" id="developer-diagnostics" data-workspace="developer_diagnostics">
