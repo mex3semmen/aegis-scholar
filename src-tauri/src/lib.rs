@@ -8,6 +8,7 @@ mod answer_draft;
 mod final_answer;
 mod grounded_answer;
 mod errors;
+mod local_server;
 mod local_runtime;
 mod locators;
 mod retrieval;
@@ -23,6 +24,18 @@ use answer_draft::{AnswerDraft, AnswerDraftService};
 use evidence::{EvidencePack, EvidencePackMetadata, EvidenceService};
 use final_answer::{build_final_answer as build_final_answer_impl, export_answer_artifacts as export_answer_artifacts_impl, get_answer_artifact_export_manifest as get_answer_artifact_export_manifest_impl, get_answer_artifact_health as get_answer_artifact_health_impl, inspect_answer_artifact_export_bundle as inspect_answer_artifact_export_bundle_impl, list_answer_artifact_issues as list_answer_artifact_issues_impl, get_answer_artifact_overview as get_answer_artifact_overview_impl, list_answer_artifact_sources as list_answer_artifact_sources_impl, list_final_answers as list_final_answers_impl, read_final_answer as read_final_answer_impl, AnswerArtifactExportBundleInspection, AnswerArtifactExportManifest, AnswerArtifactExportResult, AnswerArtifactHealth, AnswerArtifactIssue, AnswerArtifactOverview, AnswerArtifactSourceMetadata, FinalAnswer, FinalAnswerMetadata};
 use grounded_answer::{build_grounded_answer as build_grounded_answer_impl, read_grounded_answer as read_grounded_answer_impl, GroundedAnswer};
+use local_server::{
+    check_managed_llama_server_health as check_managed_llama_server_health_impl,
+    inspect_managed_llama_server_status as inspect_managed_llama_server_status_impl,
+    preview_managed_llama_server_launch_plan as preview_managed_llama_server_launch_plan_impl,
+    start_managed_llama_server as start_managed_llama_server_impl,
+    stop_managed_llama_server as stop_managed_llama_server_impl,
+    ManagedLlamaServerLaunchPlanPreview,
+    ManagedLlamaServerLaunchPlanRequest,
+    ManagedLlamaServerStartRequest,
+    ManagedLlamaServerState,
+    ManagedLlamaServerStatusPreview,
+};
 use local_runtime::{
     preview_local_model_runtime_health as preview_local_model_runtime_health_impl,
     preview_local_runtime_invocation_plan as preview_local_runtime_invocation_plan_impl,
@@ -798,8 +811,47 @@ fn preview_scholar_chat_evidence_pack_assembly_plan(
         .map_err(to_user_error)
 }
 
+#[tauri::command]
+fn preview_managed_llama_server_launch_plan(
+    root: String,
+    request: ManagedLlamaServerLaunchPlanRequest,
+) -> Result<ManagedLlamaServerLaunchPlanPreview, String> {
+    preview_managed_llama_server_launch_plan_impl(root, request).map_err(to_user_error)
+}
+
+#[tauri::command]
+fn start_managed_llama_server(
+    root: String,
+    state: tauri::State<'_, ManagedLlamaServerState>,
+    request: ManagedLlamaServerStartRequest,
+) -> Result<ManagedLlamaServerStatusPreview, String> {
+    start_managed_llama_server_impl(root, &state, request).map_err(to_user_error)
+}
+
+#[tauri::command]
+fn check_managed_llama_server_health(
+    state: tauri::State<'_, ManagedLlamaServerState>,
+) -> Result<ManagedLlamaServerStatusPreview, String> {
+    check_managed_llama_server_health_impl(&state).map_err(to_user_error)
+}
+
+#[tauri::command]
+fn stop_managed_llama_server(
+    state: tauri::State<'_, ManagedLlamaServerState>,
+) -> Result<ManagedLlamaServerStatusPreview, String> {
+    stop_managed_llama_server_impl(&state).map_err(to_user_error)
+}
+
+#[tauri::command]
+fn inspect_managed_llama_server_status(
+    state: tauri::State<'_, ManagedLlamaServerState>,
+) -> Result<ManagedLlamaServerStatusPreview, String> {
+    inspect_managed_llama_server_status_impl(&state).map_err(to_user_error)
+}
+
 pub fn run() {
     tauri::Builder::default()
+        .manage(ManagedLlamaServerState::default())
         .invoke_handler(tauri::generate_handler![
             register_source,
             get_source,
@@ -881,6 +933,11 @@ pub fn run() {
             preview_llama_runtime_smoke_execution_plan,
             run_llama_runtime_version_probe,
             run_llama_runtime_smoke_diagnostic,
+            preview_managed_llama_server_launch_plan,
+            start_managed_llama_server,
+            check_managed_llama_server_health,
+            stop_managed_llama_server,
+            inspect_managed_llama_server_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");
