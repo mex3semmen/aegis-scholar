@@ -16,6 +16,8 @@ It is a controlled scientific retrieval pipeline for disciplined local-first wor
 
 The architecture is designed to support preview-first rollout phases before any execution or answer-writing behavior is enabled.
 
+For a compact external orientation layer, see `docs/01-architecture-overview.md` and `docs/00-project-overview.md`.
+
 ## Current State
 
 The current system is a mixed preview / execution stack:

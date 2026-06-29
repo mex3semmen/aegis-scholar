@@ -117,6 +117,10 @@ Start here:
 10. `docs/10-literature-rag-evidence.md`
 11. `docs/11-evaluation-harness.md`
 12. `docs/12-roadmap.md`
+13. `docs/00-project-overview.md`
+14. `docs/01-architecture-overview.md`
+15. `docs/02-phase-index.md`
+16. `docs/03-github-wiki-outline.md`
 
 ## Developer onboarding
 
@@ -125,6 +129,7 @@ If you are trying to orient yourself quickly:
 - architecture and boundaries: `docs/00-executive-summary.md`, `docs/02-target-architecture.md`, `docs/03-corpus-authority.md`
 - retrieval and evidence packs: `docs/06-retrieval-architecture.md`, `docs/10-literature-rag-evidence.md`
 - current roadmap and closed review blocks: `docs/12-roadmap.md`
+- project overview and external orientation: `docs/00-project-overview.md`, `docs/01-architecture-overview.md`, `docs/02-phase-index.md`, `docs/03-github-wiki-outline.md`
 
 ## Developer verification
 
