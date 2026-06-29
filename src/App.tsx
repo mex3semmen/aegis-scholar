@@ -39,6 +39,35 @@ type ScholarChatRequest = {
   selected_source_ids: string[];
 };
 
+type WorkspaceSection = "scholar_chat" | "sources" | "evidence_packs" | "developer_diagnostics";
+
+const WORKSPACE_SECTIONS: { value: WorkspaceSection; label: string; targetId: string; description: string }[] = [
+  {
+    value: "scholar_chat",
+    label: "Scholar Chat",
+    targetId: "scholar-chat",
+    description: "Primary chat-first workflow surface.",
+  },
+  {
+    value: "sources",
+    label: "Sources",
+    targetId: "sources",
+    description: "Source readiness and registration context.",
+  },
+  {
+    value: "evidence_packs",
+    label: "Evidence Packs",
+    targetId: "evidence-packs",
+    description: "Guarded local evidence-pack inspection.",
+  },
+  {
+    value: "developer_diagnostics",
+    label: "Developer Diagnostics",
+    targetId: "developer-diagnostics",
+    description: "Preview, contract, and runtime inspection.",
+  },
+];
+
 const SCHOLAR_CHAT_MODES: { value: ScholarChatMode; label: string }[] = [
   { value: "lecture_learning", label: "Lecture learning" },
   { value: "thesis_writing", label: "Thesis writing" },
@@ -2020,6 +2049,7 @@ function renderMetricGrid(entries: { label: string; value: string | number }[]) 
 }
 
 export default function App() {
+  const [activeWorkspace, setActiveWorkspace] = createSignal<WorkspaceSection>("scholar_chat");
   const [status, setStatus] = createSignal<CorpusStatus | null>(null);
   const [statusError, setStatusError] = createSignal<string | null>(null);
   const [scholarChatPrompt, setScholarChatPrompt] = createSignal("");
@@ -4450,40 +4480,72 @@ export default function App() {
     void loadStatus();
   });
 
+  function activateWorkspace(workspace: WorkspaceSection) {
+    const target = WORKSPACE_SECTIONS.find((item) => item.value === workspace);
+    setActiveWorkspace(workspace);
+    if (target) {
+      queueMicrotask(() => {
+        document.getElementById(target.targetId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }
+
   return (
     <main class="app-shell">
-      <section class="hero">
-        <p class="eyebrow">AEGIS Scholar</p>
-        <h1>Scientific knowledge OS</h1>
-        <p>
-          Minimal Phase 1 scaffold for Corpus Authority and Source Registry.
-          No RAG, no model runtime, no coding-agent behavior.
-        </p>
-        <div class="hero-actions">
-          <button onClick={loadStatus}>Check corpus status</button>
+      <aside class="workspace-nav" aria-label="Workspace navigation">
+        <p class="eyebrow">Workspaces</p>
+        <div class="workspace-nav-list">
+          {WORKSPACE_SECTIONS.map((item) => (
+            <button
+              classList={{ active: activeWorkspace() === item.value }}
+              onClick={() => activateWorkspace(item.value)}
+            >
+              <span>{item.label}</span>
+              <small>{item.description}</small>
+            </button>
+          ))}
         </div>
-      </section>
+      </aside>
 
-      <section class="card">
-        <h2>Corpus status</h2>
-        {status() ? (
-          <>
-            <pre>{JSON.stringify(status(), null, 2)}</pre>
-            {status()!.source_count === 0 ? (
-              <p class="muted">No local sources yet. See the source readiness panel below for supported source types and next steps.</p>
-            ) : null}
-          </>
-        ) : (
-          <p>No status loaded yet.</p>
-        )}
-        {statusError() && <p class="error">{statusError()}</p>}
-      </section>
+      <div class="workspace-content">
+        <section class="hero">
+          <p class="eyebrow">AEGIS Scholar</p>
+          <h1>Scientific knowledge OS</h1>
+          <p>
+            Minimal Phase 1 scaffold for Corpus Authority and Source Registry.
+            No RAG, no model runtime, no coding-agent behavior.
+          </p>
+          <p class="muted">
+            The shell now orients around Scholar Chat first, with Sources, Evidence Packs, and Developer Diagnostics as secondary workspaces.
+          </p>
+          <div class="hero-actions">
+            <button onClick={loadStatus}>Check corpus status</button>
+          </div>
+        </section>
 
-      <section class="card">
-        <h2>Scholar Chat</h2>
-        <p class="muted">
-          Preview-only request shell for the future chat-first Scholar Chat workflow. It previews a local workflow plan from the prompt and selected source context, but it does not run answer generation, model calls, or Evidence Pack builds.
-        </p>
+        <section class="card workspace-panel" id="sources" data-workspace="sources">
+          <h2>Sources</h2>
+          <p class="muted">
+            Source registration and readiness are still early. This workspace keeps the corpus state visible while the import and readiness flow stays manual.
+          </p>
+          {status() ? (
+            <>
+              <pre>{JSON.stringify(status(), null, 2)}</pre>
+              {status()!.source_count === 0 ? (
+                <p class="muted">No local sources yet. See the source readiness panel below for supported source types and next steps.</p>
+              ) : null}
+            </>
+          ) : (
+            <p>No status loaded yet.</p>
+          )}
+          {statusError() && <p class="error">{statusError()}</p>}
+        </section>
+
+        <section class="card workspace-panel" id="scholar-chat" data-workspace="scholar_chat">
+          <h2>Scholar Chat</h2>
+          <p class="muted">
+            Preview-only request shell for the future chat-first Scholar Chat workflow. It previews a local workflow plan from the prompt and selected source context, but it does not run answer generation, model calls, or Evidence Pack builds.
+          </p>
         <div class="form-row">
           <label>
             Mode
@@ -8368,10 +8430,10 @@ export default function App() {
         </div>
       </section>
 
-      <section class="card">
+      <section class="card workspace-panel" id="developer-diagnostics" data-workspace="developer_diagnostics">
         <h2>Final answer inspector</h2>
         <p class="muted">
-          Read-only display for an already-built FinalAnswer contract.
+          Developer diagnostics and contract inspection stay available here. This read-only display covers an already-built FinalAnswer contract.
         </p>
         <div class="form-row">
           <label>
@@ -8979,7 +9041,7 @@ export default function App() {
             <p>Select an answer artifact source to load final answers.</p>
           )}
         </div>
-        <div class="artifact-overview">
+        <div class="artifact-overview workspace-panel" id="evidence-packs" data-workspace="evidence_packs">
           <h3>Evidence packs</h3>
           <p class="muted">Read-only evidence-pack metadata for the selected retrieval or answer-artifact source.</p>
           {selectedEvidencePackSourceId() ? (
@@ -9222,6 +9284,7 @@ export default function App() {
           <p>No final answer loaded yet.</p>
         )}
       </section>
+      </div>
     </main>
   );
 }
