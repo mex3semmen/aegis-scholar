@@ -20,6 +20,7 @@ This is a compressed status index, not a full changelog.
 | Phase 130.0 | in progress | chat product surface refinement | `src/App.tsx`, `src/styles.css`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | assistant-like default chat surface is polish only; preview/gate behavior and diagnostics remain available |
 | Phase 131.0 | in progress | chat transcript interaction model | `src/App.tsx`, `src/styles.css`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | transcript turns are in-memory only; preview/gate behavior remains preview-only |
 | Phase 132.0 | complete | frontend surface extraction | `src/App.tsx`, `src/workspaces/WorkspaceShell.tsx`, `src/workspaces/ScholarChatWorkspace.tsx`, `src/workspaces/SourcesWorkspace.tsx`, `src/workspaces/EvidencePacksWorkspace.tsx`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | behavior remains unchanged; Developer Diagnostics stays in `src/App.tsx` until a later safe extraction |
+| Phase 133.0 | complete | chat transcript interaction model | `src/App.tsx`, `src/workspaces/ScholarChatWorkspace.tsx`, `src/styles.css`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | transcript turns are in-memory only; preview/gate behavior remains preview-only and assistant-style responses stay secondary |
 | Phase 117.0 | implemented | local Evidence Pack creation MVP | Evidence Pack backend path and managed storage | integrate with broader product surfaces |
 | Phase 118.0 | implemented | PDF text-layer extraction MVP with page-level locators | extraction and locator handling | OCR and broad PDF ingestion remain out of scope |
 | Phase 119.0 | implemented | first-run source import readiness UI | frontend guidance surfaces | actual import wizard remains missing |
@@ -39,6 +40,7 @@ The most relevant recent product milestones are:
 - Phase 124.0 docs QA / GitHub Wiki readiness review
 - Phase 125.0 wiki export prep guide
 - Phase 126.0 wiki copy QA / publication checklist
+- Phase 133.0 chat transcript interaction model
 - Evidence Pack planning and creation
 - PDF text-layer extraction
 - first-run and source workflow guidance
