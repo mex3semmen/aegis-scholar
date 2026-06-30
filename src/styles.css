@@ -660,6 +660,37 @@ pre {
   margin: 0;
 }
 
+.grounded-answer-action-header,
+.grounded-statement-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.grounded-answer-action-header h4,
+.grounded-answer-result h4 {
+  margin: 0;
+}
+
+.grounded-answer-actions,
+.grounded-answer-result {
+  margin-top: 1rem;
+}
+
+.grounded-statement-list {
+  margin-top: 0.8rem;
+}
+
+.grounded-statement {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.grounded-statement p {
+  margin: 0;
+}
+
 .status-not_started {
   background: rgba(148, 163, 184, 0.14);
   color: #cbd5e1;
@@ -860,7 +891,9 @@ pre {
   .source-import-step-heading,
   .evidence-pack-action-header,
   .answer-draft-action-header,
-  .answer-draft-claim-header {
+  .answer-draft-claim-header,
+  .grounded-answer-action-header,
+  .grounded-statement-header {
     flex-direction: column;
   }
 }

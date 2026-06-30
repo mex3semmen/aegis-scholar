@@ -28,6 +28,7 @@ This roadmap now has a clear split between implemented foundations, preview-firs
 | Current / completed Phase 140.0 | source import wizard MVP |
 | Current / completed Phase 141.0 | Evidence Pack action from indexed source |
 | Current / completed Phase 142.0 | Answer Draft action from Evidence Pack |
+| Current / completed Phase 143.0 | Grounded Answer action from Answer Draft |
 | Known missing product workflows | scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 | Recommended next product slices | scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 
@@ -52,6 +53,7 @@ Phase 139.0 is the managed server chat diagnostic pass. It adds a consent-gated,
 Phase 140.0 adds a local Source Import Wizard MVP in the Sources workspace. It accepts a local file path plus existing source metadata, drives the existing register -> extract -> chunk -> retrieval-index pipeline step by step, refreshes corpus status and source context after each successful step, and keeps Scholar Chat preview-only.
 Phase 141.0 adds an explicit Evidence Pack action for an already indexed local source. It accepts a query and conservative result limit, uses the existing `build_evidence_pack` command, refreshes source and Evidence Pack context after success, and does not generate an answer or citations.
 Phase 142.0 adds an explicit Answer Draft action for an existing Evidence Pack. It uses the existing `build_answer_draft` command to create a mechanical evidence-only claim scaffold and does not build a GroundedAnswer, FinalAnswer, citation output, or LLM prose.
+Phase 143.0 adds an explicit Grounded Answer action for the Answer Draft currently shown in the Evidence Packs workspace. It uses the existing `build_grounded_answer` command to create a mechanical contract-only statement scaffold and does not build a FinalAnswer, emit citations, or generate LLM prose.
 Phase 116 remains backend-only, preview-only, and in-memory. It does not add Evidence Pack creation, citations, writes, retrieval execution, provider expansion, runtime/model/LLM behavior, or answer generation.
 Phase 117.0 adds a backend-only Local Evidence Pack Creation MVP. It uses existing local source/retrieval/evidence data and managed Evidence Pack storage, stays deterministic and path-safe, and does not add network access, model/runtime/LLM behavior, or answer generation.
 Phase 118.0 adds a backend-only PDF Text Extraction MVP. It supports local PDFs when a text layer is present, preserves page-level locators, reuses the existing extraction-report / source-registry / corpus-layout contracts, and stays OCR-free and preview-only. It does not add OCR, web requests, scraping, downloads, connectors, source import, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.

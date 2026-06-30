@@ -71,6 +71,37 @@ type AnswerDraftBuildSummary = {
   sourceTitle: string;
 };
 
+type GroundedStatement = {
+  statement_id: string;
+  status: string;
+  text: string;
+  claim_ids: string[];
+  evidence_ids: string[];
+  chunk_ids: string[];
+  locators: unknown[];
+  support_level: string;
+};
+
+type GroundedAnswer = {
+  grounded_answer_id: string;
+  answer_draft_id: string;
+  evidence_pack_id: string;
+  source_id: string;
+  version_id: string;
+  query: string;
+  created_at: string;
+  answer_mode: string;
+  statement_count: number;
+  unsupported_count: number;
+  statements: GroundedStatement[];
+  warnings: string[];
+};
+
+type GroundedAnswerBuildSummary = {
+  answer: GroundedAnswer;
+  sourceTitle: string;
+};
+
 const ELIGIBLE_SOURCE_STATUSES = new Set([
   "indexed",
   "evidence_ready",
@@ -112,8 +143,12 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
   const [answerDraftRunningPackId, setAnswerDraftRunningPackId] = createSignal<string | null>(null);
   const [answerDraftError, setAnswerDraftError] = createSignal<string | null>(null);
   const [answerDraftSummary, setAnswerDraftSummary] = createSignal<AnswerDraftBuildSummary | null>(null);
+  const [groundedAnswerStatus, setGroundedAnswerStatus] = createSignal<EvidencePackActionStatus>("not_started");
+  const [groundedAnswerError, setGroundedAnswerError] = createSignal<string | null>(null);
+  const [groundedAnswerSummary, setGroundedAnswerSummary] = createSignal<GroundedAnswerBuildSummary | null>(null);
   let previousExternalSourceSelection: string | null = null;
   let answerDraftRequestVersion = 0;
+  let groundedAnswerRequestVersion = 0;
 
   const eligibleSources = () =>
     (props.sourceContext as EvidencePackSource[])
@@ -135,8 +170,20 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
     setAnswerDraftSummary(null);
   }
 
+  function resetGroundedAnswerResult(preserveRunning = false) {
+    groundedAnswerRequestVersion += 1;
+    setGroundedAnswerError(null);
+    setGroundedAnswerSummary(null);
+    if (preserveRunning && groundedAnswerStatus() === "running") {
+      return;
+    }
+    setGroundedAnswerStatus("not_started");
+  }
+
   const workspaceMutationRunning = () =>
-    actionStatus() === "running" || answerDraftStatus() === "running";
+    actionStatus() === "running" ||
+    answerDraftStatus() === "running" ||
+    groundedAnswerStatus() === "running";
 
   createEffect(() => {
     const externalSelection = [
@@ -151,6 +198,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
       } else {
         resetAnswerDraftResult();
       }
+      resetGroundedAnswerResult(true);
     }
     previousExternalSourceSelection = externalSelection;
   });
@@ -166,6 +214,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
         setSelectedSourceId(selectedContextSource.source_id);
         resetActionResult();
         resetAnswerDraftResult();
+        resetGroundedAnswerResult(true);
       }
       return;
     }
@@ -177,6 +226,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
     setSelectedSourceId(selectedContextSource?.source_id ?? existingEvidenceSource?.source_id ?? sources[0]?.source_id ?? "");
     resetActionResult();
     resetAnswerDraftResult();
+    resetGroundedAnswerResult(true);
   });
 
   function selectSource(sourceId: string) {
@@ -184,6 +234,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
     setSelectedSourceId(sourceId);
     resetActionResult();
     resetAnswerDraftResult();
+    resetGroundedAnswerResult();
   }
 
   function updateQuery(value: string) {
@@ -281,6 +332,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
     const source = (props.sourceContext as EvidencePackSource[]).find(
       (candidate) => candidate.source_id === item.source_id,
     );
+    resetGroundedAnswerResult();
     const requestVersion = ++answerDraftRequestVersion;
     setAnswerDraftStatus("running");
     setAnswerDraftRunningPackId(item.evidence_pack_id);
@@ -319,6 +371,69 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
       setAnswerDraftError(explainAnswerDraftError(error));
       setAnswerDraftSummary(null);
     }
+  }
+
+  function explainGroundedAnswerError(error: unknown) {
+    const sanitized = props.sanitizeBackendError(error);
+    const normalized = sanitized.toLowerCase().replace(/[_\s-]+/g, "");
+    if (normalized.includes("groundedansweremptydraft")) {
+      return "The current Answer Draft contains no claims.";
+    }
+    if (normalized.includes("answerdraftmissing")) {
+      return "The current Answer Draft is no longer available.";
+    }
+    if (normalized.includes("groundedanswerinvalidid") || normalized.includes("answerdraftinvalidid")) {
+      return "The current Answer Draft ID is invalid.";
+    }
+    if (normalized.includes("answerdraftreadfailed")) {
+      return "The current Answer Draft could not be read.";
+    }
+    return sanitized;
+  }
+
+  async function buildGroundedAnswer() {
+    const currentDraft = answerDraftSummary();
+    if (workspaceMutationRunning() || !currentDraft) {
+      return;
+    }
+
+    resetGroundedAnswerResult();
+    const requestVersion = ++groundedAnswerRequestVersion;
+    setGroundedAnswerStatus("running");
+    try {
+      const answer = await invoke<GroundedAnswer>("build_grounded_answer", {
+        root: ".",
+        source_id: currentDraft.draft.source_id,
+        answer_draft_id: currentDraft.draft.answer_draft_id,
+      });
+      await Promise.all([
+        props.refreshCorpusStatus(),
+        props.refreshSourceContext(true),
+        props.loadEvidencePacksBySourceId(currentDraft.draft.source_id),
+      ]);
+      if (requestVersion !== groundedAnswerRequestVersion) {
+        setGroundedAnswerStatus("not_started");
+        return;
+      }
+      setGroundedAnswerSummary({
+        answer,
+        sourceTitle: currentDraft.sourceTitle,
+      });
+      setGroundedAnswerStatus("succeeded");
+    } catch (error) {
+      if (requestVersion !== groundedAnswerRequestVersion) {
+        setGroundedAnswerStatus("not_started");
+        return;
+      }
+      setGroundedAnswerStatus("failed");
+      setGroundedAnswerError(explainGroundedAnswerError(error));
+      setGroundedAnswerSummary(null);
+    }
+  }
+
+  function reloadEvidencePacks() {
+    resetGroundedAnswerResult();
+    return props.loadEvidencePacksBySourceId(selectedSourceId());
   }
 
   const selectedSource = () =>
@@ -418,7 +533,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
           <>
             <div class="hero-actions">
               <button
-                onClick={() => props.loadEvidencePacksBySourceId(selectedSourceId())}
+                onClick={reloadEvidencePacks}
                 disabled={props.evidencePacksLoading || workspaceMutationRunning()}
               >
                 {props.evidencePacksLoading ? "Loading..." : "Load Evidence Packs"}
@@ -480,7 +595,12 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
         {answerDraftError() ? <p class="error">{answerDraftError()}</p> : null}
         {answerDraftSummary() ? (
           <section class="compact-note answer-draft-result">
-            <h4>Answer Draft</h4>
+            <div class="grounded-answer-action-header">
+              <h4>Answer Draft</h4>
+              <span class={`status-pill status-${groundedAnswerStatus()}`}>
+                Grounded answer: {actionStatusLabel(groundedAnswerStatus())}
+              </span>
+            </div>
             <p class="muted">
               Mechanical evidence-only claim scaffold. This is not a grounded answer or final prose.
             </p>
@@ -519,6 +639,57 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
               </>
             ) : (
               <p>No claims returned.</p>
+            )}
+            <div class="hero-actions grounded-answer-actions">
+              <button onClick={buildGroundedAnswer} disabled={workspaceMutationRunning()}>
+                {groundedAnswerStatus() === "running" ? "Building..." : "Build grounded answer"}
+              </button>
+            </div>
+          </section>
+        ) : null}
+        {groundedAnswerError() ? <p class="error">{groundedAnswerError()}</p> : null}
+        {groundedAnswerSummary() ? (
+          <section class="compact-note grounded-answer-result">
+            <h4>Grounded Answer</h4>
+            <p class="muted">
+              Mechanical contract-only statement scaffold. This is not final prose or an LLM answer.
+            </p>
+            <div class="contract-meta">
+              <div><span>Grounded Answer ID</span><strong>{groundedAnswerSummary()!.answer.grounded_answer_id}</strong></div>
+              <div><span>Answer Draft ID</span><strong>{groundedAnswerSummary()!.answer.answer_draft_id}</strong></div>
+              <div><span>Evidence Pack ID</span><strong>{groundedAnswerSummary()!.answer.evidence_pack_id}</strong></div>
+              <div><span>Source</span><strong>{groundedAnswerSummary()!.sourceTitle}</strong></div>
+              <div><span>Source ID</span><strong>{groundedAnswerSummary()!.answer.source_id}</strong></div>
+              <div><span>Query</span><strong>{groundedAnswerSummary()!.answer.query}</strong></div>
+              <div><span>Answer mode</span><strong>{props.formatSnakeCaseLabel(groundedAnswerSummary()!.answer.answer_mode)}</strong></div>
+              <div><span>Statements</span><strong>{groundedAnswerSummary()!.answer.statement_count}</strong></div>
+              <div><span>Unsupported</span><strong>{groundedAnswerSummary()!.answer.unsupported_count}</strong></div>
+              <div><span>Warnings</span><strong>{groundedAnswerSummary()!.answer.warnings.length}</strong></div>
+            </div>
+            {groundedAnswerSummary()!.answer.statements.length > 0 ? (
+              <>
+                {groundedAnswerSummary()!.answer.statements.length > 3 ? (
+                  <p class="muted">Showing 3 of {groundedAnswerSummary()!.answer.statement_count} statements.</p>
+                ) : null}
+                <ul class="final-answer-list-items grounded-statement-list">
+                  {groundedAnswerSummary()!.answer.statements.slice(0, 3).map((statement) => (
+                    <li>
+                      <article class="final-answer-list-item grounded-statement">
+                        <div class="grounded-statement-header">
+                          <span>{props.formatSnakeCaseLabel(statement.status)}</span>
+                          <small>{props.formatSnakeCaseLabel(statement.support_level)}</small>
+                        </div>
+                        <p>{compactClaimPreview(statement.text)}</p>
+                        <small>
+                          claims={statement.claim_ids.length} | evidence={statement.evidence_ids.length} | chunks={statement.chunk_ids.length} | locators={statement.locators.length}
+                        </small>
+                      </article>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p>No statements returned.</p>
             )}
           </section>
         ) : null}
