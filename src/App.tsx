@@ -1529,8 +1529,11 @@ type ManagedLlamaServerLifecycleStatus =
   | "stopped"
   | "failed"
   | "blocked"
-  | "already_running";
+  | "already_running"
+  | "port_occupied"
+  | "external_server_detected";
 type ManagedLlamaServerHealthStatus = "not_started" | "loading" | "ready" | "unreachable" | "failed";
+type ManagedLlamaServerPortOccupancyStatus = "free" | "managed_owned" | "external_server_detected" | "port_occupied" | "unknown_owner";
 
 type ManagedLlamaServerNotice = {
   kind: string;
@@ -1583,6 +1586,10 @@ type ManagedLlamaServerLaunchPlanPreview = {
 type ManagedLlamaServerStatusPreview = {
   lifecycle_status: ManagedLlamaServerLifecycleStatus;
   health_status: ManagedLlamaServerHealthStatus;
+  owns_active_server: boolean;
+  port_occupied: boolean;
+  port_occupied_by_unmanaged_process: boolean;
+  port_occupancy_status: ManagedLlamaServerPortOccupancyStatus;
   host?: string | null;
   port?: number | null;
   alias?: string | null;
@@ -1604,6 +1611,51 @@ type ManagedLlamaServerStatusPreview = {
   no_persistence: boolean;
   no_artifact_write: boolean;
   no_lan_binding_by_default: boolean;
+};
+
+type ManagedLlamaServerChatDiagnosticStatus =
+  | "blocked"
+  | "server_not_ready"
+  | "diagnostic_succeeded"
+  | "diagnostic_failed"
+  | "timed_out";
+
+type ManagedLlamaServerChatDiagnosticRequest = {
+  allow_chat_diagnostic: boolean;
+  prompt: string | null;
+  max_tokens: number | null;
+  temperature: number | null;
+  timeout_ms: number | null;
+};
+
+type ManagedLlamaServerChatDiagnosticPreview = {
+  status: ManagedLlamaServerChatDiagnosticStatus;
+  request_attempted: boolean;
+  lifecycle_status: ManagedLlamaServerLifecycleStatus;
+  health_status: ManagedLlamaServerHealthStatus;
+  host?: string | null;
+  port?: number | null;
+  alias?: string | null;
+  safe_model_file_name?: string | null;
+  prompt_char_count: number;
+  max_tokens: number;
+  temperature: number;
+  timeout_ms: number;
+  http_status?: number | null;
+  response_preview: string;
+  response_preview_truncated: boolean;
+  extracted_message_preview?: string | null;
+  duration_ms: number;
+  blockers: ManagedLlamaServerNotice[];
+  warnings: ManagedLlamaServerNotice[];
+  next_required_actions: string[];
+  summary: string;
+  diagnostic_only: boolean;
+  not_scholar_chat_answer: boolean;
+  no_final_answer_created: boolean;
+  no_grounding_applied: boolean;
+  no_artifact_write: boolean;
+  no_persistence: boolean;
 };
 
 type LocalRuntimeInvocationPlanStatus =
@@ -2312,6 +2364,15 @@ export default function App() {
   const [managedLlamaServerStatusLoading, setManagedLlamaServerStatusLoading] = createSignal(false);
   const [managedLlamaServerStatusError, setManagedLlamaServerStatusError] = createSignal<string | null>(null);
   const [managedLlamaServerStatusHasRun, setManagedLlamaServerStatusHasRun] = createSignal(false);
+  const [managedLlamaServerChatDiagnosticPrompt, setManagedLlamaServerChatDiagnosticPrompt] = createSignal("Say READY in one short sentence.");
+  const [managedLlamaServerChatDiagnosticMaxTokens, setManagedLlamaServerChatDiagnosticMaxTokens] = createSignal("16");
+  const [managedLlamaServerChatDiagnosticTemperature, setManagedLlamaServerChatDiagnosticTemperature] = createSignal("0.2");
+  const [managedLlamaServerChatDiagnosticTimeoutMs, setManagedLlamaServerChatDiagnosticTimeoutMs] = createSignal("5000");
+  const [managedLlamaServerChatDiagnosticAllowRun, setManagedLlamaServerChatDiagnosticAllowRun] = createSignal(false);
+  const [managedLlamaServerChatDiagnosticPreview, setManagedLlamaServerChatDiagnosticPreview] = createSignal<ManagedLlamaServerChatDiagnosticPreview | null>(null);
+  const [managedLlamaServerChatDiagnosticLoading, setManagedLlamaServerChatDiagnosticLoading] = createSignal(false);
+  const [managedLlamaServerChatDiagnosticError, setManagedLlamaServerChatDiagnosticError] = createSignal<string | null>(null);
+  const [managedLlamaServerChatDiagnosticHasRun, setManagedLlamaServerChatDiagnosticHasRun] = createSignal(false);
   const [localRuntimeAdapterExecutablePath, setLocalRuntimeAdapterExecutablePath] = createSignal("");
   const [localRuntimeAdapterModelPath, setLocalRuntimeAdapterModelPath] = createSignal("");
   const [localRuntimeAdapterModelFamily, setLocalRuntimeAdapterModelFamily] = createSignal("");
@@ -2821,9 +2882,14 @@ export default function App() {
   function managedLlamaServerReadinessSummary() {
     const status = managedLlamaServerStatusPreview();
     if (!status) {
-      return "Managed llama-server setup stays in Developer Diagnostics. Scholar Chat still does not use local model output as a final answer.";
+      return "AEGIS can start and stop only the local llama-server it owns. External servers stay outside its control.";
     }
-    return `Managed llama-server: ${formatSnakeCaseLabel(status.health_status)} / ${formatSnakeCaseLabel(status.lifecycle_status)}. Scholar Chat still does not use local model output as a final answer.`;
+    const occupancyLabel = formatSnakeCaseLabel(status.port_occupancy_status);
+    const ownershipLabel = status.owns_active_server ? "owned by AEGIS" : status.port_occupied_by_unmanaged_process ? "external / unmanaged" : "not active";
+    if (status.port_occupied_by_unmanaged_process) {
+      return `Managed llama-server: ${formatSnakeCaseLabel(status.health_status)} / ${formatSnakeCaseLabel(status.lifecycle_status)}. Port occupancy: ${occupancyLabel} (${ownershipLabel}). AEGIS will not stop external servers.`;
+    }
+    return `Managed llama-server: ${formatSnakeCaseLabel(status.health_status)} / ${formatSnakeCaseLabel(status.lifecycle_status)}. Port occupancy: ${occupancyLabel} (${ownershipLabel}). AEGIS can start and stop only the server it owns.`;
   }
 
   function formatSnakeCaseLabel(value: string) {
@@ -2974,6 +3040,7 @@ export default function App() {
       return;
     }
 
+    clearManagedLlamaServerChatDiagnosticPreview();
     setManagedLlamaServerStatusLoading(true);
     setManagedLlamaServerStatusError(null);
     try {
@@ -3020,6 +3087,7 @@ export default function App() {
       return;
     }
 
+    clearManagedLlamaServerChatDiagnosticPreview();
     const request = buildManagedLlamaServerLaunchPlanRequest();
     if (!request) {
       setManagedLlamaServerStatusHasRun(true);
@@ -3051,6 +3119,7 @@ export default function App() {
       return;
     }
 
+    clearManagedLlamaServerChatDiagnosticPreview();
     setManagedLlamaServerStatusLoading(true);
     setManagedLlamaServerStatusError(null);
     try {
@@ -3069,6 +3138,7 @@ export default function App() {
       return;
     }
 
+    clearManagedLlamaServerChatDiagnosticPreview();
     setManagedLlamaServerStatusLoading(true);
     setManagedLlamaServerStatusError(null);
     try {
@@ -3079,6 +3149,70 @@ export default function App() {
       setManagedLlamaServerStatusError(sanitizeBackendError(err));
     } finally {
       setManagedLlamaServerStatusLoading(false);
+    }
+  }
+
+  function clearManagedLlamaServerChatDiagnosticPreview() {
+    setManagedLlamaServerChatDiagnosticPreview(null);
+    setManagedLlamaServerChatDiagnosticError(null);
+    setManagedLlamaServerChatDiagnosticHasRun(false);
+  }
+
+  function buildManagedLlamaServerChatDiagnosticRequest(): ManagedLlamaServerChatDiagnosticRequest | null {
+    const prompt = normalizeOptionalTextInput(managedLlamaServerChatDiagnosticPrompt()) ?? "Say READY in one short sentence.";
+    const maxTokens = parseOptionalIntegerInput(
+      managedLlamaServerChatDiagnosticMaxTokens(),
+      "Managed llama-server chat diagnostic max tokens",
+      setManagedLlamaServerChatDiagnosticError,
+    );
+    const temperature = parseOptionalNumberInput(
+      managedLlamaServerChatDiagnosticTemperature(),
+      "Managed llama-server chat diagnostic temperature",
+      setManagedLlamaServerChatDiagnosticError,
+    );
+    const timeoutMs = parseOptionalIntegerInput(
+      managedLlamaServerChatDiagnosticTimeoutMs(),
+      "Managed llama-server chat diagnostic timeout",
+      setManagedLlamaServerChatDiagnosticError,
+    );
+
+    if (maxTokens === undefined || temperature === undefined || timeoutMs === undefined) {
+      return null;
+    }
+
+    return {
+      allow_chat_diagnostic: managedLlamaServerChatDiagnosticAllowRun(),
+      prompt,
+      max_tokens: maxTokens,
+      temperature,
+      timeout_ms: timeoutMs,
+    };
+  }
+
+  async function runManagedLlamaServerChatDiagnostic() {
+    if (managedLlamaServerChatDiagnosticLoading()) {
+      return;
+    }
+
+    const request = buildManagedLlamaServerChatDiagnosticRequest();
+    if (!request) {
+      setManagedLlamaServerChatDiagnosticHasRun(true);
+      setManagedLlamaServerChatDiagnosticPreview(null);
+      return;
+    }
+
+    setManagedLlamaServerChatDiagnosticLoading(true);
+    setManagedLlamaServerChatDiagnosticError(null);
+    try {
+      const result = await invoke<ManagedLlamaServerChatDiagnosticPreview>("run_managed_llama_server_chat_diagnostic", {
+        request,
+      });
+      setManagedLlamaServerChatDiagnosticPreview(result);
+      setManagedLlamaServerChatDiagnosticHasRun(true);
+    } catch (err) {
+      setManagedLlamaServerChatDiagnosticError(sanitizeBackendError(err));
+    } finally {
+      setManagedLlamaServerChatDiagnosticLoading(false);
     }
   }
 
@@ -7062,6 +7196,12 @@ export default function App() {
           <p class="muted">
             Backend-owned lifecycle preview and local launch control for llama-server. The server stays on localhost, remains consent-gated, and does not route output into Scholar Chat answers yet.
           </p>
+          <div class="warning-box">
+            <p><strong>AEGIS can start and stop the local llama-server it owns.</strong></p>
+            <p><strong>AEGIS will not stop external servers it did not start.</strong></p>
+            <p><strong>If the configured port is already occupied, start is blocked until you stop the external process or change the port.</strong></p>
+            <p><strong>Server is stopped when the app exits where possible.</strong></p>
+          </div>
           <ol class="runtime-sequence">
             <li>Preview the managed launch plan.</li>
             <li>Check the exact executable and `.gguf` model file.</li>
@@ -7079,6 +7219,7 @@ export default function App() {
                   setManagedLlamaServerExecutablePath(event.currentTarget.value);
                   clearManagedLlamaServerLaunchPreview();
                   clearManagedLlamaServerStatusPreview();
+                  clearManagedLlamaServerChatDiagnosticPreview();
                 }}
                 placeholder="E:\\llama.cpp\\b9842-cpu\\llama-server.exe"
               />
@@ -7092,6 +7233,7 @@ export default function App() {
                   setManagedLlamaServerModelPath(event.currentTarget.value);
                   clearManagedLlamaServerLaunchPreview();
                   clearManagedLlamaServerStatusPreview();
+                  clearManagedLlamaServerChatDiagnosticPreview();
                 }}
                 placeholder="E:\\gemma4-v2-Q4_K_M\\gemma4-v2-Q4_K_M.gguf"
               />
@@ -7107,6 +7249,7 @@ export default function App() {
                   setManagedLlamaServerHost(event.currentTarget.value);
                   clearManagedLlamaServerLaunchPreview();
                   clearManagedLlamaServerStatusPreview();
+                  clearManagedLlamaServerChatDiagnosticPreview();
                 }}
                 placeholder="127.0.0.1"
               />
@@ -7120,6 +7263,7 @@ export default function App() {
                   setManagedLlamaServerPort(event.currentTarget.value);
                   clearManagedLlamaServerLaunchPreview();
                   clearManagedLlamaServerStatusPreview();
+                  clearManagedLlamaServerChatDiagnosticPreview();
                 }}
                 placeholder="48921"
               />
@@ -7135,6 +7279,7 @@ export default function App() {
                   setManagedLlamaServerAlias(event.currentTarget.value);
                   clearManagedLlamaServerLaunchPreview();
                   clearManagedLlamaServerStatusPreview();
+                  clearManagedLlamaServerChatDiagnosticPreview();
                 }}
                 placeholder="aegis-local-gemma"
               />
@@ -7148,6 +7293,7 @@ export default function App() {
                   setManagedLlamaServerContextWindow(event.currentTarget.value);
                   clearManagedLlamaServerLaunchPreview();
                   clearManagedLlamaServerStatusPreview();
+                  clearManagedLlamaServerChatDiagnosticPreview();
                 }}
                 placeholder="4096"
               />
@@ -7161,6 +7307,7 @@ export default function App() {
                   setManagedLlamaServerGpuLayers(event.currentTarget.value);
                   clearManagedLlamaServerLaunchPreview();
                   clearManagedLlamaServerStatusPreview();
+                  clearManagedLlamaServerChatDiagnosticPreview();
                 }}
                 placeholder="0"
               />
@@ -7169,7 +7316,10 @@ export default function App() {
               <input
                 type="checkbox"
                 checked={managedLlamaServerAllowStart()}
-                onChange={(event) => setManagedLlamaServerAllowStart(event.currentTarget.checked)}
+                onChange={(event) => {
+                  setManagedLlamaServerAllowStart(event.currentTarget.checked);
+                  clearManagedLlamaServerChatDiagnosticPreview();
+                }}
               />
               I understand server start is consent-gated and local only.
             </label>
@@ -7286,6 +7436,10 @@ export default function App() {
                 {renderMetricGrid([
                   { label: "Lifecycle", value: formatSnakeCaseLabel(managedLlamaServerStatusPreview()!.lifecycle_status) },
                   { label: "Health", value: formatSnakeCaseLabel(managedLlamaServerStatusPreview()!.health_status) },
+                  { label: "Ownership", value: managedLlamaServerStatusPreview()!.owns_active_server ? "AEGIS-owned" : managedLlamaServerStatusPreview()!.port_occupied_by_unmanaged_process ? "external / unmanaged" : "not active" },
+                  { label: "Port occupancy", value: formatSnakeCaseLabel(managedLlamaServerStatusPreview()!.port_occupancy_status) },
+                  { label: "Port occupied", value: managedLlamaServerStatusPreview()!.port_occupied ? "yes" : "no" },
+                  { label: "Port unmanaged", value: managedLlamaServerStatusPreview()!.port_occupied_by_unmanaged_process ? "yes" : "no" },
                   { label: "Host", value: managedLlamaServerStatusPreview()!.host ?? "missing" },
                   { label: "Port", value: managedLlamaServerStatusPreview()!.port ?? "missing" },
                   { label: "Alias", value: managedLlamaServerStatusPreview()!.alias ?? "missing" },
@@ -7297,9 +7451,15 @@ export default function App() {
                   { label: "Response body truncated", value: managedLlamaServerStatusPreview()!.response_body_truncated ? "yes" : "no" },
                 ])}
                 {managedLlamaServerStatusPreview()!.summary && <p><strong>Summary:</strong> {managedLlamaServerStatusPreview()!.summary}</p>}
-                {managedLlamaServerStatusPreview()!.response_body_preview ? (
-                  <p><strong>Health preview:</strong> {managedLlamaServerStatusPreview()!.response_body_preview}</p>
-                ) : null}
+                <details class="warning-box">
+                  <summary>Health preview</summary>
+                  {managedLlamaServerStatusPreview()!.response_body_preview ? (
+                    <pre>{managedLlamaServerStatusPreview()!.response_body_preview}</pre>
+                  ) : (
+                    <p>No health preview captured.</p>
+                  )}
+                  {managedLlamaServerStatusPreview()!.response_body_truncated ? <p class="muted">Preview truncated.</p> : null}
+                </details>
                 <div class="contract-meta">
                   <div><span>Preview only</span><strong>{managedLlamaServerStatusPreview()!.preview_only ? "yes" : "no"}</strong></div>
                   <div><span>No process spawn</span><strong>{managedLlamaServerStatusPreview()!.no_process_spawn ? "yes" : "no"}</strong></div>
@@ -7357,6 +7517,177 @@ export default function App() {
             )
           ) : (
             <p>No managed server status preview loaded yet.</p>
+          )}
+        </div>
+        <div class="artifact-overview runtime-setup-card">
+          <h3>Chat diagnostic</h3>
+          <p class="muted">
+            Diagnostic-only local request. This does not create a Scholar Chat answer. Requires managed server health to be ready.
+          </p>
+          <p class="muted">{managedLlamaServerReadinessSummary()}</p>
+          <div class="form-row">
+            <label>
+              Prompt
+              <textarea
+                value={managedLlamaServerChatDiagnosticPrompt()}
+                onInput={(event) => {
+                  setManagedLlamaServerChatDiagnosticPrompt(event.currentTarget.value);
+                  clearManagedLlamaServerChatDiagnosticPreview();
+                }}
+                rows={3}
+                placeholder="Say READY in one short sentence."
+              />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>
+              Max tokens
+              <input
+                type="number"
+                value={managedLlamaServerChatDiagnosticMaxTokens()}
+                onInput={(event) => {
+                  setManagedLlamaServerChatDiagnosticMaxTokens(event.currentTarget.value);
+                  clearManagedLlamaServerChatDiagnosticPreview();
+                }}
+                placeholder="16"
+              />
+            </label>
+            <label>
+              Temperature
+              <input
+                type="number"
+                step="0.1"
+                value={managedLlamaServerChatDiagnosticTemperature()}
+                onInput={(event) => {
+                  setManagedLlamaServerChatDiagnosticTemperature(event.currentTarget.value);
+                  clearManagedLlamaServerChatDiagnosticPreview();
+                }}
+                placeholder="0.2"
+              />
+            </label>
+            <label>
+              Timeout ms
+              <input
+                type="number"
+                value={managedLlamaServerChatDiagnosticTimeoutMs()}
+                onInput={(event) => {
+                  setManagedLlamaServerChatDiagnosticTimeoutMs(event.currentTarget.value);
+                  clearManagedLlamaServerChatDiagnosticPreview();
+                }}
+                placeholder="5000"
+              />
+            </label>
+            <label class="inline-field">
+              <input
+                type="checkbox"
+                checked={managedLlamaServerChatDiagnosticAllowRun()}
+                onChange={(event) => {
+                  setManagedLlamaServerChatDiagnosticAllowRun(event.currentTarget.checked);
+                  clearManagedLlamaServerChatDiagnosticPreview();
+                }}
+              />
+              I understand this is diagnostic-only.
+            </label>
+          </div>
+          <div class="hero-actions">
+            <button onClick={runManagedLlamaServerChatDiagnostic} disabled={managedLlamaServerChatDiagnosticLoading()}>
+              {managedLlamaServerChatDiagnosticLoading() ? "Running..." : "Run chat diagnostic"}
+            </button>
+          </div>
+          <p class="muted">This does not create a Scholar Chat answer and stays inside the managed localhost server boundary.</p>
+          {managedLlamaServerChatDiagnosticError() && <p class="error">{managedLlamaServerChatDiagnosticError()}</p>}
+          {managedLlamaServerChatDiagnosticLoading() ? (
+            <p>Running managed chat diagnostic...</p>
+          ) : managedLlamaServerChatDiagnosticHasRun() ? (
+            managedLlamaServerChatDiagnosticPreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(managedLlamaServerChatDiagnosticPreview()!.status) },
+                  { label: "Lifecycle", value: formatSnakeCaseLabel(managedLlamaServerChatDiagnosticPreview()!.lifecycle_status) },
+                  { label: "Health", value: formatSnakeCaseLabel(managedLlamaServerChatDiagnosticPreview()!.health_status) },
+                  { label: "Host", value: managedLlamaServerChatDiagnosticPreview()!.host ?? "missing" },
+                  { label: "Port", value: managedLlamaServerChatDiagnosticPreview()!.port ?? "missing" },
+                  { label: "Alias", value: managedLlamaServerChatDiagnosticPreview()!.alias ?? "missing" },
+                  { label: "Model", value: managedLlamaServerChatDiagnosticPreview()!.safe_model_file_name ?? "missing" },
+                  { label: "Prompt chars", value: managedLlamaServerChatDiagnosticPreview()!.prompt_char_count },
+                  { label: "Max tokens", value: managedLlamaServerChatDiagnosticPreview()!.max_tokens },
+                  { label: "Temperature", value: managedLlamaServerChatDiagnosticPreview()!.temperature },
+                  { label: "Timeout ms", value: managedLlamaServerChatDiagnosticPreview()!.timeout_ms },
+                  { label: "HTTP status", value: managedLlamaServerChatDiagnosticPreview()!.http_status ?? "missing" },
+                  { label: "Duration ms", value: managedLlamaServerChatDiagnosticPreview()!.duration_ms },
+                ])}
+                <p><strong>Summary:</strong> {managedLlamaServerChatDiagnosticPreview()!.summary}</p>
+                {managedLlamaServerChatDiagnosticPreview()!.extracted_message_preview ? (
+                  <p><strong>Extracted message preview:</strong> {managedLlamaServerChatDiagnosticPreview()!.extracted_message_preview}</p>
+                ) : (
+                  <p>No extracted assistant message preview.</p>
+                )}
+                <div class="contract-meta">
+                  <div><span>Diagnostic only</span><strong>{managedLlamaServerChatDiagnosticPreview()!.diagnostic_only ? "yes" : "no"}</strong></div>
+                  <div><span>Not Scholar Chat answer</span><strong>{managedLlamaServerChatDiagnosticPreview()!.not_scholar_chat_answer ? "yes" : "no"}</strong></div>
+                  <div><span>No final answer</span><strong>{managedLlamaServerChatDiagnosticPreview()!.no_final_answer_created ? "yes" : "no"}</strong></div>
+                  <div><span>No grounding applied</span><strong>{managedLlamaServerChatDiagnosticPreview()!.no_grounding_applied ? "yes" : "no"}</strong></div>
+                  <div><span>No artifact write</span><strong>{managedLlamaServerChatDiagnosticPreview()!.no_artifact_write ? "yes" : "no"}</strong></div>
+                  <div><span>No persistence</span><strong>{managedLlamaServerChatDiagnosticPreview()!.no_persistence ? "yes" : "no"}</strong></div>
+                  <div><span>Request attempted</span><strong>{managedLlamaServerChatDiagnosticPreview()!.request_attempted ? "yes" : "no"}</strong></div>
+                </div>
+                {managedLlamaServerChatDiagnosticPreview()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {managedLlamaServerChatDiagnosticPreview()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No diagnostic blockers.</p>
+                )}
+                {managedLlamaServerChatDiagnosticPreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {managedLlamaServerChatDiagnosticPreview()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No diagnostic warnings.</p>
+                )}
+                {managedLlamaServerChatDiagnosticPreview()!.next_required_actions.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Next required actions</h4>
+                    <ul>
+                      {managedLlamaServerChatDiagnosticPreview()!.next_required_actions.map((action) => (
+                        <li>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No next required actions.</p>
+                )}
+                <details class="warning-box">
+                  <summary>Raw response preview</summary>
+                  {managedLlamaServerChatDiagnosticPreview()!.response_preview ? (
+                    <pre>{managedLlamaServerChatDiagnosticPreview()!.response_preview}</pre>
+                  ) : (
+                    <p>No raw response preview captured.</p>
+                  )}
+                  {managedLlamaServerChatDiagnosticPreview()!.response_preview_truncated ? <p class="muted">Preview truncated.</p> : null}
+                </details>
+              </>
+            ) : (
+              <p>No managed chat diagnostic preview loaded yet.</p>
+            )
+          ) : (
+            <p>No managed chat diagnostic preview loaded yet.</p>
           )}
         </div>
         <div class="artifact-overview runtime-setup-card">
