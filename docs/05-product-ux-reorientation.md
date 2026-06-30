@@ -86,6 +86,7 @@ Phase 134.0 is the chat UX interaction polish pass that makes the first viewport
 Phase 135.0 is the local model runtime setup UX pass that keeps the model path and llama.cpp executable setup secondary, consent-gated, and diagnostics-only until future answer generation work exists.
 Phase 136.0 is the local runtime probe validation pass that sharpens the readiness, validation, version-probe, and smoke-diagnostic flow for an exact `.gguf` model file and llama.cpp executable without changing answer generation behavior.
 Phase 137.0 is the managed llama-server lifecycle pass that keeps backend-owned localhost startup, health, and stop controls visible in Developer Diagnostics while remaining preview-first and answer-generation-free.
+Phase 138.0 is the managed server lifecycle hardening pass that adds port preflight, ownership clarity, and shutdown cleanup for the already-managed llama-server without turning the output into a Scholar Chat answer.
 
 ## Acceptance Criteria For Future UX Work
 

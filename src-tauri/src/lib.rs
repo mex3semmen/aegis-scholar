@@ -26,10 +26,13 @@ use final_answer::{build_final_answer as build_final_answer_impl, export_answer_
 use grounded_answer::{build_grounded_answer as build_grounded_answer_impl, read_grounded_answer as read_grounded_answer_impl, GroundedAnswer};
 use local_server::{
     check_managed_llama_server_health as check_managed_llama_server_health_impl,
+    run_managed_llama_server_chat_diagnostic as run_managed_llama_server_chat_diagnostic_impl,
     inspect_managed_llama_server_status as inspect_managed_llama_server_status_impl,
     preview_managed_llama_server_launch_plan as preview_managed_llama_server_launch_plan_impl,
     start_managed_llama_server as start_managed_llama_server_impl,
     stop_managed_llama_server as stop_managed_llama_server_impl,
+    ManagedLlamaServerChatDiagnosticPreview,
+    ManagedLlamaServerChatDiagnosticRequest,
     ManagedLlamaServerLaunchPlanPreview,
     ManagedLlamaServerLaunchPlanRequest,
     ManagedLlamaServerStartRequest,
@@ -173,6 +176,7 @@ use scholar_chat::{
     ScholarChatResponse,
     ScholarChatRetrievalPreviewResponse,
 };
+use tauri::Manager;
 use source_metadata::{CorpusStatus, SourceMetadataInput, SourceMetadataPatch, SourceRecord};
 
 #[tauri::command]
@@ -843,6 +847,14 @@ fn stop_managed_llama_server(
 }
 
 #[tauri::command]
+fn run_managed_llama_server_chat_diagnostic(
+    state: tauri::State<'_, ManagedLlamaServerState>,
+    request: ManagedLlamaServerChatDiagnosticRequest,
+) -> Result<ManagedLlamaServerChatDiagnosticPreview, String> {
+    run_managed_llama_server_chat_diagnostic_impl(&state, request).map_err(to_user_error)
+}
+
+#[tauri::command]
 fn inspect_managed_llama_server_status(
     state: tauri::State<'_, ManagedLlamaServerState>,
 ) -> Result<ManagedLlamaServerStatusPreview, String> {
@@ -937,8 +949,15 @@ pub fn run() {
             start_managed_llama_server,
             check_managed_llama_server_health,
             stop_managed_llama_server,
+            run_managed_llama_server_chat_diagnostic,
             inspect_managed_llama_server_status,
         ])
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                let state = window.app_handle().state::<ManagedLlamaServerState>();
+                let _ = stop_managed_llama_server_impl(&state);
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running AEGIS Scholar");
 }

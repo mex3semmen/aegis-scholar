@@ -1,12 +1,14 @@
 use crate::errors::AegisResult;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::fs;
+use std::net::{SocketAddr, TcpListener};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const DEFAULT_HOST: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 48_921;
@@ -16,6 +18,18 @@ const DEFAULT_GPU_LAYERS: i32 = 0;
 const HEALTH_TIMEOUT_MS: u64 = 1_500;
 const HEALTH_PREVIEW_LIMIT: usize = 256;
 const MONITOR_SLEEP_MS: u64 = 250;
+const CHAT_DIAGNOSTIC_DEFAULT_PROMPT: &str = "Say READY in one short sentence.";
+const CHAT_DIAGNOSTIC_DEFAULT_MAX_TOKENS: u32 = 16;
+const CHAT_DIAGNOSTIC_DEFAULT_TEMPERATURE: f32 = 0.2;
+const CHAT_DIAGNOSTIC_DEFAULT_TIMEOUT_MS: u64 = 5_000;
+const CHAT_DIAGNOSTIC_PROMPT_PREVIEW_LIMIT: usize = 256;
+const CHAT_DIAGNOSTIC_RESPONSE_PREVIEW_LIMIT: usize = 512;
+const CHAT_DIAGNOSTIC_MESSAGE_PREVIEW_LIMIT: usize = 256;
+const CHAT_DIAGNOSTIC_MAX_TOKENS_LIMIT: u32 = 64;
+const CHAT_DIAGNOSTIC_MIN_TIMEOUT_MS: u64 = 250;
+const CHAT_DIAGNOSTIC_MAX_TIMEOUT_MS: u64 = 15_000;
+const CHAT_DIAGNOSTIC_MIN_TEMPERATURE: f32 = 0.0;
+const CHAT_DIAGNOSTIC_MAX_TEMPERATURE: f32 = 2.0;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -34,6 +48,8 @@ pub enum ManagedLlamaServerLifecycleStatus {
     Failed,
     Blocked,
     AlreadyRunning,
+    PortOccupied,
+    ExternalServerDetected,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -44,6 +60,26 @@ pub enum ManagedLlamaServerHealthStatus {
     Ready,
     Unreachable,
     Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedLlamaServerPortOccupancyStatus {
+    Free,
+    ManagedOwned,
+    ExternalServerDetected,
+    PortOccupied,
+    UnknownOwner,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedLlamaServerChatDiagnosticStatus {
+    Blocked,
+    ServerNotReady,
+    DiagnosticSucceeded,
+    DiagnosticFailed,
+    TimedOut,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -102,6 +138,10 @@ pub struct ManagedLlamaServerLaunchPlanPreview {
 pub struct ManagedLlamaServerStatusPreview {
     pub lifecycle_status: ManagedLlamaServerLifecycleStatus,
     pub health_status: ManagedLlamaServerHealthStatus,
+    pub owns_active_server: bool,
+    pub port_occupied: bool,
+    pub port_occupied_by_unmanaged_process: bool,
+    pub port_occupancy_status: ManagedLlamaServerPortOccupancyStatus,
     pub host: Option<String>,
     pub port: Option<u16>,
     pub alias: Option<String>,
@@ -125,6 +165,46 @@ pub struct ManagedLlamaServerStatusPreview {
     pub no_lan_binding_by_default: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ManagedLlamaServerChatDiagnosticRequest {
+    pub allow_chat_diagnostic: bool,
+    pub prompt: Option<String>,
+    pub max_tokens: Option<u32>,
+    pub temperature: Option<f32>,
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ManagedLlamaServerChatDiagnosticPreview {
+    pub status: ManagedLlamaServerChatDiagnosticStatus,
+    pub request_attempted: bool,
+    pub lifecycle_status: ManagedLlamaServerLifecycleStatus,
+    pub health_status: ManagedLlamaServerHealthStatus,
+    pub host: Option<String>,
+    pub port: Option<u16>,
+    pub alias: Option<String>,
+    pub safe_model_file_name: Option<String>,
+    pub prompt_char_count: usize,
+    pub max_tokens: u32,
+    pub temperature: f32,
+    pub timeout_ms: u64,
+    pub http_status: Option<u16>,
+    pub response_preview: String,
+    pub response_preview_truncated: bool,
+    pub extracted_message_preview: Option<String>,
+    pub duration_ms: u64,
+    pub blockers: Vec<ManagedLlamaServerNotice>,
+    pub warnings: Vec<ManagedLlamaServerNotice>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub diagnostic_only: bool,
+    pub not_scholar_chat_answer: bool,
+    pub no_final_answer_created: bool,
+    pub no_grounding_applied: bool,
+    pub no_artifact_write: bool,
+    pub no_persistence: bool,
+}
+
 #[derive(Clone, Default)]
 pub struct ManagedLlamaServerState {
     runtime: Arc<Mutex<ManagedLlamaServerRuntime>>,
@@ -132,6 +212,7 @@ pub struct ManagedLlamaServerState {
 
 struct ManagedLlamaServerRuntime {
     active: Option<ManagedLlamaServerProcess>,
+    last_config: Option<ManagedLlamaServerConfig>,
     last_status: ManagedLlamaServerLifecycleStatus,
     last_health_status: ManagedLlamaServerHealthStatus,
     last_health_preview: String,
@@ -177,6 +258,7 @@ impl Default for ManagedLlamaServerRuntime {
     fn default() -> Self {
         Self {
             active: None,
+            last_config: None,
             last_status: ManagedLlamaServerLifecycleStatus::NotStarted,
             last_health_status: ManagedLlamaServerHealthStatus::NotStarted,
             last_health_preview: String::new(),
@@ -268,7 +350,8 @@ pub fn start_managed_llama_server(
         let mut runtime = state.lock_runtime();
         sweep_runtime(&mut runtime);
         if runtime.active.is_some() || runtime.last_status == ManagedLlamaServerLifecycleStatus::Starting {
-            return Ok(status_preview_from_plan(
+            return Ok(apply_port_occupancy(
+                status_preview_from_plan(
                 ManagedLlamaServerLifecycleStatus::AlreadyRunning,
                 ManagedLlamaServerHealthStatus::NotStarted,
                 &plan,
@@ -284,8 +367,55 @@ pub fn start_managed_llama_server(
                 )],
                 vec![],
                 vec!["Stop the active managed server before starting another one.".to_string()],
+                ),
+                ManagedLlamaServerPortOccupancyStatus::ManagedOwned,
+                true,
+                false,
+                runtime.active.is_some(),
             ));
         }
+        runtime.last_config = Some(plan.config.clone());
+    }
+
+    let port_probe = probe_managed_llama_server_port(&plan.config);
+    if !matches!(port_probe.occupancy_status, ManagedLlamaServerPortOccupancyStatus::Free) {
+        let lifecycle_status = match port_probe.occupancy_status {
+            ManagedLlamaServerPortOccupancyStatus::ExternalServerDetected => {
+                ManagedLlamaServerLifecycleStatus::ExternalServerDetected
+            }
+            ManagedLlamaServerPortOccupancyStatus::PortOccupied
+            | ManagedLlamaServerPortOccupancyStatus::UnknownOwner => ManagedLlamaServerLifecycleStatus::PortOccupied,
+            ManagedLlamaServerPortOccupancyStatus::ManagedOwned => ManagedLlamaServerLifecycleStatus::AlreadyRunning,
+            ManagedLlamaServerPortOccupancyStatus::Free => ManagedLlamaServerLifecycleStatus::Blocked,
+        };
+        {
+            let mut runtime = state.lock_runtime();
+            runtime.active = None;
+            runtime.last_status = lifecycle_status.clone();
+            runtime.last_health_status = port_probe.health_status.clone();
+            runtime.last_health_preview = port_probe.response_body_preview.clone();
+            runtime.last_health_truncated = port_probe.response_body_truncated;
+            runtime.last_exit_code = None;
+        }
+        let preview = status_preview_from_plan(
+            lifecycle_status,
+            port_probe.health_status.clone(),
+            &plan,
+            None,
+            None,
+            Some(format!("http://{}:{}/health", plan.config.host, plan.config.port)),
+            port_probe.response_body_preview.clone(),
+            port_probe.response_body_truncated,
+            format!("Managed server start blocked: {}", port_probe.summary),
+            port_probe.blockers.clone(),
+            port_probe.warnings.clone(),
+            port_probe.next_required_actions.clone(),
+        );
+        return Ok(apply_port_probe_to_status_preview(preview, &port_probe, false));
+    }
+
+    {
+        let mut runtime = state.lock_runtime();
         runtime.last_status = ManagedLlamaServerLifecycleStatus::Starting;
         runtime.last_health_status = ManagedLlamaServerHealthStatus::NotStarted;
         runtime.last_health_preview.clear();
@@ -352,10 +482,12 @@ pub fn start_managed_llama_server(
         runtime.last_health_preview.clear();
         runtime.last_health_truncated = false;
         runtime.last_exit_code = None;
+        runtime.last_config = Some(plan.config.clone());
     }
     spawn_monitor_thread(state.runtime.clone());
 
-    Ok(status_preview_from_plan(
+    Ok(apply_port_occupancy(
+        status_preview_from_plan(
         ManagedLlamaServerLifecycleStatus::Starting,
         ManagedLlamaServerHealthStatus::NotStarted,
         &plan,
@@ -374,6 +506,11 @@ pub fn start_managed_llama_server(
             "Run the health check after the process has started listening.".to_string(),
             "Stop only the AEGIS-managed server if you need to shut it down.".to_string(),
         ],
+        ),
+        ManagedLlamaServerPortOccupancyStatus::ManagedOwned,
+        true,
+        false,
+        true,
     ))
 }
 
@@ -525,7 +662,8 @@ pub fn check_managed_llama_server_health(state: &ManagedLlamaServerState) -> Aeg
         runtime.last_health_truncated = response_body_truncated;
     }
 
-    Ok(status_preview_from_plan(
+    Ok(apply_port_occupancy(
+        status_preview_from_plan(
         lifecycle_status,
         health_status,
         &plan,
@@ -538,6 +676,11 @@ pub fn check_managed_llama_server_health(state: &ManagedLlamaServerState) -> Aeg
         blockers,
         warnings,
         next_required_actions,
+        ),
+        ManagedLlamaServerPortOccupancyStatus::ManagedOwned,
+        true,
+        false,
+        true,
     ))
 }
 
@@ -573,33 +716,72 @@ pub fn stop_managed_llama_server(state: &ManagedLlamaServerState) -> AegisResult
         runtime.last_health_preview.clear();
         runtime.last_health_truncated = false;
         runtime.last_exit_code = exit_code;
+        runtime.last_config = Some(process.config.clone());
     }
 
     let plan = plan_from_config(&process.config);
-    Ok(status_preview_from_plan(
-        ManagedLlamaServerLifecycleStatus::Stopped,
-        ManagedLlamaServerHealthStatus::NotStarted,
-        &plan,
-        Some(process.pid),
-        exit_code,
-        None,
-        String::new(),
-        false,
-        "The AEGIS-managed llama-server process was stopped.".to_string(),
-        Vec::new(),
-        vec![notice(
-            "stopped",
-            "AEGIS only stops the managed server process it started.",
-        )],
-        vec!["Restart the managed server with explicit consent if you need it again.".to_string()],
-    ))
+    let port_probe = probe_managed_llama_server_port(&process.config);
+    if matches!(port_probe.occupancy_status, ManagedLlamaServerPortOccupancyStatus::Free) {
+        Ok(apply_port_occupancy(
+            status_preview_from_plan(
+                ManagedLlamaServerLifecycleStatus::Stopped,
+                ManagedLlamaServerHealthStatus::NotStarted,
+                &plan,
+                None,
+                exit_code,
+                None,
+                String::new(),
+                false,
+                "The AEGIS-managed llama-server process was stopped.".to_string(),
+                Vec::new(),
+                vec![notice(
+                    "stopped",
+                    "AEGIS only stops the managed server process it started.",
+                )],
+                vec!["Restart the managed server with explicit consent if you need it again.".to_string()],
+            ),
+            ManagedLlamaServerPortOccupancyStatus::Free,
+            false,
+            false,
+            false,
+        ))
+    } else {
+        let lifecycle_status = match port_probe.occupancy_status {
+            ManagedLlamaServerPortOccupancyStatus::ExternalServerDetected => {
+                ManagedLlamaServerLifecycleStatus::ExternalServerDetected
+            }
+            ManagedLlamaServerPortOccupancyStatus::PortOccupied
+            | ManagedLlamaServerPortOccupancyStatus::UnknownOwner => ManagedLlamaServerLifecycleStatus::PortOccupied,
+            ManagedLlamaServerPortOccupancyStatus::ManagedOwned => ManagedLlamaServerLifecycleStatus::Stopped,
+            ManagedLlamaServerPortOccupancyStatus::Free => ManagedLlamaServerLifecycleStatus::Stopped,
+        };
+        Ok(apply_port_probe_to_status_preview(
+            status_preview_from_plan(
+                lifecycle_status,
+                port_probe.health_status.clone(),
+                &plan,
+                None,
+                exit_code,
+                Some(format!("http://{}:{}/health", plan.config.host, plan.config.port)),
+                String::new(),
+                false,
+                "The AEGIS-managed llama-server process was stopped, but the configured port still appears occupied.".to_string(),
+                Vec::new(),
+                port_probe.warnings.clone(),
+                port_probe.next_required_actions.clone(),
+            ),
+            &port_probe,
+            false,
+        ))
+    }
 }
 
 pub fn inspect_managed_llama_server_status(state: &ManagedLlamaServerState) -> AegisResult<ManagedLlamaServerStatusPreview> {
     let runtime = state.lock_runtime();
     if let Some(active) = runtime.active.as_ref() {
         let plan = plan_from_config(&active.config);
-        Ok(status_preview_from_plan(
+        Ok(apply_port_occupancy(
+            status_preview_from_plan(
             runtime.last_status.clone(),
             runtime.last_health_status.clone(),
             &plan,
@@ -615,7 +797,87 @@ pub fn inspect_managed_llama_server_status(state: &ManagedLlamaServerState) -> A
                 "The AEGIS-managed llama-server process is tracked in backend state.",
             )],
             vec!["Check health if you need the latest ready/loading status.".to_string()],
+            ),
+            ManagedLlamaServerPortOccupancyStatus::ManagedOwned,
+            true,
+            false,
+            true,
         ))
+    } else if let Some(config) = runtime.last_config.as_ref() {
+        let plan = plan_from_config(config);
+        let port_probe = probe_managed_llama_server_port(config);
+        if matches!(port_probe.occupancy_status, ManagedLlamaServerPortOccupancyStatus::Free) {
+            let lifecycle_status = match runtime.last_status {
+                ManagedLlamaServerLifecycleStatus::PortOccupied
+                | ManagedLlamaServerLifecycleStatus::ExternalServerDetected => {
+                    ManagedLlamaServerLifecycleStatus::NotStarted
+                }
+                _ => runtime.last_status.clone(),
+            };
+            let health_status = if matches!(lifecycle_status, ManagedLlamaServerLifecycleStatus::NotStarted) {
+                ManagedLlamaServerHealthStatus::NotStarted
+            } else {
+                runtime.last_health_status.clone()
+            };
+            let response_body_preview = if matches!(lifecycle_status, ManagedLlamaServerLifecycleStatus::NotStarted) {
+                String::new()
+            } else {
+                runtime.last_health_preview.clone()
+            };
+            let response_body_truncated = if matches!(lifecycle_status, ManagedLlamaServerLifecycleStatus::NotStarted) {
+                false
+            } else {
+                runtime.last_health_truncated
+            };
+            Ok(apply_port_occupancy(
+                status_preview_from_plan(
+                    lifecycle_status,
+                    health_status,
+                    &plan,
+                    None,
+                    runtime.last_exit_code,
+                    None,
+                    response_body_preview,
+                    response_body_truncated,
+                    "No AEGIS-managed llama-server is currently running.".to_string(),
+                    Vec::new(),
+                    vec![notice("not_running", "No managed server process is active.")],
+                    vec!["Start the managed server with explicit consent if you need it again.".to_string()],
+                ),
+                ManagedLlamaServerPortOccupancyStatus::Free,
+                false,
+                false,
+                false,
+            ))
+        } else {
+            let lifecycle_status = match port_probe.occupancy_status {
+                ManagedLlamaServerPortOccupancyStatus::ExternalServerDetected => {
+                    ManagedLlamaServerLifecycleStatus::ExternalServerDetected
+                }
+                ManagedLlamaServerPortOccupancyStatus::PortOccupied
+                | ManagedLlamaServerPortOccupancyStatus::UnknownOwner => ManagedLlamaServerLifecycleStatus::PortOccupied,
+                ManagedLlamaServerPortOccupancyStatus::ManagedOwned => ManagedLlamaServerLifecycleStatus::AlreadyRunning,
+                ManagedLlamaServerPortOccupancyStatus::Free => ManagedLlamaServerLifecycleStatus::Stopped,
+            };
+            Ok(apply_port_probe_to_status_preview(
+                status_preview_from_plan(
+                    lifecycle_status,
+                    port_probe.health_status.clone(),
+                    &plan,
+                    None,
+                    runtime.last_exit_code,
+                    Some(format!("http://{}:{}/health", plan.config.host, plan.config.port)),
+                    port_probe.response_body_preview.clone(),
+                    port_probe.response_body_truncated,
+                    "The configured managed server port is occupied by a server that AEGIS does not own.".to_string(),
+                    port_probe.blockers.clone(),
+                    port_probe.warnings.clone(),
+                    port_probe.next_required_actions.clone(),
+                ),
+                &port_probe,
+                false,
+            ))
+        }
     } else {
         Ok(status_preview_from_empty(
             runtime.last_status.clone(),
@@ -624,6 +886,360 @@ pub fn inspect_managed_llama_server_status(state: &ManagedLlamaServerState) -> A
         )
         .with_warnings(vec![notice("not_running", "No managed server process is active.")])
         .with_actions(vec!["Start the managed server with explicit consent if you need it again.".to_string()]))
+    }
+}
+
+pub fn run_managed_llama_server_chat_diagnostic(
+    state: &ManagedLlamaServerState,
+    request: ManagedLlamaServerChatDiagnosticRequest,
+) -> AegisResult<ManagedLlamaServerChatDiagnosticPreview> {
+    let status = inspect_managed_llama_server_status(state)?;
+    Ok(run_managed_llama_server_chat_diagnostic_from_status(&status, request))
+}
+
+fn run_managed_llama_server_chat_diagnostic_from_status(
+    status: &ManagedLlamaServerStatusPreview,
+    request: ManagedLlamaServerChatDiagnosticRequest,
+) -> ManagedLlamaServerChatDiagnosticPreview {
+    let normalized = normalize_chat_diagnostic_request(request);
+    let mut blockers = status.blockers.clone();
+    let mut warnings = status.warnings.clone();
+    warnings.push(notice(
+        "diagnostic_only",
+        "This is a diagnostic-only local request; it does not create a Scholar Chat answer.",
+    ));
+    if normalized.prompt_truncated {
+        warnings.push(notice(
+            "prompt_truncated",
+            "The diagnostic prompt was truncated to keep the request bounded.",
+        ));
+    }
+    if normalized.max_tokens_was_clamped {
+        warnings.push(notice(
+            "max_tokens_clamped",
+            "The diagnostic max_tokens value was clamped to the bounded request limit.",
+        ));
+    }
+    if normalized.temperature_was_clamped {
+        warnings.push(notice(
+            "temperature_clamped",
+            "The diagnostic temperature was clamped to the supported local range.",
+        ));
+    }
+    if normalized.timeout_ms_was_clamped {
+        warnings.push(notice(
+            "timeout_clamped",
+            "The diagnostic timeout was clamped to the bounded request range.",
+        ));
+    }
+
+    if !normalized.allow_chat_diagnostic {
+        blockers.push(notice(
+            "chat_diagnostic_consent_missing",
+            "Chat diagnostic consent is required before a local request is sent.",
+        ));
+        return chat_diagnostic_preview(
+            ManagedLlamaServerChatDiagnosticStatus::Blocked,
+            false,
+            &status,
+            normalized,
+            None,
+            String::new(),
+            false,
+            None,
+            0,
+            blockers,
+            warnings,
+            vec!["Enable chat diagnostic consent, then run the diagnostic again.".to_string()],
+            "The managed chat diagnostic is blocked until explicit consent is granted.".to_string(),
+        );
+    }
+
+    if !matches!(status.lifecycle_status, ManagedLlamaServerLifecycleStatus::Running)
+        || !matches!(status.health_status, ManagedLlamaServerHealthStatus::Ready)
+    {
+        blockers.push(notice(
+            "server_not_ready",
+            "The managed llama-server must be running and health-ready before the chat diagnostic can run.",
+        ));
+        return chat_diagnostic_preview(
+            ManagedLlamaServerChatDiagnosticStatus::ServerNotReady,
+            false,
+            &status,
+            normalized,
+            None,
+            String::new(),
+            false,
+            None,
+            0,
+            blockers,
+            warnings,
+            vec![
+                "Start the managed server with explicit consent.".to_string(),
+                "Wait until health reports ready, then run the chat diagnostic again.".to_string(),
+            ],
+            "The managed llama-server is not ready for a diagnostic chat request yet.".to_string(),
+        );
+    }
+
+    let Some(host) = status.host.clone() else {
+        blockers.push(notice(
+            "host_missing",
+            "The managed llama-server host is missing from the tracked status.",
+        ));
+        return chat_diagnostic_preview(
+            ManagedLlamaServerChatDiagnosticStatus::ServerNotReady,
+            false,
+            &status,
+            normalized,
+            None,
+            String::new(),
+            false,
+            None,
+            0,
+            blockers,
+            warnings,
+            vec!["Review the managed launch state and retry once the host is available.".to_string()],
+            "The managed llama-server host is not available for the chat diagnostic.".to_string(),
+        );
+    };
+    if !is_local_host(&host) {
+        blockers.push(notice(
+            "host_not_local",
+            "The managed chat diagnostic only targets localhost or 127.0.0.1.",
+        ));
+        return chat_diagnostic_preview(
+            ManagedLlamaServerChatDiagnosticStatus::Blocked,
+            false,
+            &status,
+            normalized,
+            None,
+            String::new(),
+            false,
+            None,
+            0,
+            blockers,
+            warnings,
+            vec!["Restore the managed server to localhost and retry the diagnostic.".to_string()],
+            "The managed chat diagnostic is blocked because the managed server is not localhost-bound.".to_string(),
+        );
+    }
+    let Some(port) = status.port else {
+        blockers.push(notice(
+            "port_missing",
+            "The managed llama-server port is missing from the tracked status.",
+        ));
+        return chat_diagnostic_preview(
+            ManagedLlamaServerChatDiagnosticStatus::ServerNotReady,
+            false,
+            &status,
+            normalized,
+            None,
+            String::new(),
+            false,
+            None,
+            0,
+            blockers,
+            warnings,
+            vec!["Review the managed launch state and retry once the port is available.".to_string()],
+            "The managed llama-server port is not available for the chat diagnostic.".to_string(),
+        );
+    };
+
+    let timeout_ms = normalized.timeout_ms;
+    let client = match Client::builder()
+        .timeout(Duration::from_millis(timeout_ms))
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => {
+            blockers.push(notice(
+                "client_build_failed",
+                "The managed chat diagnostic client could not be created.",
+            ));
+            return chat_diagnostic_preview(
+                ManagedLlamaServerChatDiagnosticStatus::DiagnosticFailed,
+                false,
+                &status,
+                normalized,
+                None,
+                String::new(),
+                false,
+                None,
+                0,
+                blockers,
+                warnings,
+                vec!["Review the local runtime environment and retry the diagnostic.".to_string()],
+                format!("The managed chat diagnostic client could not be created: {error}"),
+            );
+        }
+    };
+
+    let url = format!("http://{host}:{port}/v1/chat/completions");
+    let model = status
+        .alias
+        .clone()
+        .or_else(|| status.safe_model_file_name.clone())
+        .unwrap_or_else(|| DEFAULT_ALIAS.to_string());
+    let payload = json!({
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": normalized.prompt
+            }
+        ],
+        "max_tokens": normalized.max_tokens,
+        "temperature": normalized.temperature,
+        "stream": false,
+    });
+
+    let start = Instant::now();
+    let response = client.post(&url).json(&payload).send();
+    let duration_ms = start
+        .elapsed()
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64;
+
+    match response {
+        Ok(response) => {
+            let http_status = Some(response.status().as_u16());
+            let body = response.text().unwrap_or_default();
+            let (response_preview, response_preview_truncated) =
+                preview_text(&body, CHAT_DIAGNOSTIC_RESPONSE_PREVIEW_LIMIT);
+            let parsed: Result<Value, _> = serde_json::from_str(&body);
+            match parsed {
+                Ok(parsed_json) => {
+                    if let Some(extracted_message) = extract_chat_completion_message(&parsed_json) {
+                        let (extracted_message_preview, _) =
+                            compact_text_preview(&extracted_message, CHAT_DIAGNOSTIC_MESSAGE_PREVIEW_LIMIT);
+                        let mut success_warnings = warnings;
+                        success_warnings.push(notice(
+                            "diagnostic_success",
+                            "The managed chat diagnostic request succeeded and remained diagnostic-only.",
+                        ));
+                        success_warnings.push(notice(
+                            "not_scholar_chat_answer",
+                            "The diagnostic message preview is not a Scholar Chat answer.",
+                        ));
+                        return chat_diagnostic_preview(
+                            ManagedLlamaServerChatDiagnosticStatus::DiagnosticSucceeded,
+                            true,
+                            &status,
+                            normalized,
+                            http_status,
+                            response_preview,
+                            response_preview_truncated,
+                            Some(extracted_message_preview),
+                            duration_ms,
+                            blockers,
+                            success_warnings,
+                            vec!["Stop the managed server when you no longer need it.".to_string()],
+                            "The managed chat diagnostic succeeded and remains diagnostic-only.".to_string(),
+                        );
+                    }
+
+                    blockers.push(notice(
+                        "message_missing",
+                        "The managed chat diagnostic response did not include an assistant message content field.",
+                    ));
+                    warnings.push(notice(
+                        "response_parse_failed",
+                        "The response parsed as JSON, but no assistant message content could be extracted.",
+                    ));
+                    return chat_diagnostic_preview(
+                        ManagedLlamaServerChatDiagnosticStatus::DiagnosticFailed,
+                        true,
+                        &status,
+                        normalized,
+                        http_status,
+                        response_preview,
+                        response_preview_truncated,
+                        None,
+                        duration_ms,
+                        blockers,
+                        warnings,
+                        vec!["Inspect the raw response preview and retry the diagnostic.".to_string()],
+                        "The managed chat diagnostic response could not be parsed into an assistant message.".to_string(),
+                    );
+                }
+                Err(error) => {
+                    blockers.push(notice(
+                        "response_parse_failed",
+                        "The managed chat diagnostic response body was not valid JSON.",
+                    ));
+                    warnings.push(notice(
+                        "response_not_parseable",
+                        "Inspect the bounded raw response preview and retry the diagnostic.",
+                    ));
+                    return chat_diagnostic_preview(
+                        ManagedLlamaServerChatDiagnosticStatus::DiagnosticFailed,
+                        true,
+                        &status,
+                        normalized,
+                        http_status,
+                        response_preview,
+                        response_preview_truncated,
+                        None,
+                        duration_ms,
+                        blockers,
+                        warnings,
+                        vec!["Inspect the raw response preview and retry the diagnostic.".to_string()],
+                        format!("The managed chat diagnostic response was not valid JSON: {error}"),
+                    );
+                }
+            }
+        }
+        Err(error) if error.is_timeout() => {
+            blockers.push(notice(
+                "request_timeout",
+                "The managed chat diagnostic request timed out.",
+            ));
+            warnings.push(notice(
+                "timeout",
+                "The bounded chat diagnostic timeout elapsed before a response was received.",
+            ));
+            return chat_diagnostic_preview(
+                ManagedLlamaServerChatDiagnosticStatus::TimedOut,
+                true,
+                &status,
+                normalized,
+                None,
+                String::new(),
+                false,
+                None,
+                duration_ms,
+                blockers,
+                warnings,
+                vec!["Retry the diagnostic or increase the bounded timeout.".to_string()],
+                format!("The managed chat diagnostic timed out after {duration_ms} ms."),
+            );
+        }
+        Err(error) => {
+            blockers.push(notice(
+                "request_failed",
+                "The managed chat diagnostic request failed before a usable response arrived.",
+            ));
+            warnings.push(notice(
+                "request_error",
+                "Inspect the bounded request preview, raw response preview, and local server status.",
+            ));
+            return chat_diagnostic_preview(
+                ManagedLlamaServerChatDiagnosticStatus::DiagnosticFailed,
+                true,
+                &status,
+                normalized,
+                None,
+                String::new(),
+                false,
+                None,
+                duration_ms,
+                blockers,
+                warnings,
+                vec!["Review the managed server status and retry the diagnostic.".to_string()],
+                format!("The managed chat diagnostic request failed: {error}"),
+            );
+        }
     }
 }
 
@@ -805,6 +1421,125 @@ impl ManagedLlamaServerStatusPreview {
     }
 }
 
+struct NormalizedChatDiagnosticRequest {
+    prompt: String,
+    prompt_char_count: usize,
+    prompt_truncated: bool,
+    allow_chat_diagnostic: bool,
+    max_tokens: u32,
+    max_tokens_was_clamped: bool,
+    temperature: f32,
+    temperature_was_clamped: bool,
+    timeout_ms: u64,
+    timeout_ms_was_clamped: bool,
+}
+
+fn normalize_chat_diagnostic_request(
+    request: ManagedLlamaServerChatDiagnosticRequest,
+) -> NormalizedChatDiagnosticRequest {
+    let prompt = normalize_optional_text(request.prompt).unwrap_or_else(|| CHAT_DIAGNOSTIC_DEFAULT_PROMPT.to_string());
+    let mut prompt_chars = prompt.chars();
+    let prompt = prompt_chars
+        .by_ref()
+        .take(CHAT_DIAGNOSTIC_PROMPT_PREVIEW_LIMIT)
+        .collect::<String>();
+    let prompt_truncated = prompt_chars.next().is_some();
+
+    let raw_max_tokens = request.max_tokens.filter(|value| *value > 0).unwrap_or(CHAT_DIAGNOSTIC_DEFAULT_MAX_TOKENS);
+    let max_tokens = raw_max_tokens.min(CHAT_DIAGNOSTIC_MAX_TOKENS_LIMIT);
+    let max_tokens_was_clamped = max_tokens != raw_max_tokens;
+
+    let raw_temperature = request
+        .temperature
+        .filter(|value| value.is_finite())
+        .unwrap_or(CHAT_DIAGNOSTIC_DEFAULT_TEMPERATURE);
+    let temperature = raw_temperature.clamp(CHAT_DIAGNOSTIC_MIN_TEMPERATURE, CHAT_DIAGNOSTIC_MAX_TEMPERATURE);
+    let temperature_was_clamped = (temperature - raw_temperature).abs() > f32::EPSILON;
+
+    let raw_timeout_ms = request
+        .timeout_ms
+        .filter(|value| *value > 0)
+        .unwrap_or(CHAT_DIAGNOSTIC_DEFAULT_TIMEOUT_MS);
+    let timeout_ms = raw_timeout_ms.clamp(CHAT_DIAGNOSTIC_MIN_TIMEOUT_MS, CHAT_DIAGNOSTIC_MAX_TIMEOUT_MS);
+    let timeout_ms_was_clamped = timeout_ms != raw_timeout_ms;
+
+    NormalizedChatDiagnosticRequest {
+        prompt_char_count: prompt.chars().count(),
+        prompt,
+        prompt_truncated,
+        allow_chat_diagnostic: request.allow_chat_diagnostic,
+        max_tokens,
+        max_tokens_was_clamped,
+        temperature,
+        temperature_was_clamped,
+        timeout_ms,
+        timeout_ms_was_clamped,
+    }
+}
+
+fn extract_chat_completion_message(parsed: &Value) -> Option<String> {
+    let choices = parsed.get("choices")?.as_array()?;
+    let first_choice = choices.first()?;
+    let message = first_choice.get("message")?;
+    let content = message.get("content")?.as_str()?.trim().to_string();
+    if content.is_empty() {
+        None
+    } else {
+        Some(content)
+    }
+}
+
+fn compact_text_preview(value: &str, limit: usize) -> (String, bool) {
+    let compacted = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    preview_text(&compacted, limit)
+}
+
+fn chat_diagnostic_preview(
+    status: ManagedLlamaServerChatDiagnosticStatus,
+    request_attempted: bool,
+    managed_status: &ManagedLlamaServerStatusPreview,
+    normalized: NormalizedChatDiagnosticRequest,
+    http_status: Option<u16>,
+    response_preview: String,
+    response_preview_truncated: bool,
+    extracted_message_preview: Option<String>,
+    duration_ms: u64,
+    blockers: Vec<ManagedLlamaServerNotice>,
+    warnings: Vec<ManagedLlamaServerNotice>,
+    next_required_actions: Vec<String>,
+    summary: String,
+) -> ManagedLlamaServerChatDiagnosticPreview {
+    ManagedLlamaServerChatDiagnosticPreview {
+        status,
+        request_attempted,
+        lifecycle_status: managed_status.lifecycle_status.clone(),
+        health_status: managed_status.health_status.clone(),
+        host: managed_status.host.clone(),
+        port: managed_status.port,
+        alias: managed_status.alias.clone(),
+        safe_model_file_name: managed_status.safe_model_file_name.clone(),
+        prompt_char_count: normalized.prompt_char_count,
+        max_tokens: normalized.max_tokens,
+        temperature: normalized.temperature,
+        timeout_ms: normalized.timeout_ms,
+        http_status,
+        response_preview,
+        response_preview_truncated,
+        extracted_message_preview,
+        duration_ms,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        diagnostic_only: true,
+        not_scholar_chat_answer: true,
+        no_final_answer_created: true,
+        no_grounding_applied: true,
+        no_artifact_write: true,
+        no_persistence: true,
+    }
+}
+
 fn plan_from_config(config: &ManagedLlamaServerConfig) -> LaunchPlan {
     let executable_path = config.executable_path.to_string_lossy().to_string();
     let model_path = config.model_path.to_string_lossy().to_string();
@@ -843,6 +1578,10 @@ fn status_preview_from_plan(
     ManagedLlamaServerStatusPreview {
         lifecycle_status,
         health_status,
+        owns_active_server: false,
+        port_occupied: false,
+        port_occupied_by_unmanaged_process: false,
+        port_occupancy_status: ManagedLlamaServerPortOccupancyStatus::Free,
         host: Some(plan.config.host.clone()),
         port: Some(plan.config.port),
         alias: Some(plan.config.alias.clone()),
@@ -875,6 +1614,10 @@ fn status_preview_from_empty(
     ManagedLlamaServerStatusPreview {
         lifecycle_status,
         health_status,
+        owns_active_server: false,
+        port_occupied: false,
+        port_occupied_by_unmanaged_process: false,
+        port_occupancy_status: ManagedLlamaServerPortOccupancyStatus::Free,
         host: None,
         port: None,
         alias: None,
@@ -897,6 +1640,229 @@ fn status_preview_from_empty(
         no_artifact_write: true,
         no_lan_binding_by_default: true,
     }
+}
+
+fn apply_port_occupancy(
+    mut preview: ManagedLlamaServerStatusPreview,
+    status: ManagedLlamaServerPortOccupancyStatus,
+    port_occupied: bool,
+    port_occupied_by_unmanaged_process: bool,
+    owns_active_server: bool,
+) -> ManagedLlamaServerStatusPreview {
+    preview.port_occupancy_status = status;
+    preview.port_occupied = port_occupied;
+    preview.port_occupied_by_unmanaged_process = port_occupied_by_unmanaged_process;
+    preview.owns_active_server = owns_active_server;
+    preview
+}
+
+fn apply_port_probe_to_status_preview(
+    mut preview: ManagedLlamaServerStatusPreview,
+    probe: &ManagedLlamaServerPortProbe,
+    owns_active_server: bool,
+) -> ManagedLlamaServerStatusPreview {
+    preview.health_status = probe.health_status.clone();
+    preview.response_body_preview = probe.response_body_preview.clone();
+    preview.response_body_truncated = probe.response_body_truncated;
+    preview.blockers = probe.blockers.clone();
+    preview.warnings = probe.warnings.clone();
+    preview.next_required_actions = probe.next_required_actions.clone();
+    preview.summary = probe.summary.clone();
+    apply_port_occupancy(
+        preview,
+        probe.occupancy_status.clone(),
+        !matches!(probe.occupancy_status, ManagedLlamaServerPortOccupancyStatus::Free),
+        matches!(
+            probe.occupancy_status,
+            ManagedLlamaServerPortOccupancyStatus::ExternalServerDetected
+                | ManagedLlamaServerPortOccupancyStatus::PortOccupied
+                | ManagedLlamaServerPortOccupancyStatus::UnknownOwner
+        ),
+        owns_active_server,
+    )
+}
+
+struct ManagedLlamaServerPortProbe {
+    occupancy_status: ManagedLlamaServerPortOccupancyStatus,
+    health_status: ManagedLlamaServerHealthStatus,
+    response_body_preview: String,
+    response_body_truncated: bool,
+    summary: String,
+    blockers: Vec<ManagedLlamaServerNotice>,
+    warnings: Vec<ManagedLlamaServerNotice>,
+    next_required_actions: Vec<String>,
+}
+
+fn probe_managed_llama_server_port(config: &ManagedLlamaServerConfig) -> ManagedLlamaServerPortProbe {
+    let Some(socket_addr) = localhost_socket_addr(&config.host, config.port) else {
+        return ManagedLlamaServerPortProbe {
+            occupancy_status: ManagedLlamaServerPortOccupancyStatus::UnknownOwner,
+            health_status: ManagedLlamaServerHealthStatus::Failed,
+            response_body_preview: String::new(),
+            response_body_truncated: false,
+            summary: "The configured localhost address could not be parsed for port occupancy inspection.".to_string(),
+            blockers: vec![notice(
+                "port_probe_invalid_host",
+                "The configured managed server host could not be resolved for local occupancy inspection.",
+            )],
+            warnings: vec![notice(
+                "port_probe_unknown_owner",
+                "The managed server port could not be inspected, so ownership remains unknown.",
+            )],
+            next_required_actions: vec!["Choose a valid localhost host name or IP address and retry.".to_string()],
+        };
+    };
+
+    match TcpListener::bind(socket_addr) {
+        Ok(listener) => {
+            drop(listener);
+            ManagedLlamaServerPortProbe {
+                occupancy_status: ManagedLlamaServerPortOccupancyStatus::Free,
+                health_status: ManagedLlamaServerHealthStatus::NotStarted,
+                response_body_preview: String::new(),
+                response_body_truncated: false,
+                summary: format!("localhost:{} is available for an AEGIS-managed llama-server start.", config.port),
+                blockers: Vec::new(),
+                warnings: Vec::new(),
+                next_required_actions: vec!["Start the managed server with explicit consent when ready.".to_string()],
+            }
+        }
+        Err(_) => {
+            let health_url = format!("http://{}:{}/health", config.host, config.port);
+            let client = match Client::builder().timeout(Duration::from_millis(500)).build() {
+                Ok(client) => client,
+                Err(error) => {
+                    return ManagedLlamaServerPortProbe {
+                        occupancy_status: ManagedLlamaServerPortOccupancyStatus::UnknownOwner,
+                        health_status: ManagedLlamaServerHealthStatus::Failed,
+                        response_body_preview: String::new(),
+                        response_body_truncated: false,
+                        summary: format!("localhost:{} is occupied, but the health client could not be created: {error}", config.port),
+                        blockers: vec![notice(
+                            "port_occupied",
+                            "The configured localhost port is already in use.",
+                        )],
+                        warnings: vec![notice(
+                            "unknown_owner",
+                            "The occupied port could not be identified as managed or external.",
+                        )],
+                        next_required_actions: vec!["Stop the external process or choose another port.".to_string()],
+                    };
+                }
+            };
+
+            match client.get(&health_url).send() {
+                Ok(response) => {
+                    let status_code = response.status().as_u16();
+                    let body = response.text().unwrap_or_default();
+                    let (preview, truncated) = preview_text(&body, HEALTH_PREVIEW_LIMIT);
+                    let normalized = body.trim().to_ascii_lowercase();
+                    if status_code == 200 && normalized == "ok" {
+                        ManagedLlamaServerPortProbe {
+                            occupancy_status: ManagedLlamaServerPortOccupancyStatus::ExternalServerDetected,
+                            health_status: ManagedLlamaServerHealthStatus::Ready,
+                            response_body_preview: preview,
+                            response_body_truncated: truncated,
+                            summary: format!(
+                                "localhost:{} is already serving a ready server that AEGIS did not start.",
+                                config.port
+                            ),
+                            blockers: vec![notice(
+                                "external_process_detected",
+                                "A ready server is already listening on the managed localhost port and is not AEGIS-owned.",
+                            )],
+                            warnings: vec![notice(
+                                "external_server_detected",
+                                "The configured localhost port appears to be owned by an external server.",
+                            )],
+                            next_required_actions: vec!["Stop the external process or choose another port.".to_string()],
+                        }
+                    } else if status_code == 503 || normalized.contains("loading") {
+                        ManagedLlamaServerPortProbe {
+                            occupancy_status: ManagedLlamaServerPortOccupancyStatus::ExternalServerDetected,
+                            health_status: ManagedLlamaServerHealthStatus::Loading,
+                            response_body_preview: preview,
+                            response_body_truncated: truncated,
+                            summary: format!(
+                                "localhost:{} is already serving a loading server that AEGIS did not start.",
+                                config.port
+                            ),
+                            blockers: vec![notice(
+                                "external_process_detected",
+                                "A loading server is already listening on the managed localhost port and is not AEGIS-owned.",
+                            )],
+                            warnings: vec![notice(
+                                "external_server_detected",
+                                "The configured localhost port appears to be owned by an external server.",
+                            )],
+                            next_required_actions: vec!["Stop the external process or choose another port.".to_string()],
+                        }
+                    } else {
+                        ManagedLlamaServerPortProbe {
+                            occupancy_status: ManagedLlamaServerPortOccupancyStatus::PortOccupied,
+                            health_status: ManagedLlamaServerHealthStatus::Failed,
+                            response_body_preview: preview,
+                            response_body_truncated: truncated,
+                            summary: format!(
+                                "localhost:{} is occupied, but AEGIS could not verify ownership from the health response.",
+                                config.port
+                            ),
+                            blockers: vec![notice(
+                                "port_occupied",
+                                "The configured localhost port is already in use.",
+                            )],
+                            warnings: vec![notice(
+                                "unknown_owner",
+                                "The occupied port could not be verified as managed or external from the health response.",
+                            )],
+                            next_required_actions: vec!["Stop the external process or choose another port.".to_string()],
+                        }
+                    }
+                }
+                Err(error) if error.is_timeout() => ManagedLlamaServerPortProbe {
+                    occupancy_status: ManagedLlamaServerPortOccupancyStatus::PortOccupied,
+                    health_status: ManagedLlamaServerHealthStatus::Unreachable,
+                    response_body_preview: String::new(),
+                    response_body_truncated: false,
+                    summary: format!("localhost:{} is occupied, but health could not be reached within the bounded probe.", config.port),
+                    blockers: vec![notice(
+                        "port_occupied",
+                        "The configured localhost port is already in use.",
+                    )],
+                    warnings: vec![notice(
+                        "unknown_owner",
+                        "The occupied port could not be verified as managed or external from the bounded probe.",
+                    )],
+                    next_required_actions: vec!["Stop the external process or choose another port.".to_string()],
+                },
+                Err(error) => ManagedLlamaServerPortProbe {
+                    occupancy_status: ManagedLlamaServerPortOccupancyStatus::UnknownOwner,
+                    health_status: ManagedLlamaServerHealthStatus::Failed,
+                    response_body_preview: String::new(),
+                    response_body_truncated: false,
+                    summary: format!("localhost:{} is occupied, but the health probe failed: {error}", config.port),
+                    blockers: vec![notice(
+                        "port_occupied",
+                        "The configured localhost port is already in use.",
+                    )],
+                    warnings: vec![notice(
+                        "unknown_owner",
+                        "The occupied port could not be verified as managed or external.",
+                    )],
+                    next_required_actions: vec!["Stop the external process or choose another port.".to_string()],
+                },
+            }
+        }
+    }
+}
+
+fn localhost_socket_addr(host: &str, port: u16) -> Option<SocketAddr> {
+    let normalized_host = if host.eq_ignore_ascii_case("localhost") {
+        "127.0.0.1"
+    } else {
+        host
+    };
+    format!("{normalized_host}:{port}").parse().ok()
 }
 
 fn notice(kind: &str, message: &str) -> ManagedLlamaServerNotice {
@@ -1047,6 +2013,7 @@ mod tests {
     use super::*;
     use std::env;
     use std::net::TcpListener;
+    use reqwest::blocking::Client;
     use tempfile::tempdir;
 
     fn launch_request(
@@ -1074,10 +2041,12 @@ mod tests {
         let executable_path = temp
             .path()
             .join(if cfg!(windows) { "managed_server_helper.exe" } else { "managed_server_helper" });
-        let source = r#"
+        let source = r##"
 use std::env;
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::thread;
+use std::time::Duration;
 
 fn main() {
     let mut host = String::new();
@@ -1111,6 +2080,18 @@ fn main() {
         let request = String::from_utf8_lossy(&buffer[..read]);
         let (status_line, body) = if request.starts_with("GET /health") {
             ("HTTP/1.1 200 OK", "ok")
+        } else if request.starts_with("POST /v1/chat/completions") {
+            if request.contains("MALFORMED_CHAT_DIAGNOSTIC") {
+                ("HTTP/1.1 200 OK", "{not valid json")
+            } else {
+                if request.contains("SLOW_CHAT_DIAGNOSTIC") {
+                    thread::sleep(Duration::from_millis(650));
+                }
+                (
+                    "HTTP/1.1 200 OK",
+                    r#"{"id":"chatcmpl-test","object":"chat.completion","created":1,"model":"aegis-local-gemma","choices":[{"index":0,"message":{"role":"assistant","content":"READY"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}"#,
+                )
+            }
         } else {
             ("HTTP/1.1 404 Not Found", "not found")
         };
@@ -1118,7 +2099,7 @@ fn main() {
         let _ = stream.write_all(response.as_bytes());
     }
 }
-"#;
+"##;
         fs::write(&source_path, source).unwrap();
         let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
         let status = Command::new(rustc)
@@ -1137,6 +2118,123 @@ fn main() {
         let port = listener.local_addr().unwrap().port();
         drop(listener);
         port
+    }
+
+    fn managed_chat_status_preview(
+        lifecycle_status: ManagedLlamaServerLifecycleStatus,
+        health_status: ManagedLlamaServerHealthStatus,
+        host: Option<&str>,
+        port: Option<u16>,
+        alias: Option<&str>,
+        safe_model_file_name: Option<&str>,
+    ) -> ManagedLlamaServerStatusPreview {
+        let owns_active_server = matches!(
+            lifecycle_status,
+            ManagedLlamaServerLifecycleStatus::Running
+                | ManagedLlamaServerLifecycleStatus::Starting
+                | ManagedLlamaServerLifecycleStatus::AlreadyRunning
+        );
+        let port_occupied = !matches!(
+            lifecycle_status,
+            ManagedLlamaServerLifecycleStatus::NotStarted
+                | ManagedLlamaServerLifecycleStatus::Stopped
+                | ManagedLlamaServerLifecycleStatus::Failed
+                | ManagedLlamaServerLifecycleStatus::Blocked
+        );
+        ManagedLlamaServerStatusPreview {
+            lifecycle_status,
+            health_status,
+            owns_active_server,
+            port_occupied,
+            port_occupied_by_unmanaged_process: false,
+            port_occupancy_status: ManagedLlamaServerPortOccupancyStatus::ManagedOwned,
+            host: host.map(|value| value.to_string()),
+            port,
+            alias: alias.map(|value| value.to_string()),
+            process_id: Some(4242),
+            exit_code: None,
+            safe_executable_file_name: Some("llama-server.exe".to_string()),
+            safe_model_file_name: safe_model_file_name.map(|value| value.to_string()),
+            health_url: host.zip(port).map(|(host, port)| format!("http://{}:{}/health", host, port)),
+            response_body_preview: "ok".to_string(),
+            response_body_truncated: false,
+            blockers: Vec::new(),
+            warnings: Vec::new(),
+            next_required_actions: Vec::new(),
+            summary: "managed server ready".to_string(),
+            preview_only: true,
+            no_process_spawn: true,
+            no_model_output_used: true,
+            no_answer_generation: true,
+            no_persistence: true,
+            no_artifact_write: true,
+            no_lan_binding_by_default: true,
+        }
+    }
+
+    fn spawn_chat_helper_server(
+        executable: &Path,
+        model: &Path,
+        host: &str,
+        port: u16,
+        alias: &str,
+    ) -> std::process::Child {
+        std::process::Command::new(executable)
+            .arg("-m")
+            .arg(model)
+            .arg("-c")
+            .arg(DEFAULT_CONTEXT_WINDOW.to_string())
+            .arg("-ngl")
+            .arg(DEFAULT_GPU_LAYERS.to_string())
+            .arg("--host")
+            .arg(host)
+            .arg("--port")
+            .arg(port.to_string())
+            .arg("--alias")
+            .arg(alias)
+            .spawn()
+            .unwrap()
+    }
+
+    struct ChildGuard(Option<std::process::Child>);
+
+    impl Drop for ChildGuard {
+        fn drop(&mut self) {
+            if let Some(mut child) = self.0.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+
+    fn wait_for_chat_helper_server(host: &str, port: u16) {
+        let client = Client::builder()
+            .timeout(Duration::from_millis(250))
+            .build()
+            .unwrap();
+        let url = format!("http://{host}:{port}/health");
+        for _ in 0..40 {
+            if let Ok(response) = client.get(&url).send() {
+                if response.status().as_u16() == 200 {
+                    let body = response.text().unwrap_or_default();
+                    if body.trim() == "ok" {
+                        return;
+                    }
+                }
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        panic!("managed chat helper server did not become healthy");
+    }
+
+    fn wait_for_port_available(port: u16) {
+        for _ in 0..40 {
+            if TcpListener::bind(("127.0.0.1", port)).is_ok() {
+                return;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        panic!("port {port} did not become available");
     }
 
     #[test]
@@ -1236,5 +2334,339 @@ fn main() {
         let status = inspect_managed_llama_server_status(&state).unwrap();
         assert_eq!(status.lifecycle_status, ManagedLlamaServerLifecycleStatus::Stopped);
         assert_eq!(status.health_status, ManagedLlamaServerHealthStatus::NotStarted);
+    }
+
+    #[test]
+    fn start_blocks_when_port_is_occupied_before_spawn() {
+        let temp = tempdir().unwrap();
+        let helper_temp = tempdir().unwrap();
+        let executable = helper_server_executable(&helper_temp);
+        let model = temp.path().join("gemma.gguf");
+        fs::write(&model, "model").unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let state = ManagedLlamaServerState::default();
+
+        let result = start_managed_llama_server(
+            temp.path(),
+            &state,
+            ManagedLlamaServerStartRequest {
+                allow_server_start: true,
+                launch_plan_request: launch_request(
+                    Some(executable.to_string_lossy().as_ref()),
+                    Some(model.to_string_lossy().as_ref()),
+                    Some("127.0.0.1"),
+                    Some(port),
+                    Some(DEFAULT_ALIAS),
+                    Some(DEFAULT_CONTEXT_WINDOW),
+                    Some(DEFAULT_GPU_LAYERS),
+                ),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.lifecycle_status, ManagedLlamaServerLifecycleStatus::PortOccupied);
+        assert!(!result.owns_active_server);
+        assert!(result.port_occupied);
+        assert!(result.port_occupied_by_unmanaged_process);
+        assert!(result.next_required_actions.iter().any(|action| action.contains("Stop the external process or choose another port.")));
+        drop(listener);
+    }
+
+    #[test]
+    fn start_blocks_external_server_and_status_reports_unmanaged_occupancy() {
+        let temp = tempdir().unwrap();
+        let helper_temp = tempdir().unwrap();
+        let executable = helper_server_executable(&helper_temp);
+        let model = temp.path().join("gemma.gguf");
+        fs::write(&model, "model").unwrap();
+        let port = free_port();
+        let external_child = spawn_chat_helper_server(
+            &executable,
+            &model,
+            "127.0.0.1",
+            port,
+            DEFAULT_ALIAS,
+        );
+        let _guard = ChildGuard(Some(external_child));
+        wait_for_chat_helper_server("127.0.0.1", port);
+
+        let state = ManagedLlamaServerState::default();
+        let start_result = start_managed_llama_server(
+            temp.path(),
+            &state,
+            ManagedLlamaServerStartRequest {
+                allow_server_start: true,
+                launch_plan_request: launch_request(
+                    Some(executable.to_string_lossy().as_ref()),
+                    Some(model.to_string_lossy().as_ref()),
+                    Some("127.0.0.1"),
+                    Some(port),
+                    Some(DEFAULT_ALIAS),
+                    Some(DEFAULT_CONTEXT_WINDOW),
+                    Some(DEFAULT_GPU_LAYERS),
+                ),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(start_result.lifecycle_status, ManagedLlamaServerLifecycleStatus::ExternalServerDetected);
+        assert!(!start_result.owns_active_server);
+        assert!(start_result.port_occupied);
+        assert!(start_result.port_occupied_by_unmanaged_process);
+        assert!(start_result.blockers.iter().any(|notice| notice.kind == "external_process_detected"));
+
+        let status = inspect_managed_llama_server_status(&state).unwrap();
+        assert_eq!(status.lifecycle_status, ManagedLlamaServerLifecycleStatus::ExternalServerDetected);
+        assert!(!status.owns_active_server);
+        assert!(status.port_occupied);
+        assert!(status.port_occupied_by_unmanaged_process);
+    }
+
+    #[test]
+    fn stop_without_active_server_is_safe() {
+        let state = ManagedLlamaServerState::default();
+        let stop = stop_managed_llama_server(&state).unwrap();
+        assert_eq!(stop.lifecycle_status, ManagedLlamaServerLifecycleStatus::NotStarted);
+        assert!(!stop.owns_active_server);
+        assert!(!stop.port_occupied);
+    }
+
+    #[test]
+    fn drop_cleanup_stops_managed_server() {
+        let temp = tempdir().unwrap();
+        let helper_temp = tempdir().unwrap();
+        let executable = helper_server_executable(&helper_temp);
+        let model = temp.path().join("gemma.gguf");
+        fs::write(&model, "model").unwrap();
+        let port = free_port();
+
+        {
+            let state = ManagedLlamaServerState::default();
+            let start = start_managed_llama_server(
+                temp.path(),
+                &state,
+                ManagedLlamaServerStartRequest {
+                    allow_server_start: true,
+                    launch_plan_request: launch_request(
+                        Some(executable.to_string_lossy().as_ref()),
+                        Some(model.to_string_lossy().as_ref()),
+                        Some("127.0.0.1"),
+                        Some(port),
+                        Some(DEFAULT_ALIAS),
+                        Some(DEFAULT_CONTEXT_WINDOW),
+                        Some(DEFAULT_GPU_LAYERS),
+                    ),
+                },
+            )
+            .unwrap();
+            assert_eq!(start.lifecycle_status, ManagedLlamaServerLifecycleStatus::Starting);
+            wait_for_chat_helper_server("127.0.0.1", port);
+        }
+
+        wait_for_port_available(port);
+    }
+
+    #[test]
+    fn chat_diagnostic_blocks_without_consent() {
+        let status = managed_chat_status_preview(
+            ManagedLlamaServerLifecycleStatus::Running,
+            ManagedLlamaServerHealthStatus::Ready,
+            Some("127.0.0.1"),
+            Some(48921),
+            Some(DEFAULT_ALIAS),
+            Some("gemma.gguf"),
+        );
+        let result = run_managed_llama_server_chat_diagnostic_from_status(
+            &status,
+            ManagedLlamaServerChatDiagnosticRequest {
+                allow_chat_diagnostic: false,
+                prompt: Some("Say READY in one short sentence.".to_string()),
+                max_tokens: Some(16),
+                temperature: Some(0.2),
+                timeout_ms: Some(5_000),
+            },
+        );
+        assert_eq!(result.status, ManagedLlamaServerChatDiagnosticStatus::Blocked);
+        assert!(!result.request_attempted);
+        assert!(result.blockers.iter().any(|notice| notice.kind == "chat_diagnostic_consent_missing"));
+    }
+
+    #[test]
+    fn chat_diagnostic_requires_server_ready() {
+        let status = status_preview_from_empty(
+            ManagedLlamaServerLifecycleStatus::NotStarted,
+            ManagedLlamaServerHealthStatus::NotStarted,
+            "No AEGIS-managed llama-server is running.".to_string(),
+        );
+        let result = run_managed_llama_server_chat_diagnostic_from_status(
+            &status,
+            ManagedLlamaServerChatDiagnosticRequest {
+                allow_chat_diagnostic: true,
+                prompt: Some("Say READY in one short sentence.".to_string()),
+                max_tokens: Some(16),
+                temperature: Some(0.2),
+                timeout_ms: Some(5_000),
+            },
+        );
+        assert_eq!(result.status, ManagedLlamaServerChatDiagnosticStatus::ServerNotReady);
+        assert!(!result.request_attempted);
+        assert!(result.blockers.iter().any(|notice| notice.kind == "server_not_ready"));
+    }
+
+    #[test]
+    fn chat_diagnostic_rejects_remote_host() {
+        let status = managed_chat_status_preview(
+            ManagedLlamaServerLifecycleStatus::Running,
+            ManagedLlamaServerHealthStatus::Ready,
+            Some("0.0.0.0"),
+            Some(48921),
+            Some(DEFAULT_ALIAS),
+            Some("gemma.gguf"),
+        );
+        let result = run_managed_llama_server_chat_diagnostic_from_status(
+            &status,
+            ManagedLlamaServerChatDiagnosticRequest {
+                allow_chat_diagnostic: true,
+                prompt: Some("Say READY in one short sentence.".to_string()),
+                max_tokens: Some(16),
+                temperature: Some(0.2),
+                timeout_ms: Some(5_000),
+            },
+        );
+        assert_eq!(result.status, ManagedLlamaServerChatDiagnosticStatus::Blocked);
+        assert!(!result.request_attempted);
+        assert!(result.blockers.iter().any(|notice| notice.kind == "host_not_local"));
+    }
+
+    #[test]
+    fn chat_diagnostic_bounds_inputs_and_parses_minimal_response() {
+        let temp = tempdir().unwrap();
+        let helper_temp = tempdir().unwrap();
+        let executable = helper_server_executable(&helper_temp);
+        let model = temp.path().join("gemma.gguf");
+        fs::write(&model, "model").unwrap();
+        let port = free_port();
+        let _guard = ChildGuard(Some(spawn_chat_helper_server(
+            &executable,
+            &model,
+            "127.0.0.1",
+            port,
+            DEFAULT_ALIAS,
+        )));
+        wait_for_chat_helper_server("127.0.0.1", port);
+
+        let result = run_managed_llama_server_chat_diagnostic_from_status(
+            &managed_chat_status_preview(
+                ManagedLlamaServerLifecycleStatus::Running,
+                ManagedLlamaServerHealthStatus::Ready,
+                Some("127.0.0.1"),
+                Some(port),
+                Some(DEFAULT_ALIAS),
+                Some("gemma.gguf"),
+            ),
+            ManagedLlamaServerChatDiagnosticRequest {
+                allow_chat_diagnostic: true,
+                prompt: Some("A".repeat(300)),
+                max_tokens: Some(999),
+                temperature: Some(5.0),
+                timeout_ms: Some(1),
+            },
+        );
+
+        assert_eq!(result.status, ManagedLlamaServerChatDiagnosticStatus::DiagnosticSucceeded);
+        assert!(result.request_attempted);
+        assert_eq!(result.prompt_char_count, 256);
+        assert_eq!(result.max_tokens, 64);
+        assert!((result.temperature - 2.0).abs() < f32::EPSILON);
+        assert_eq!(result.timeout_ms, 250);
+        assert_eq!(result.http_status, Some(200));
+        assert_eq!(result.extracted_message_preview.as_deref(), Some("READY"));
+        assert!(result.response_preview.contains("chat.completion"));
+        assert!(result.warnings.iter().any(|notice| notice.kind == "prompt_truncated"));
+        assert!(result.warnings.iter().any(|notice| notice.kind == "max_tokens_clamped"));
+        assert!(result.warnings.iter().any(|notice| notice.kind == "temperature_clamped"));
+        assert!(result.warnings.iter().any(|notice| notice.kind == "timeout_clamped"));
+    }
+
+    #[test]
+    fn chat_diagnostic_malformed_response_is_failed() {
+        let temp = tempdir().unwrap();
+        let helper_temp = tempdir().unwrap();
+        let executable = helper_server_executable(&helper_temp);
+        let model = temp.path().join("gemma.gguf");
+        fs::write(&model, "model").unwrap();
+        let port = free_port();
+        let _guard = ChildGuard(Some(spawn_chat_helper_server(
+            &executable,
+            &model,
+            "127.0.0.1",
+            port,
+            DEFAULT_ALIAS,
+        )));
+        wait_for_chat_helper_server("127.0.0.1", port);
+
+        let result = run_managed_llama_server_chat_diagnostic_from_status(
+            &managed_chat_status_preview(
+                ManagedLlamaServerLifecycleStatus::Running,
+                ManagedLlamaServerHealthStatus::Ready,
+                Some("127.0.0.1"),
+                Some(port),
+                Some(DEFAULT_ALIAS),
+                Some("gemma.gguf"),
+            ),
+            ManagedLlamaServerChatDiagnosticRequest {
+                allow_chat_diagnostic: true,
+                prompt: Some("MALFORMED_CHAT_DIAGNOSTIC".to_string()),
+                max_tokens: Some(16),
+                temperature: Some(0.2),
+                timeout_ms: Some(5_000),
+            },
+        );
+
+        assert_eq!(result.status, ManagedLlamaServerChatDiagnosticStatus::DiagnosticFailed);
+        assert!(result.request_attempted);
+        assert_eq!(result.extracted_message_preview, None);
+        assert!(result.blockers.iter().any(|notice| notice.kind == "response_parse_failed"));
+    }
+
+    #[test]
+    fn chat_diagnostic_times_out_when_response_is_too_slow() {
+        let temp = tempdir().unwrap();
+        let helper_temp = tempdir().unwrap();
+        let executable = helper_server_executable(&helper_temp);
+        let model = temp.path().join("gemma.gguf");
+        fs::write(&model, "model").unwrap();
+        let port = free_port();
+        let _guard = ChildGuard(Some(spawn_chat_helper_server(
+            &executable,
+            &model,
+            "127.0.0.1",
+            port,
+            DEFAULT_ALIAS,
+        )));
+        wait_for_chat_helper_server("127.0.0.1", port);
+
+        let result = run_managed_llama_server_chat_diagnostic_from_status(
+            &managed_chat_status_preview(
+                ManagedLlamaServerLifecycleStatus::Running,
+                ManagedLlamaServerHealthStatus::Ready,
+                Some("127.0.0.1"),
+                Some(port),
+                Some(DEFAULT_ALIAS),
+                Some("gemma.gguf"),
+            ),
+            ManagedLlamaServerChatDiagnosticRequest {
+                allow_chat_diagnostic: true,
+                prompt: Some("SLOW_CHAT_DIAGNOSTIC".to_string()),
+                max_tokens: Some(16),
+                temperature: Some(0.2),
+                timeout_ms: Some(1),
+            },
+        );
+
+        assert_eq!(result.status, ManagedLlamaServerChatDiagnosticStatus::TimedOut);
+        assert!(result.request_attempted);
+        assert!(result.blockers.iter().any(|notice| notice.kind == "request_timeout"));
     }
 }
