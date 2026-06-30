@@ -602,6 +602,37 @@ pre {
   margin-top: 1rem;
 }
 
+.export-readiness-gate {
+  display: grid;
+  gap: 0.9rem;
+  margin: 1rem 0;
+}
+
+.export-readiness-gate-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.export-readiness-gate-header h3,
+.export-readiness-next-actions h4 {
+  margin: 0;
+}
+
+.export-readiness-gate p {
+  margin: 0;
+}
+
+.export-readiness-next-actions ol {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.export-readiness-next-actions li + li {
+  margin-top: 0.35rem;
+}
+
 .evidence-pack-action-header {
   display: flex;
   justify-content: space-between;
@@ -920,6 +951,7 @@ pre {
 
   .source-import-panel-header,
   .source-import-step-heading,
+  .export-readiness-gate-header,
   .evidence-pack-action-header,
   .answer-draft-action-header,
   .answer-draft-claim-header,

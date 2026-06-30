@@ -3754,6 +3754,98 @@ export default function App() {
     );
   }
 
+  function answerArtifactExportReadiness() {
+    const manifest = artifactManifest();
+    const health = artifactHealth();
+    const manifestLoaded = manifest !== null;
+    const healthLoaded = health !== null;
+    const sourceCount = manifest?.source_count ?? health?.source_count ?? 0;
+    const draftCount = manifest?.draft_count ?? health?.draft_count ?? 0;
+    const groundedAnswerCount = manifest?.grounded_answer_count ?? health?.grounded_answer_count ?? 0;
+    const finalAnswerCount = manifest?.final_answer_count ?? health?.final_answer_count ?? 0;
+    const malformedFinalAnswerCount = health?.malformed_final_answer_count ?? 0;
+    const unsupportedStatementCount = health?.unsupported_statement_count ?? 0;
+    const needsEvidenceStatementCount = health?.needs_evidence_statement_count ?? 0;
+    const healthIssueCount =
+      malformedFinalAnswerCount + unsupportedStatementCount + needsEvidenceStatementCount;
+    const loadedIssueCount = artifactIssuesHasRun() ? artifactIssues().length : 0;
+    const issueCount = Math.max(manifest?.issue_count ?? 0, healthIssueCount, loadedIssueCount);
+    const exportableArtifactCount = draftCount + groundedAnswerCount + finalAnswerCount;
+    const exportAppearsMeaningful = exportableArtifactCount > 0;
+    const exportHasKnownIssues = issueCount > 0;
+    const destinationSet = exportRoot().trim().length > 0;
+    const readinessInputErrorCount = [
+      artifactManifestError(),
+      artifactHealthError(),
+      artifactIssuesError(),
+    ].filter(Boolean).length;
+
+    let status = "Ready to export";
+    let statusClass = "status-succeeded";
+    let reason = destinationSet
+      ? "The loaded artifact set is ready for an explicit export."
+      : "The loaded artifact set is ready; set an export destination before exporting.";
+    if (!manifestLoaded) {
+      status = "Load export manifest first";
+      statusClass = "status-not_started";
+      reason = "Load the export manifest to preview the artifact set before exporting.";
+    } else if (!healthLoaded) {
+      status = "Load artifact health first";
+      statusClass = "status-not_started";
+      reason = "Load artifact health to review quality counts before exporting.";
+    } else if (!exportAppearsMeaningful) {
+      status = "Nothing to export yet";
+      statusClass = "status-not_started";
+      reason = "The loaded manifest contains no Answer Draft, Grounded Answer, or Final Answer artifacts.";
+    } else if (exportHasKnownIssues) {
+      status = "Export possible with issues";
+      statusClass = "status-needs_evidence";
+      reason = "Known artifact issues do not block export, but they should be reviewed first.";
+    }
+
+    const nextActions: string[] = [];
+    if (!manifestLoaded) {
+      nextActions.push("Load the export manifest.");
+    }
+    if (!healthLoaded) {
+      nextActions.push("Load artifact health.");
+    }
+    if (exportHasKnownIssues && !artifactIssuesHasRun()) {
+      nextActions.push("Load and review artifact issues.");
+    }
+    if (exportAppearsMeaningful && !destinationSet) {
+      nextActions.push("Set an export destination.");
+    }
+    if (manifestLoaded && healthLoaded && !exportAppearsMeaningful) {
+      nextActions.push("Create at least one answer artifact before exporting.");
+    }
+    if (manifestLoaded && healthLoaded && exportAppearsMeaningful && destinationSet) {
+      nextActions.push("Use the existing Export artifacts button when ready.");
+    }
+
+    return {
+      manifest_loaded: manifestLoaded,
+      health_loaded: healthLoaded,
+      source_count: sourceCount,
+      draft_count: draftCount,
+      grounded_answer_count: groundedAnswerCount,
+      final_answer_count: finalAnswerCount,
+      issue_count: issueCount,
+      malformed_final_answer_count: malformedFinalAnswerCount,
+      unsupported_statement_count: unsupportedStatementCount,
+      needs_evidence_statement_count: needsEvidenceStatementCount,
+      exportable_artifact_count: exportableArtifactCount,
+      export_appears_meaningful: exportAppearsMeaningful,
+      export_has_known_issues: exportHasKnownIssues,
+      destination_set: destinationSet,
+      readiness_input_error_count: readinessInputErrorCount,
+      status,
+      status_class: statusClass,
+      reason,
+      next_actions: nextActions,
+    };
+  }
+
   async function refreshDiagnostics() {
     const sourceIdForRetrieval = sourceId().trim() || retrievalIndex()?.source_id?.trim() || "";
     const sourceIdForEvidence = selectedEvidencePackSourceId();
@@ -8797,6 +8889,52 @@ export default function App() {
             I understand this only prepares a future diagnostic smoke inference and does not run inference now.
           </label>
         </div>
+        <section class="warning-box export-readiness-gate">
+          <div class="export-readiness-gate-header">
+            <div>
+              <h3>Export preview gate</h3>
+              <p class="muted">
+                Read-only readiness derived from the loaded manifest, artifact health, and known issues.
+              </p>
+            </div>
+            <span class={`status-pill ${answerArtifactExportReadiness().status_class}`}>
+              {answerArtifactExportReadiness().status}
+            </span>
+          </div>
+          <p>{answerArtifactExportReadiness().reason}</p>
+          <div class="contract-meta">
+            <div><span>Manifest loaded</span><strong>{answerArtifactExportReadiness().manifest_loaded ? "yes" : "no"}</strong></div>
+            <div><span>Health loaded</span><strong>{answerArtifactExportReadiness().health_loaded ? "yes" : "no"}</strong></div>
+            <div><span>Sources</span><strong>{answerArtifactExportReadiness().source_count}</strong></div>
+            <div><span>Drafts</span><strong>{answerArtifactExportReadiness().draft_count}</strong></div>
+            <div><span>Grounded answers</span><strong>{answerArtifactExportReadiness().grounded_answer_count}</strong></div>
+            <div><span>Final answers</span><strong>{answerArtifactExportReadiness().final_answer_count}</strong></div>
+            <div><span>Exportable artifacts</span><strong>{answerArtifactExportReadiness().exportable_artifact_count}</strong></div>
+            <div><span>Known issues</span><strong>{answerArtifactExportReadiness().issue_count}</strong></div>
+            <div><span>Malformed finals</span><strong>{answerArtifactExportReadiness().malformed_final_answer_count}</strong></div>
+            <div><span>Unsupported statements</span><strong>{answerArtifactExportReadiness().unsupported_statement_count}</strong></div>
+            <div><span>Needs evidence</span><strong>{answerArtifactExportReadiness().needs_evidence_statement_count}</strong></div>
+            <div><span>Meaningful export</span><strong>{answerArtifactExportReadiness().export_appears_meaningful ? "yes" : "no"}</strong></div>
+            <div><span>Known issue warning</span><strong>{answerArtifactExportReadiness().export_has_known_issues ? "yes" : "no"}</strong></div>
+            <div><span>Destination set</span><strong>{answerArtifactExportReadiness().destination_set ? "yes" : "no"}</strong></div>
+          </div>
+          {answerArtifactExportReadiness().readiness_input_error_count > 0 ? (
+            <p class="error">
+              One or more readiness inputs failed to load. Review the sanitized diagnostics below.
+            </p>
+          ) : null}
+          {answerArtifactExportReadiness().next_actions.length > 0 ? (
+            <div class="export-readiness-next-actions">
+              <h4>Next actions</h4>
+              <ol>
+                {answerArtifactExportReadiness().next_actions.map((action) => <li>{action}</li>)}
+              </ol>
+            </div>
+          ) : null}
+          <p class="muted">
+            This preview never exports automatically. Export remains an explicit action through the existing button.
+          </p>
+        </section>
         <div class="hero-actions">
           <button onClick={previewLocalRuntimeSmokeReadiness} disabled={localRuntimeSmokeReadinessLoading()}>
             {localRuntimeSmokeReadinessLoading() ? "Previewing..." : "Preview llama.cpp smoke readiness"}
