@@ -66,9 +66,9 @@ const WORKSPACE_SECTIONS: { value: WorkspaceSection; label: string; targetId: st
   },
   {
     value: "developer_diagnostics",
-    label: "Developer Diagnostics",
+    label: "Artifacts & Diagnostics",
     targetId: "developer-diagnostics",
-    description: "Runtime setup, preview, and inspection.",
+    description: "Answer artifacts, export readiness, and advanced diagnostics.",
   },
 ];
 
@@ -2970,25 +2970,28 @@ export default function App() {
 
   function renderFirstRunSourceReadiness() {
     return (
-      <div class="warning-box">
-        <h4>No local sources yet</h4>
-        <p>Use the Source Import Wizard to register a local file and then move through extraction, chunking, and retrieval indexing step by step. AEGIS Scholar can later create Evidence Packs from already indexed sources.</p>
+      <div class="warning-box first-run-start-card">
+        <h4>Start with a local source</h4>
+        <p>Use the import form in this workspace, then complete each local processing step explicitly.</p>
+        <p class="workflow-chain-summary">
+          Import → Extract → Chunk → Index → Evidence Pack → Answer Draft → Grounded Answer → Final Answer contract → Export preview
+        </p>
         <div class="contract-meta">
           <div>
             <span>Supported now</span>
-            <strong>Markdown / text notes, dataset notes, web snapshots, PDF text-layer extraction</strong>
+            <strong>PDFs with a text layer, markdown notes, dataset notes, local UTF-8 web snapshots</strong>
           </div>
           <div>
-            <span>Not yet</span>
-            <strong>OCR for scanned PDFs, drag-and-drop import, automatic literature sync</strong>
+            <span>Not available</span>
+            <strong>OCR, scanned-PDF extraction without a text layer, external source sync</strong>
           </div>
         </div>
-        <h4>Next actions</h4>
+        <h4>Next step</h4>
         <ul>
-          <li>Use the Source Import Wizard to register a local file.</li>
-          <li>Check corpus status.</li>
-          <li>Then run extraction, chunking, and retrieval.</li>
+          <li>Enter a local path and source metadata in <strong>Import a local source</strong>.</li>
+          <li>Select <strong>Register source</strong>, then continue through Extract, Chunk, and Build retrieval index.</li>
         </ul>
+        <p class="muted">Scholar Chat remains preview-only and does not generate an answer from this step.</p>
       </div>
     );
   }
@@ -2996,16 +2999,15 @@ export default function App() {
   function renderSourceWorkflowActionHints() {
     return (
       <details class="muted">
-        <summary>Manual source workflow hints</summary>
-        <p>Use this help text after registering or selecting a source. The chat workflow plan above remains the primary entry point, and the Source Import Wizard handles the local onboarding slice.</p>
+        <summary>Source workflow help</summary>
+        <p>Follow the status shown for each source. Every mutation still requires an explicit button click.</p>
         <ol>
-          <li><strong>Register a local source</strong> - Markdown / text notes, PDF text-layer extraction, dataset notes, and web snapshots are supported now.</li>
-          <li><strong>Extract text</strong> - scanned PDF OCR is not supported yet.</li>
-          <li><strong>Chunk the source</strong> - keep source locators and provenance intact.</li>
-          <li><strong>Build / inspect retrieval</strong> - preview retrieval candidates and retrieval index health.</li>
-          <li><strong>Build / read Evidence Packs</strong> - where supported by the current source and preview flow.</li>
+          <li><strong>Register</strong> a supported local file.</li>
+          <li><strong>Extract</strong> text; PDFs need a text layer because OCR is not available.</li>
+          <li><strong>Chunk</strong> the extracted text.</li>
+          <li><strong>Index</strong> the chunks for local retrieval.</li>
+          <li><strong>Continue in Evidence Packs</strong> after the source reaches Indexed.</li>
         </ol>
-        <p>Broad PDF ingestion beyond text-layer extraction is not yet supported.</p>
       </details>
     );
   }
@@ -8889,52 +8891,6 @@ export default function App() {
             I understand this only prepares a future diagnostic smoke inference and does not run inference now.
           </label>
         </div>
-        <section class="warning-box export-readiness-gate">
-          <div class="export-readiness-gate-header">
-            <div>
-              <h3>Export preview gate</h3>
-              <p class="muted">
-                Read-only readiness derived from the loaded manifest, artifact health, and known issues.
-              </p>
-            </div>
-            <span class={`status-pill ${answerArtifactExportReadiness().status_class}`}>
-              {answerArtifactExportReadiness().status}
-            </span>
-          </div>
-          <p>{answerArtifactExportReadiness().reason}</p>
-          <div class="contract-meta">
-            <div><span>Manifest loaded</span><strong>{answerArtifactExportReadiness().manifest_loaded ? "yes" : "no"}</strong></div>
-            <div><span>Health loaded</span><strong>{answerArtifactExportReadiness().health_loaded ? "yes" : "no"}</strong></div>
-            <div><span>Sources</span><strong>{answerArtifactExportReadiness().source_count}</strong></div>
-            <div><span>Drafts</span><strong>{answerArtifactExportReadiness().draft_count}</strong></div>
-            <div><span>Grounded answers</span><strong>{answerArtifactExportReadiness().grounded_answer_count}</strong></div>
-            <div><span>Final answers</span><strong>{answerArtifactExportReadiness().final_answer_count}</strong></div>
-            <div><span>Exportable artifacts</span><strong>{answerArtifactExportReadiness().exportable_artifact_count}</strong></div>
-            <div><span>Known issues</span><strong>{answerArtifactExportReadiness().issue_count}</strong></div>
-            <div><span>Malformed finals</span><strong>{answerArtifactExportReadiness().malformed_final_answer_count}</strong></div>
-            <div><span>Unsupported statements</span><strong>{answerArtifactExportReadiness().unsupported_statement_count}</strong></div>
-            <div><span>Needs evidence</span><strong>{answerArtifactExportReadiness().needs_evidence_statement_count}</strong></div>
-            <div><span>Meaningful export</span><strong>{answerArtifactExportReadiness().export_appears_meaningful ? "yes" : "no"}</strong></div>
-            <div><span>Known issue warning</span><strong>{answerArtifactExportReadiness().export_has_known_issues ? "yes" : "no"}</strong></div>
-            <div><span>Destination set</span><strong>{answerArtifactExportReadiness().destination_set ? "yes" : "no"}</strong></div>
-          </div>
-          {answerArtifactExportReadiness().readiness_input_error_count > 0 ? (
-            <p class="error">
-              One or more readiness inputs failed to load. Review the sanitized diagnostics below.
-            </p>
-          ) : null}
-          {answerArtifactExportReadiness().next_actions.length > 0 ? (
-            <div class="export-readiness-next-actions">
-              <h4>Next actions</h4>
-              <ol>
-                {answerArtifactExportReadiness().next_actions.map((action) => <li>{action}</li>)}
-              </ol>
-            </div>
-          ) : null}
-          <p class="muted">
-            This preview never exports automatically. Export remains an explicit action through the existing button.
-          </p>
-        </section>
         <div class="hero-actions">
           <button onClick={previewLocalRuntimeSmokeReadiness} disabled={localRuntimeSmokeReadinessLoading()}>
             {localRuntimeSmokeReadinessLoading() ? "Previewing..." : "Preview llama.cpp smoke readiness"}
@@ -9466,9 +9422,9 @@ export default function App() {
         </div>
         </details>
       <section class="card workspace-panel" id="developer-diagnostics" data-workspace="developer_diagnostics">
-        <h2>Final answer inspector</h2>
+        <h2>Artifacts & diagnostics</h2>
         <p class="muted">
-          Developer diagnostics and contract inspection stay available here. This read-only display covers an already-built FinalAnswer contract.
+          Review Answer Artifact counts and export readiness here. Runtime diagnostics remain available as secondary engineering tools.
         </p>
         <div class="artifact-overview runtime-setup-card">
           <h3>Diagnostic-only local model smoke test</h3>
@@ -9640,6 +9596,64 @@ export default function App() {
             <p>No managed smoke test preview loaded yet.</p>
           )}
         </div>
+        <section class="compact-note artifact-workflow-intro">
+          <h3>Answer artifacts and export readiness</h3>
+          <p>
+            Continue here after building a Final Answer contract in Evidence Packs. This area summarizes artifacts and prepares an explicit export.
+          </p>
+          <p class="workflow-chain-summary">
+            Refresh overview → Load manifest → Load health → Review issues → Set destination → Export explicitly
+          </p>
+          <p class="muted">
+            Final Answer remains a contract artifact, not natural prose or an LLM-generated Scholar Chat answer. Runtime diagnostics below and above remain optional engineering tools.
+          </p>
+        </section>
+        <section class="warning-box export-readiness-gate">
+          <div class="export-readiness-gate-header">
+            <div>
+              <h3>Export preview gate</h3>
+              <p class="muted">
+                Read-only readiness derived from the loaded manifest, artifact health, and known issues.
+              </p>
+            </div>
+            <span class={`status-pill ${answerArtifactExportReadiness().status_class}`}>
+              {answerArtifactExportReadiness().status}
+            </span>
+          </div>
+          <p>{answerArtifactExportReadiness().reason}</p>
+          <div class="contract-meta">
+            <div><span>Manifest loaded</span><strong>{answerArtifactExportReadiness().manifest_loaded ? "yes" : "no"}</strong></div>
+            <div><span>Health loaded</span><strong>{answerArtifactExportReadiness().health_loaded ? "yes" : "no"}</strong></div>
+            <div><span>Sources</span><strong>{answerArtifactExportReadiness().source_count}</strong></div>
+            <div><span>Drafts</span><strong>{answerArtifactExportReadiness().draft_count}</strong></div>
+            <div><span>Grounded answers</span><strong>{answerArtifactExportReadiness().grounded_answer_count}</strong></div>
+            <div><span>Final answers</span><strong>{answerArtifactExportReadiness().final_answer_count}</strong></div>
+            <div><span>Exportable artifacts</span><strong>{answerArtifactExportReadiness().exportable_artifact_count}</strong></div>
+            <div><span>Known issues</span><strong>{answerArtifactExportReadiness().issue_count}</strong></div>
+            <div><span>Malformed finals</span><strong>{answerArtifactExportReadiness().malformed_final_answer_count}</strong></div>
+            <div><span>Unsupported statements</span><strong>{answerArtifactExportReadiness().unsupported_statement_count}</strong></div>
+            <div><span>Needs evidence</span><strong>{answerArtifactExportReadiness().needs_evidence_statement_count}</strong></div>
+            <div><span>Meaningful export</span><strong>{answerArtifactExportReadiness().export_appears_meaningful ? "yes" : "no"}</strong></div>
+            <div><span>Known issue warning</span><strong>{answerArtifactExportReadiness().export_has_known_issues ? "yes" : "no"}</strong></div>
+            <div><span>Destination set</span><strong>{answerArtifactExportReadiness().destination_set ? "yes" : "no"}</strong></div>
+          </div>
+          {answerArtifactExportReadiness().readiness_input_error_count > 0 ? (
+            <p class="error">
+              One or more readiness inputs failed to load. Review the sanitized diagnostics below.
+            </p>
+          ) : null}
+          {answerArtifactExportReadiness().next_actions.length > 0 ? (
+            <div class="export-readiness-next-actions">
+              <h4>Next actions</h4>
+              <ol>
+                {answerArtifactExportReadiness().next_actions.map((action) => <li>{action}</li>)}
+              </ol>
+            </div>
+          ) : null}
+          <p class="muted">
+            This preview never exports automatically. Export remains an explicit action through the existing button.
+          </p>
+        </section>
         <div class="form-row">
           <label>
             Source ID

@@ -32,6 +32,7 @@ This roadmap now has a clear split between implemented foundations, preview-firs
 | Current / completed Phase 144.0 | Final Answer action from Grounded Answer |
 | Current / completed Phase 145.0 | Answer Artifact overview refresh |
 | Current / completed Phase 146.0 | Answer Artifact export preview gate |
+| Current / completed Phase 147.0 | first-run happy path cleanup |
 | Known missing product workflows | scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 | Recommended next product slices | scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 
@@ -60,6 +61,7 @@ Phase 143.0 adds an explicit Grounded Answer action for the Answer Draft current
 Phase 144.0 adds an explicit Final Answer action for the Grounded Answer currently shown in the Evidence Packs workspace. It uses the existing `build_final_answer` command to create a mechanical contract-only artifact and does not synthesize natural prose, emit citations, or build an export bundle.
 Phase 145.0 refreshes the existing Answer Artifact source index, selected-source overview, health, and previously loaded issues after a successful Final Answer build. It keeps the build result visible, preserves source selection, and adds no export action, citation output, or new artifact viewer.
 Phase 146.0 adds a path-free Answer Artifact export preview gate in Developer Diagnostics. It derives readiness, issue warnings, and next actions from already loaded manifest, health, issues, and destination state while keeping export and bundle inspection explicit and unchanged.
+Phase 147.0 improves the frontend-only first-run happy path with clearer empty states, status-derived next steps, prerequisite explanations, and a correctly placed export preview gate. It adds no commands, automatic mutations, LLM output, citations, or export execution.
 Phase 116 remains backend-only, preview-only, and in-memory. It does not add Evidence Pack creation, citations, writes, retrieval execution, provider expansion, runtime/model/LLM behavior, or answer generation.
 Phase 117.0 adds a backend-only Local Evidence Pack Creation MVP. It uses existing local source/retrieval/evidence data and managed Evidence Pack storage, stays deterministic and path-safe, and does not add network access, model/runtime/LLM behavior, or answer generation.
 Phase 118.0 adds a backend-only PDF Text Extraction MVP. It supports local PDFs when a text layer is present, preserves page-level locators, reuses the existing extraction-report / source-registry / corpus-layout contracts, and stays OCR-free and preview-only. It does not add OCR, web requests, scraping, downloads, connectors, source import, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.

@@ -113,6 +113,30 @@ function wizardStepClass(status: SourceImportStepStatus) {
   return `status-pill status-${status}`;
 }
 
+function sourceWorkflowNextStep(status: string) {
+  switch (status) {
+    case "registered":
+    case "extraction_pending":
+      return { state: "Needs action", text: "Extract the source. PDFs require a usable text layer; OCR is not available." };
+    case "extracted":
+      return { state: "Needs action", text: "Chunk the extracted text." };
+    case "chunked":
+      return { state: "Needs action", text: "Build the retrieval index." };
+    case "indexed":
+      return { state: "Ready", text: "Open Evidence Packs and build an Evidence Pack for a research query." };
+    case "evidence_ready":
+      return { state: "Ready", text: "Open Evidence Packs and build an Answer Draft from existing evidence." };
+    case "answer_drafted":
+      return { state: "Ready", text: "Open Evidence Packs and build a Grounded Answer contract." };
+    case "grounded_answer_ready":
+      return { state: "Ready", text: "Continue the Final Answer contract flow or inspect Answer Artifacts." };
+    case "failed":
+      return { state: "Needs action", text: "Review the failure and retry the appropriate explicit pipeline step." };
+    default:
+      return { state: "Not available yet", text: "Complete source registration before continuing." };
+  }
+}
+
 export default function SourcesWorkspace(props: any): JSX.Element {
   const [sourceImportPath, setSourceImportPath] = createSignal("");
   const [sourceImportTitle, setSourceImportTitle] = createSignal("");
@@ -196,6 +220,30 @@ export default function SourcesWorkspace(props: any): JSX.Element {
         return !!sourceImportCurrentSource() && statuses.extract === "succeeded";
       case "index":
         return !!sourceImportCurrentSource() && statuses.chunk === "succeeded";
+    }
+  }
+
+  function stepAvailabilityHint(step: SourceImportStep) {
+    const busyStep = sourceImportBusyStep();
+    if (busyStep) {
+      return busyStep === step
+        ? "In progress. Wait for this step to finish."
+        : "Not available while another pipeline step is running.";
+    }
+    if (canRunStep(step)) {
+      return step === "register"
+        ? "Ready when the required path and metadata fields are complete."
+        : "Ready for an explicit user action.";
+    }
+    switch (step) {
+      case "extract":
+        return "Available after Register source succeeds in this wizard session.";
+      case "chunk":
+        return "Available after Extract source succeeds.";
+      case "index":
+        return "Available after Chunk source succeeds.";
+      default:
+        return "Not available yet.";
     }
   }
 
@@ -405,9 +453,9 @@ export default function SourcesWorkspace(props: any): JSX.Element {
         <section class="warning-box source-import-panel">
           <div class="source-import-panel-header">
             <div>
-              <h3>Source Import Wizard MVP</h3>
+              <h3>Import a local source</h3>
               <p class="muted">
-                Local-first onboarding for existing Corpus Authority, extraction, chunking, and retrieval commands.
+                Add one local file, then complete each processing step explicitly.
               </p>
             </div>
             <span class={`status-pill ${wizardStepClass(sourceImportBusyStep() ? "running" : "not_started")}`}>
@@ -536,6 +584,7 @@ export default function SourcesWorkspace(props: any): JSX.Element {
                       {sourceImportBusyStep() === item.step ? "Running..." : STEP_LABELS[item.step]}
                     </button>
                   </div>
+                  <small class="workflow-availability-hint">{stepAvailabilityHint(item.step)}</small>
                 </article>
               );
             })}
@@ -561,14 +610,14 @@ export default function SourcesWorkspace(props: any): JSX.Element {
           </div>
           <p class="muted">{sourceImportSummary()}</p>
           <p class="muted">
-            Supported types: PDF with text layer, markdown notes, dataset notes, and web snapshots already supported by the backend extraction contract.
+            Supported: PDF with a text layer, markdown notes, dataset notes, and local UTF-8 web snapshots. Scanned-PDF OCR and external sync are not available.
           </p>
         </section>
 
         <section class="compact-note source-context-panel">
           <h3>Source context</h3>
           <p class="muted">
-            Source selection stays available for Scholar Chat. The wizard updates this list after each successful step.
+            Select sources for Scholar Chat previews and use each status to identify the next explicit workflow step.
           </p>
           {props.sourceContextLoading ? (
             <p>Loading registered sources...</p>
@@ -583,6 +632,7 @@ export default function SourcesWorkspace(props: any): JSX.Element {
                 {props.sourceContext.map((item: RegisteredSource) => {
                   const selected = props.sourceContextSelectedIds.includes(item.source_id);
                   const current = currentSource()?.source_id === item.source_id;
+                  const nextStep = sourceWorkflowNextStep(item.ingestion_status);
                   return (
                     <li>
                       <label classList={{ "final-answer-list-item": true, "source-context-item": true, selected, current }}>
@@ -600,6 +650,9 @@ export default function SourcesWorkspace(props: any): JSX.Element {
                         </span>
                         <small>
                           source_id={item.source_id} | type={props.formatSnakeCaseLabel(item.source_type)} | version={item.version_id} | status={props.formatSnakeCaseLabel(item.ingestion_status)}
+                        </small>
+                        <small class="workflow-next-step-line">
+                          <strong>{nextStep.state}:</strong> {nextStep.text}
                         </small>
                       </label>
                     </li>

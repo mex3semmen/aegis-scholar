@@ -560,15 +560,62 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
   const selectedSource = () =>
     eligibleSources().find((source) => source.source_id === selectedSourceId()) ?? null;
 
+  const workflowNextStep = () => {
+    if (eligibleSources().length === 0) {
+      return {
+        state: "Needs action",
+        text: "Import a local source and build its retrieval index in Sources.",
+      };
+    }
+    if (finalAnswerSummary()) {
+      return {
+        state: "Ready",
+        text: "Open Artifacts & Diagnostics to refresh the Answer Artifact overview and review Export Preview.",
+      };
+    }
+    if (groundedAnswerSummary()) {
+      return {
+        state: "Next step",
+        text: "Build the Final Answer contract from the current Grounded Answer.",
+      };
+    }
+    if (answerDraftSummary()) {
+      return {
+        state: "Next step",
+        text: "Build a Grounded Answer contract from the current Answer Draft.",
+      };
+    }
+    const packsLoadedForSource =
+      props.evidencePacksSourceId === selectedSourceId() &&
+      Array.isArray(props.evidencePacks) &&
+      props.evidencePacks.length > 0;
+    if (packsLoadedForSource) {
+      return {
+        state: "Next step",
+        text: "Choose an existing Evidence Pack and build an Answer Draft.",
+      };
+    }
+    return {
+      state: "Next step",
+      text: "Enter a query to build an Evidence Pack, or load existing packs for this source.",
+    };
+  };
+
   return (
     <div class="artifact-overview workspace-panel" id="evidence-packs" data-workspace="evidence_packs">
       <div class="evidence-pack-action-header">
         <div>
-          <h3>Evidence packs</h3>
-          <p class="muted">Build and inspect source-grounded Evidence Packs from an already indexed local source.</p>
+          <h3>Evidence and answer artifacts</h3>
+          <p class="muted">Continue the explicit local workflow from indexed evidence to contract-only answer artifacts.</p>
         </div>
         <span class={`status-pill status-${actionStatus()}`}>{actionStatusLabel(actionStatus())}</span>
       </div>
+
+      <section class="compact-note workflow-next-step-card">
+        <span>{workflowNextStep().state}</span>
+        <strong>{workflowNextStep().text}</strong>
+        <small>Each build remains user-triggered. No LLM answer, citation output, or automatic chain runs here.</small>
+      </section>
 
       <section class="warning-box evidence-pack-action">
         <h4>Build Evidence Pack</h4>
@@ -616,7 +663,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
             </label>
           </div>
         ) : (
-          <p class="muted">Import and index a source before building an Evidence Pack.</p>
+          <p class="muted">Not available yet. Complete Import, Extract, Chunk, and Build retrieval index in Sources first.</p>
         )}
 
         {validationError() ? <p class="error">{validationError()}</p> : null}
@@ -645,7 +692,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
 
       <section class="evidence-pack-list">
         <div class="answer-draft-action-header">
-          <h4>Existing Evidence Packs</h4>
+          <h4>Evidence Packs for this source</h4>
           <span class={`status-pill status-${answerDraftStatus()}`}>
             Answer draft: {actionStatusLabel(answerDraftStatus())}
           </span>
@@ -697,16 +744,16 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
                       ))}
                     </ul>
                   ) : (
-                    <p>No Evidence Packs listed yet for this source.</p>
+                    <p>No Evidence Packs yet. Enter a research query above and explicitly build the first pack.</p>
                   )}
                 </>
               ) : props.evidencePacksLoading ? (
                 <p>Loading Evidence Packs...</p>
               ) : props.evidencePacksError ? null : (
-                <p>No Evidence Packs loaded yet for this source.</p>
+                <p>Existing packs are not loaded yet. Use Load Evidence Packs, or build a new pack above.</p>
               )
             ) : (
-              <p>No Evidence Packs loaded yet for this source.</p>
+              <p>Existing packs are not loaded for the selected source yet.</p>
             )}
           </>
         ) : (
