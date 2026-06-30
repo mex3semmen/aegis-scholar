@@ -9611,7 +9611,7 @@ export default function App() {
         <section class="warning-box export-readiness-gate">
           <div class="export-readiness-gate-header">
             <div>
-              <h3>Export preview gate</h3>
+              <h3>Pre-export summary</h3>
               <p class="muted">
                 Read-only readiness derived from the loaded manifest, artifact health, and known issues.
               </p>
@@ -9699,19 +9699,58 @@ export default function App() {
           <button onClick={loadArtifactManifest} disabled={artifactManifestLoading()}>
             {artifactManifestLoading() ? "Loading..." : "Load export manifest"}
           </button>
-          <label class="inline-field">
-            Export destination
+        </div>
+        <section class="compact-note export-action-panel">
+          <div class="export-action-panel-header">
+            <div>
+              <h3>Export answer artifacts</h3>
+              <p class="muted">
+                Explicit filesystem write using the answer artifacts that already exist.
+              </p>
+            </div>
+            <span class={`status-pill ${answerArtifactExportReadiness().export_has_known_issues ? "status-needs_evidence" : "status-not_started"}`}>
+              {answerArtifactExportReadiness().export_has_known_issues ? "Export possible with issues" : "Explicit action"}
+            </span>
+          </div>
+          <label class="export-destination-field">
+            Local export destination
             <input
               type="text"
               value={exportRoot()}
               onInput={(event) => setExportRoot(event.currentTarget.value)}
               placeholder="E:\\path\\to\\export"
             />
+            <small>
+              Export writes files into the local folder entered above. The backend validates and performs the write.
+            </small>
           </label>
-          <button onClick={exportArtifacts} disabled={artifactExportLoading()}>
-            {artifactExportLoading() ? "Loading..." : "Export artifacts"}
-          </button>
-        </div>
+          {!exportRoot().trim() ? (
+            <p class="export-inline-hint">Set an export destination to enable export.</p>
+          ) : null}
+          {answerArtifactExportReadiness().export_has_known_issues ? (
+            <p class="export-issue-warning">
+              Known artifact issues are present. Review them if needed; they do not block an explicit export.
+            </p>
+          ) : null}
+          <div class="export-write-boundary">
+            <strong>Explicit write boundary</strong>
+            <span>
+              This action writes existing Answer Artifacts only. It does not call an LLM, create a new answer, or run automatically.
+            </span>
+          </div>
+          <div class="hero-actions">
+            <button
+              onClick={exportArtifacts}
+              disabled={artifactExportLoading() || !exportRoot().trim()}
+            >
+              {artifactExportLoading() ? "Exporting..." : "Export answer artifacts"}
+            </button>
+          </div>
+          {artifactExportError() ? <p class="error">{artifactExportError()}</p> : null}
+          <p class="muted">
+            If export fails, the existing local Answer Artifacts are not automatically deleted.
+          </p>
+        </section>
         {finalAnswerError() && <p class="error">{finalAnswerError()}</p>}
         {artifactOverviewError() && <p class="error">{artifactOverviewError()}</p>}
         {retrievalIndexError() && <p class="error">{retrievalIndexError()}</p>}
@@ -9719,7 +9758,6 @@ export default function App() {
         {artifactHealthError() && <p class="error">{artifactHealthError()}</p>}
         {artifactIssuesError() && <p class="error">{artifactIssuesError()}</p>}
         {artifactManifestError() && <p class="error">{artifactManifestError()}</p>}
-        {artifactExportError() && <p class="error">{artifactExportError()}</p>}
         {artifactBundleInspectionError() && <p class="error">{artifactBundleInspectionError()}</p>}
         <div class="artifact-overview">
           <h3>Answer artifact sources</h3>
@@ -9870,6 +9908,9 @@ export default function App() {
           <h3>Export result</h3>
           {artifactExportResult() ? (
             <>
+              <p class="muted">
+                Created by the most recent explicit export action in this session.
+              </p>
               <div class="contract-meta">
                 <div><span>Schema</span><strong>{artifactExportResult()!.schema_version || "missing"}</strong></div>
                 <div><span>Export ID</span><strong>{artifactExportResult()!.export_id}</strong></div>
@@ -9881,26 +9922,32 @@ export default function App() {
                 <div><span>Integrity</span><strong>{artifactExportResult()!.integrity.schema_version ? `${artifactExportResult()!.integrity.algorithm} | ${artifactExportResult()!.integrity.files.length} files` : "missing"}</strong></div>
               </div>
               {artifactExportResult()!.written_files.length > 0 ? (
-                <ul class="final-answer-list-items">
-                  {artifactExportResult()!.written_files.map((item) => (
-                    <li>
-                      <div class="final-answer-list-item">
-                        <span>{item.relative_path}</span>
-                        <small>
-                          {item.artifact_kind}
-                          {item.source_id ? ` | ${item.source_id}` : ""}
-                          {item.artifact_id ? ` | ${item.artifact_id}` : ""}
-                        </small>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <div class="export-result-files">
+                  <h4>Bundle-internal files</h4>
+                  <p class="muted">
+                    These are relative paths inside the generated export bundle, not local source paths.
+                  </p>
+                  <ul class="final-answer-list-items">
+                    {artifactExportResult()!.written_files.map((item) => (
+                      <li>
+                        <div class="final-answer-list-item">
+                          <span>{item.relative_path}</span>
+                          <small>
+                            {item.artifact_kind}
+                            {item.source_id ? ` | ${item.source_id}` : ""}
+                            {item.artifact_id ? ` | ${item.artifact_id}` : ""}
+                          </small>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ) : (
                 <p>No exported files listed yet.</p>
               )}
             </>
           ) : (
-            <p>No export result loaded yet.</p>
+            <p>No explicit export has completed in this session yet.</p>
           )}
         </div>
         <div class="artifact-overview">

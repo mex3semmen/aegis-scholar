@@ -96,6 +96,7 @@ Phase 144.0 adds an explicit Final Answer build action for the currently display
 Phase 145.0 keeps the existing Answer Artifact overview, health, and optional issue data synchronized after a successful Final Answer build without adding export behavior, citations, or new artifact viewers.
 Phase 146.0 adds a read-only Answer Artifact export preview gate that summarizes readiness and next actions while leaving export explicit and keeping export results and bundle inspection unchanged.
 Phase 147.0 clarifies the first-run path from local source import through contract-only Answer Artifacts and export readiness with status-derived next steps and less diagnostic primary copy, without changing workflow execution.
+Phase 148.0 clarifies the explicit export write boundary, local destination input, non-blocking issue warnings, and bundle-internal result paths without changing export behavior or format.
 
 ## Acceptance Criteria For Future UX Work
 

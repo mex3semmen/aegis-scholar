@@ -680,6 +680,68 @@ pre {
   margin-top: 0.35rem;
 }
 
+.export-action-panel {
+  display: grid;
+  gap: 0.9rem;
+  margin: 1rem 0;
+  border-left: 3px solid rgba(96, 165, 250, 0.72);
+}
+
+.export-action-panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.export-action-panel-header h3,
+.export-result-files h4 {
+  margin: 0;
+}
+
+.export-action-panel p,
+.export-result-files p {
+  margin: 0;
+}
+
+.export-destination-field {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.export-destination-field small {
+  color: #94a3b8;
+}
+
+.export-inline-hint {
+  color: #bfdbfe;
+  font-weight: 650;
+}
+
+.export-issue-warning {
+  border: 1px solid rgba(250, 204, 21, 0.34);
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+  background: rgba(250, 204, 21, 0.08);
+  color: #fde68a;
+}
+
+.export-write-boundary {
+  display: grid;
+  gap: 0.3rem;
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+  background: rgba(2, 6, 23, 0.35);
+}
+
+.export-write-boundary span {
+  color: #cbd5e1;
+}
+
+.export-result-files {
+  margin-top: 1rem;
+}
+
 .evidence-pack-action-header {
   display: flex;
   justify-content: space-between;
@@ -999,6 +1061,7 @@ pre {
   .source-import-panel-header,
   .source-import-step-heading,
   .export-readiness-gate-header,
+  .export-action-panel-header,
   .evidence-pack-action-header,
   .answer-draft-action-header,
   .answer-draft-claim-header,
