@@ -1658,6 +1658,52 @@ type ManagedLlamaServerChatDiagnosticPreview = {
   no_persistence: boolean;
 };
 
+type ManagedLlamaServerSmokeDiagnosticStatus = "blocked" | "server_not_running" | "smoke_succeeded" | "smoke_failed" | "timed_out";
+
+type ManagedLlamaServerSmokeDiagnosticRequest = {
+  allow_smoke_execution: boolean;
+  prompt: string | null;
+  max_output_tokens: number | null;
+  timeout_ms: number | null;
+};
+
+type ManagedLlamaServerSmokeDiagnosticPreview = {
+  status: ManagedLlamaServerSmokeDiagnosticStatus;
+  execution_attempted: boolean;
+  lifecycle_status: ManagedLlamaServerLifecycleStatus;
+  health_status: ManagedLlamaServerHealthStatus;
+  owns_active_server: boolean;
+  port_occupied: boolean;
+  port_occupied_by_unmanaged_process: boolean;
+  port_occupancy_status: ManagedLlamaServerPortOccupancyStatus;
+  host?: string | null;
+  port?: number | null;
+  alias?: string | null;
+  safe_model_file_name?: string | null;
+  prompt_char_count: number;
+  max_output_tokens: number;
+  timeout_ms: number;
+  http_status?: number | null;
+  response_preview: string;
+  response_preview_truncated: boolean;
+  extracted_output_preview?: string | null;
+  error_preview: string;
+  error_preview_truncated: boolean;
+  duration_ms: number;
+  blockers: ManagedLlamaServerNotice[];
+  warnings: ManagedLlamaServerNotice[];
+  next_required_actions: string[];
+  summary: string;
+  diagnostic_only: boolean;
+  not_scholar_chat_answer: boolean;
+  no_grounding_applied: boolean;
+  no_evidence_pack_used: boolean;
+  no_artifact_write: boolean;
+  no_audit_write: boolean;
+  no_persistence: boolean;
+  no_final_answer_created: boolean;
+};
+
 type LocalRuntimeInvocationPlanStatus =
   | "not_configured"
   | "blocked"
@@ -2343,13 +2389,13 @@ export default function App() {
   const [localRuntimeSmokeExecutionPlanLoading, setLocalRuntimeSmokeExecutionPlanLoading] = createSignal(false);
   const [localRuntimeSmokeExecutionPlanHasRun, setLocalRuntimeSmokeExecutionPlanHasRun] = createSignal(false);
   const [localRuntimeKind, setLocalRuntimeKind] = createSignal<LocalModelRuntimeKind>("llama_cpp");
-  const [localRuntimeModelPath, setLocalRuntimeModelPath] = createSignal("E:\\gemma4-v2-Q4_K_M\\gemma4-v2-Q4_K_M.gguf");
+  const [localRuntimeModelPath, setLocalRuntimeModelPath] = createSignal("");
   const [localRuntimeExecutablePath, setLocalRuntimeExecutablePath] = createSignal("");
   const [localRuntimeContextWindow, setLocalRuntimeContextWindow] = createSignal("4096");
   const [localRuntimeGpuLayers, setLocalRuntimeGpuLayers] = createSignal("0");
   const [localRuntimeTemperature, setLocalRuntimeTemperature] = createSignal("0.2");
-  const [managedLlamaServerExecutablePath, setManagedLlamaServerExecutablePath] = createSignal("E:\\llama.cpp\\b9842-cpu\\llama-server.exe");
-  const [managedLlamaServerModelPath, setManagedLlamaServerModelPath] = createSignal("E:\\gemma4-v2-Q4_K_M\\gemma4-v2-Q4_K_M.gguf");
+  const [managedLlamaServerExecutablePath, setManagedLlamaServerExecutablePath] = createSignal("");
+  const [managedLlamaServerModelPath, setManagedLlamaServerModelPath] = createSignal("");
   const [managedLlamaServerHost, setManagedLlamaServerHost] = createSignal("127.0.0.1");
   const [managedLlamaServerPort, setManagedLlamaServerPort] = createSignal("48921");
   const [managedLlamaServerAlias, setManagedLlamaServerAlias] = createSignal("aegis-local-gemma");
@@ -2373,6 +2419,14 @@ export default function App() {
   const [managedLlamaServerChatDiagnosticLoading, setManagedLlamaServerChatDiagnosticLoading] = createSignal(false);
   const [managedLlamaServerChatDiagnosticError, setManagedLlamaServerChatDiagnosticError] = createSignal<string | null>(null);
   const [managedLlamaServerChatDiagnosticHasRun, setManagedLlamaServerChatDiagnosticHasRun] = createSignal(false);
+  const [managedLlamaServerSmokeDiagnosticPrompt, setManagedLlamaServerSmokeDiagnosticPrompt] = createSignal("Say READY in one short sentence.");
+  const [managedLlamaServerSmokeDiagnosticMaxOutputTokens, setManagedLlamaServerSmokeDiagnosticMaxOutputTokens] = createSignal("16");
+  const [managedLlamaServerSmokeDiagnosticTimeoutMs, setManagedLlamaServerSmokeDiagnosticTimeoutMs] = createSignal("5000");
+  const [managedLlamaServerSmokeDiagnosticAllowRun, setManagedLlamaServerSmokeDiagnosticAllowRun] = createSignal(false);
+  const [managedLlamaServerSmokeDiagnosticPreview, setManagedLlamaServerSmokeDiagnosticPreview] = createSignal<ManagedLlamaServerSmokeDiagnosticPreview | null>(null);
+  const [managedLlamaServerSmokeDiagnosticLoading, setManagedLlamaServerSmokeDiagnosticLoading] = createSignal(false);
+  const [managedLlamaServerSmokeDiagnosticError, setManagedLlamaServerSmokeDiagnosticError] = createSignal<string | null>(null);
+  const [managedLlamaServerSmokeDiagnosticHasRun, setManagedLlamaServerSmokeDiagnosticHasRun] = createSignal(false);
   const [localRuntimeAdapterExecutablePath, setLocalRuntimeAdapterExecutablePath] = createSignal("");
   const [localRuntimeAdapterModelPath, setLocalRuntimeAdapterModelPath] = createSignal("");
   const [localRuntimeAdapterModelFamily, setLocalRuntimeAdapterModelFamily] = createSignal("");
@@ -3041,6 +3095,7 @@ export default function App() {
     }
 
     clearManagedLlamaServerChatDiagnosticPreview();
+    clearManagedLlamaServerSmokeDiagnosticPreview();
     setManagedLlamaServerStatusLoading(true);
     setManagedLlamaServerStatusError(null);
     try {
@@ -3052,6 +3107,12 @@ export default function App() {
     } finally {
       setManagedLlamaServerStatusLoading(false);
     }
+  }
+
+  function clearManagedLlamaServerSmokeDiagnosticPreview() {
+    setManagedLlamaServerSmokeDiagnosticPreview(null);
+    setManagedLlamaServerSmokeDiagnosticError(null);
+    setManagedLlamaServerSmokeDiagnosticHasRun(false);
   }
 
   async function previewManagedLlamaServerLaunchPlan() {
@@ -3088,6 +3149,7 @@ export default function App() {
     }
 
     clearManagedLlamaServerChatDiagnosticPreview();
+    clearManagedLlamaServerSmokeDiagnosticPreview();
     const request = buildManagedLlamaServerLaunchPlanRequest();
     if (!request) {
       setManagedLlamaServerStatusHasRun(true);
@@ -3120,6 +3182,7 @@ export default function App() {
     }
 
     clearManagedLlamaServerChatDiagnosticPreview();
+    clearManagedLlamaServerSmokeDiagnosticPreview();
     setManagedLlamaServerStatusLoading(true);
     setManagedLlamaServerStatusError(null);
     try {
@@ -3139,6 +3202,7 @@ export default function App() {
     }
 
     clearManagedLlamaServerChatDiagnosticPreview();
+    clearManagedLlamaServerSmokeDiagnosticPreview();
     setManagedLlamaServerStatusLoading(true);
     setManagedLlamaServerStatusError(null);
     try {
@@ -3156,6 +3220,58 @@ export default function App() {
     setManagedLlamaServerChatDiagnosticPreview(null);
     setManagedLlamaServerChatDiagnosticError(null);
     setManagedLlamaServerChatDiagnosticHasRun(false);
+  }
+
+  function buildManagedLlamaServerSmokeDiagnosticRequest(): ManagedLlamaServerSmokeDiagnosticRequest | null {
+    const prompt = normalizeOptionalTextInput(managedLlamaServerSmokeDiagnosticPrompt()) ?? "Say READY in one short sentence.";
+    const maxOutputTokens = parseOptionalIntegerInput(
+      managedLlamaServerSmokeDiagnosticMaxOutputTokens(),
+      "Managed llama-server smoke diagnostic max output tokens",
+      setManagedLlamaServerSmokeDiagnosticError,
+    );
+    const timeoutMs = parseOptionalIntegerInput(
+      managedLlamaServerSmokeDiagnosticTimeoutMs(),
+      "Managed llama-server smoke diagnostic timeout",
+      setManagedLlamaServerSmokeDiagnosticError,
+    );
+
+    if (maxOutputTokens === undefined || timeoutMs === undefined) {
+      return null;
+    }
+
+    return {
+      allow_smoke_execution: managedLlamaServerSmokeDiagnosticAllowRun(),
+      prompt,
+      max_output_tokens: maxOutputTokens,
+      timeout_ms: timeoutMs,
+    };
+  }
+
+  async function runManagedLlamaServerSmokeDiagnostic() {
+    if (managedLlamaServerSmokeDiagnosticLoading()) {
+      return;
+    }
+
+    const request = buildManagedLlamaServerSmokeDiagnosticRequest();
+    if (!request) {
+      setManagedLlamaServerSmokeDiagnosticHasRun(true);
+      setManagedLlamaServerSmokeDiagnosticPreview(null);
+      return;
+    }
+
+    setManagedLlamaServerSmokeDiagnosticLoading(true);
+    setManagedLlamaServerSmokeDiagnosticError(null);
+    try {
+      const result = await invoke<ManagedLlamaServerSmokeDiagnosticPreview>("run_managed_llama_server_smoke_diagnostic", {
+        request,
+      });
+      setManagedLlamaServerSmokeDiagnosticPreview(result);
+      setManagedLlamaServerSmokeDiagnosticHasRun(true);
+    } catch (err) {
+      setManagedLlamaServerSmokeDiagnosticError(sanitizeBackendError(err));
+    } finally {
+      setManagedLlamaServerSmokeDiagnosticLoading(false);
+    }
   }
 
   function buildManagedLlamaServerChatDiagnosticRequest(): ManagedLlamaServerChatDiagnosticRequest | null {
@@ -7215,13 +7331,14 @@ export default function App() {
               <input
                 type="text"
                 value={managedLlamaServerExecutablePath()}
-                onInput={(event) => {
-                  setManagedLlamaServerExecutablePath(event.currentTarget.value);
-                  clearManagedLlamaServerLaunchPreview();
-                  clearManagedLlamaServerStatusPreview();
-                  clearManagedLlamaServerChatDiagnosticPreview();
-                }}
-                placeholder="E:\\llama.cpp\\b9842-cpu\\llama-server.exe"
+                  onInput={(event) => {
+                    setManagedLlamaServerExecutablePath(event.currentTarget.value);
+                    clearManagedLlamaServerLaunchPreview();
+                    clearManagedLlamaServerStatusPreview();
+                    clearManagedLlamaServerChatDiagnosticPreview();
+                    clearManagedLlamaServerSmokeDiagnosticPreview();
+                  }}
+                placeholder="C:\\path\\to\\llama-server.exe"
               />
             </label>
             <label>
@@ -7229,13 +7346,14 @@ export default function App() {
               <input
                 type="text"
                 value={managedLlamaServerModelPath()}
-                onInput={(event) => {
-                  setManagedLlamaServerModelPath(event.currentTarget.value);
-                  clearManagedLlamaServerLaunchPreview();
-                  clearManagedLlamaServerStatusPreview();
-                  clearManagedLlamaServerChatDiagnosticPreview();
-                }}
-                placeholder="E:\\gemma4-v2-Q4_K_M\\gemma4-v2-Q4_K_M.gguf"
+                  onInput={(event) => {
+                    setManagedLlamaServerModelPath(event.currentTarget.value);
+                    clearManagedLlamaServerLaunchPreview();
+                    clearManagedLlamaServerStatusPreview();
+                    clearManagedLlamaServerChatDiagnosticPreview();
+                    clearManagedLlamaServerSmokeDiagnosticPreview();
+                  }}
+                placeholder="C:\\path\\to\\model.gguf"
               />
             </label>
           </div>
@@ -7245,12 +7363,13 @@ export default function App() {
               <input
                 type="text"
                 value={managedLlamaServerHost()}
-                onInput={(event) => {
-                  setManagedLlamaServerHost(event.currentTarget.value);
-                  clearManagedLlamaServerLaunchPreview();
-                  clearManagedLlamaServerStatusPreview();
-                  clearManagedLlamaServerChatDiagnosticPreview();
-                }}
+                  onInput={(event) => {
+                    setManagedLlamaServerHost(event.currentTarget.value);
+                    clearManagedLlamaServerLaunchPreview();
+                    clearManagedLlamaServerStatusPreview();
+                    clearManagedLlamaServerChatDiagnosticPreview();
+                    clearManagedLlamaServerSmokeDiagnosticPreview();
+                  }}
                 placeholder="127.0.0.1"
               />
             </label>
@@ -7259,12 +7378,13 @@ export default function App() {
               <input
                 type="number"
                 value={managedLlamaServerPort()}
-                onInput={(event) => {
-                  setManagedLlamaServerPort(event.currentTarget.value);
-                  clearManagedLlamaServerLaunchPreview();
-                  clearManagedLlamaServerStatusPreview();
-                  clearManagedLlamaServerChatDiagnosticPreview();
-                }}
+                  onInput={(event) => {
+                    setManagedLlamaServerPort(event.currentTarget.value);
+                    clearManagedLlamaServerLaunchPreview();
+                    clearManagedLlamaServerStatusPreview();
+                    clearManagedLlamaServerChatDiagnosticPreview();
+                    clearManagedLlamaServerSmokeDiagnosticPreview();
+                  }}
                 placeholder="48921"
               />
             </label>
@@ -7275,12 +7395,13 @@ export default function App() {
               <input
                 type="text"
                 value={managedLlamaServerAlias()}
-                onInput={(event) => {
-                  setManagedLlamaServerAlias(event.currentTarget.value);
-                  clearManagedLlamaServerLaunchPreview();
-                  clearManagedLlamaServerStatusPreview();
-                  clearManagedLlamaServerChatDiagnosticPreview();
-                }}
+                  onInput={(event) => {
+                    setManagedLlamaServerAlias(event.currentTarget.value);
+                    clearManagedLlamaServerLaunchPreview();
+                    clearManagedLlamaServerStatusPreview();
+                    clearManagedLlamaServerChatDiagnosticPreview();
+                    clearManagedLlamaServerSmokeDiagnosticPreview();
+                  }}
                 placeholder="aegis-local-gemma"
               />
             </label>
@@ -7289,12 +7410,13 @@ export default function App() {
               <input
                 type="number"
                 value={managedLlamaServerContextWindow()}
-                onInput={(event) => {
-                  setManagedLlamaServerContextWindow(event.currentTarget.value);
-                  clearManagedLlamaServerLaunchPreview();
-                  clearManagedLlamaServerStatusPreview();
-                  clearManagedLlamaServerChatDiagnosticPreview();
-                }}
+                  onInput={(event) => {
+                    setManagedLlamaServerContextWindow(event.currentTarget.value);
+                    clearManagedLlamaServerLaunchPreview();
+                    clearManagedLlamaServerStatusPreview();
+                    clearManagedLlamaServerChatDiagnosticPreview();
+                    clearManagedLlamaServerSmokeDiagnosticPreview();
+                  }}
                 placeholder="4096"
               />
             </label>
@@ -7303,12 +7425,13 @@ export default function App() {
               <input
                 type="number"
                 value={managedLlamaServerGpuLayers()}
-                onInput={(event) => {
-                  setManagedLlamaServerGpuLayers(event.currentTarget.value);
-                  clearManagedLlamaServerLaunchPreview();
-                  clearManagedLlamaServerStatusPreview();
-                  clearManagedLlamaServerChatDiagnosticPreview();
-                }}
+                  onInput={(event) => {
+                    setManagedLlamaServerGpuLayers(event.currentTarget.value);
+                    clearManagedLlamaServerLaunchPreview();
+                    clearManagedLlamaServerStatusPreview();
+                    clearManagedLlamaServerChatDiagnosticPreview();
+                    clearManagedLlamaServerSmokeDiagnosticPreview();
+                  }}
                 placeholder="0"
               />
             </label>
@@ -7319,6 +7442,7 @@ export default function App() {
                 onChange={(event) => {
                   setManagedLlamaServerAllowStart(event.currentTarget.checked);
                   clearManagedLlamaServerChatDiagnosticPreview();
+                  clearManagedLlamaServerSmokeDiagnosticPreview();
                 }}
               />
               I understand server start is consent-gated and local only.
@@ -7788,7 +7912,7 @@ export default function App() {
                   clearLocalRuntimeSmokePreview();
                   clearScholarChatDraftInferencePreview();
                 }}
-                placeholder="E:\\gemma4-v2-Q4_K_M\\gemma4-v2-Q4_K_M.gguf"
+                placeholder="C:\\path\\to\\model.gguf"
               />
             </label>
             <label>
@@ -7804,7 +7928,7 @@ export default function App() {
                   clearLocalRuntimeSmokePreview();
                   clearScholarChatDraftInferencePreview();
                 }}
-                placeholder="E:\\llama.cpp\\b9842-cpu\\...\\llama-cli.exe"
+                placeholder="C:\\path\\to\\llama-cli.exe"
               />
             </label>
           </div>
@@ -7874,7 +7998,7 @@ export default function App() {
                   setLocalRuntimeAdapterExecutablePath(event.currentTarget.value);
                   clearLocalRuntimeAdapterContractPreview();
                 }}
-                placeholder="E:\\bin\\llama-cli.exe"
+                placeholder="C:\\path\\to\\llama-cli.exe"
               />
             </label>
             <label>
@@ -7886,7 +8010,7 @@ export default function App() {
                   setLocalRuntimeAdapterModelPath(event.currentTarget.value);
                   clearLocalRuntimeAdapterContractPreview();
                 }}
-                placeholder="E:\\gemma4-v2-Q4_K_M\\gemma4-v2-Q4_K_M.gguf"
+                placeholder="C:\\path\\to\\model.gguf"
               />
             </label>
           </div>
@@ -9188,6 +9312,176 @@ export default function App() {
         <p class="muted">
           Developer diagnostics and contract inspection stay available here. This read-only display covers an already-built FinalAnswer contract.
         </p>
+        <div class="artifact-overview runtime-setup-card">
+          <h3>Diagnostic-only local model smoke test</h3>
+          <p class="muted">
+            Consent-gated local smoke request against the managed localhost llama-server. This stays diagnostic-only, does not create a Scholar Chat answer, and is secondary to the chat workflow.
+          </p>
+          <p class="muted">{managedLlamaServerReadinessSummary()}</p>
+          <div class="form-row">
+            <label>
+              Prompt
+              <textarea
+                value={managedLlamaServerSmokeDiagnosticPrompt()}
+                onInput={(event) => {
+                  setManagedLlamaServerSmokeDiagnosticPrompt(event.currentTarget.value);
+                  clearManagedLlamaServerSmokeDiagnosticPreview();
+                }}
+                rows={3}
+                placeholder="Say READY in one short sentence."
+              />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>
+              Max output tokens
+              <input
+                type="number"
+                value={managedLlamaServerSmokeDiagnosticMaxOutputTokens()}
+                onInput={(event) => {
+                  setManagedLlamaServerSmokeDiagnosticMaxOutputTokens(event.currentTarget.value);
+                  clearManagedLlamaServerSmokeDiagnosticPreview();
+                }}
+                placeholder="16"
+              />
+            </label>
+            <label>
+              Timeout ms
+              <input
+                type="number"
+                value={managedLlamaServerSmokeDiagnosticTimeoutMs()}
+                onInput={(event) => {
+                  setManagedLlamaServerSmokeDiagnosticTimeoutMs(event.currentTarget.value);
+                  clearManagedLlamaServerSmokeDiagnosticPreview();
+                }}
+                placeholder="5000"
+              />
+            </label>
+            <label class="inline-field">
+              <input
+                type="checkbox"
+                checked={managedLlamaServerSmokeDiagnosticAllowRun()}
+                onChange={(event) => {
+                  setManagedLlamaServerSmokeDiagnosticAllowRun(event.currentTarget.checked);
+                  clearManagedLlamaServerSmokeDiagnosticPreview();
+                }}
+              />
+              I understand this is a diagnostic-only local smoke test against the managed localhost server.
+            </label>
+          </div>
+          <div class="hero-actions">
+            <button onClick={runManagedLlamaServerSmokeDiagnostic} disabled={managedLlamaServerSmokeDiagnosticLoading()}>
+              {managedLlamaServerSmokeDiagnosticLoading() ? "Running..." : "Run smoke test"}
+            </button>
+          </div>
+          <p class="muted">This remains diagnostic-only and does not create a Scholar Chat answer, Evidence Pack, or persisted artifact.</p>
+          {managedLlamaServerSmokeDiagnosticError() && <p class="error">{managedLlamaServerSmokeDiagnosticError()}</p>}
+          {managedLlamaServerSmokeDiagnosticLoading() ? (
+            <p>Running managed smoke test...</p>
+          ) : managedLlamaServerSmokeDiagnosticHasRun() ? (
+            managedLlamaServerSmokeDiagnosticPreview() ? (
+              <>
+                {renderMetricGrid([
+                  { label: "Status", value: formatSnakeCaseLabel(managedLlamaServerSmokeDiagnosticPreview()!.status) },
+                  { label: "Lifecycle", value: formatSnakeCaseLabel(managedLlamaServerSmokeDiagnosticPreview()!.lifecycle_status) },
+                  { label: "Health", value: formatSnakeCaseLabel(managedLlamaServerSmokeDiagnosticPreview()!.health_status) },
+                  { label: "Ownership", value: managedLlamaServerSmokeDiagnosticPreview()!.owns_active_server ? "AEGIS-owned" : managedLlamaServerSmokeDiagnosticPreview()!.port_occupied_by_unmanaged_process ? "external / unmanaged" : "not active" },
+                  { label: "Port occupancy", value: formatSnakeCaseLabel(managedLlamaServerSmokeDiagnosticPreview()!.port_occupancy_status) },
+                  { label: "Port occupied", value: managedLlamaServerSmokeDiagnosticPreview()!.port_occupied ? "yes" : "no" },
+                  { label: "Port unmanaged", value: managedLlamaServerSmokeDiagnosticPreview()!.port_occupied_by_unmanaged_process ? "yes" : "no" },
+                  { label: "Host", value: managedLlamaServerSmokeDiagnosticPreview()!.host ?? "missing" },
+                  { label: "Port", value: managedLlamaServerSmokeDiagnosticPreview()!.port ?? "missing" },
+                  { label: "Alias", value: managedLlamaServerSmokeDiagnosticPreview()!.alias ?? "missing" },
+                  { label: "Model", value: managedLlamaServerSmokeDiagnosticPreview()!.safe_model_file_name ?? "missing" },
+                  { label: "Prompt chars", value: managedLlamaServerSmokeDiagnosticPreview()!.prompt_char_count },
+                  { label: "Max output tokens", value: managedLlamaServerSmokeDiagnosticPreview()!.max_output_tokens },
+                  { label: "Timeout ms", value: managedLlamaServerSmokeDiagnosticPreview()!.timeout_ms },
+                  { label: "HTTP status", value: managedLlamaServerSmokeDiagnosticPreview()!.http_status ?? "missing" },
+                  { label: "Duration ms", value: managedLlamaServerSmokeDiagnosticPreview()!.duration_ms },
+                ])}
+                <p><strong>Summary:</strong> {managedLlamaServerSmokeDiagnosticPreview()!.summary}</p>
+                <div class="contract-meta">
+                  <div><span>Diagnostic only</span><strong>{managedLlamaServerSmokeDiagnosticPreview()!.diagnostic_only ? "yes" : "no"}</strong></div>
+                  <div><span>Not Scholar Chat answer</span><strong>{managedLlamaServerSmokeDiagnosticPreview()!.not_scholar_chat_answer ? "yes" : "no"}</strong></div>
+                  <div><span>No grounding applied</span><strong>{managedLlamaServerSmokeDiagnosticPreview()!.no_grounding_applied ? "yes" : "no"}</strong></div>
+                  <div><span>No Evidence Pack used</span><strong>{managedLlamaServerSmokeDiagnosticPreview()!.no_evidence_pack_used ? "yes" : "no"}</strong></div>
+                  <div><span>No final answer</span><strong>{managedLlamaServerSmokeDiagnosticPreview()!.no_final_answer_created ? "yes" : "no"}</strong></div>
+                  <div><span>No artifact write</span><strong>{managedLlamaServerSmokeDiagnosticPreview()!.no_artifact_write ? "yes" : "no"}</strong></div>
+                  <div><span>No audit write</span><strong>{managedLlamaServerSmokeDiagnosticPreview()!.no_audit_write ? "yes" : "no"}</strong></div>
+                  <div><span>No persistence</span><strong>{managedLlamaServerSmokeDiagnosticPreview()!.no_persistence ? "yes" : "no"}</strong></div>
+                  <div><span>Execution attempted</span><strong>{managedLlamaServerSmokeDiagnosticPreview()!.execution_attempted ? "yes" : "no"}</strong></div>
+                </div>
+                {managedLlamaServerSmokeDiagnosticPreview()!.extracted_output_preview ? (
+                  <p><strong>Output preview:</strong> {managedLlamaServerSmokeDiagnosticPreview()!.extracted_output_preview}</p>
+                ) : (
+                  <p>No extracted output preview.</p>
+                )}
+                {managedLlamaServerSmokeDiagnosticPreview()!.response_preview ? (
+                  <details class="warning-box">
+                    <summary>Raw response preview</summary>
+                    <pre>{managedLlamaServerSmokeDiagnosticPreview()!.response_preview}</pre>
+                    {managedLlamaServerSmokeDiagnosticPreview()!.response_preview_truncated ? <p class="muted">Preview truncated.</p> : null}
+                  </details>
+                ) : (
+                  <p>No raw response preview captured.</p>
+                )}
+                {managedLlamaServerSmokeDiagnosticPreview()!.error_preview ? (
+                  <details class="warning-box">
+                    <summary>Error preview</summary>
+                    <pre>{managedLlamaServerSmokeDiagnosticPreview()!.error_preview}</pre>
+                    {managedLlamaServerSmokeDiagnosticPreview()!.error_preview_truncated ? <p class="muted">Preview truncated.</p> : null}
+                  </details>
+                ) : null}
+                {managedLlamaServerSmokeDiagnosticPreview()!.blockers.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Blockers</h4>
+                    <ul>
+                      {managedLlamaServerSmokeDiagnosticPreview()!.blockers.map((blocker) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(blocker.kind)}</strong>
+                          <div>{blocker.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No smoke test blockers.</p>
+                )}
+                {managedLlamaServerSmokeDiagnosticPreview()!.warnings.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Warnings</h4>
+                    <ul>
+                      {managedLlamaServerSmokeDiagnosticPreview()!.warnings.map((warning) => (
+                        <li>
+                          <strong>{formatSnakeCaseLabel(warning.kind)}</strong>
+                          <div>{warning.message}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No smoke test warnings.</p>
+                )}
+                {managedLlamaServerSmokeDiagnosticPreview()!.next_required_actions.length > 0 ? (
+                  <div class="warning-box">
+                    <h4>Next required actions</h4>
+                    <ul>
+                      {managedLlamaServerSmokeDiagnosticPreview()!.next_required_actions.map((action) => (
+                        <li>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>No next required actions.</p>
+                )}
+              </>
+            ) : (
+              <p>No managed smoke test preview loaded yet.</p>
+            )
+          ) : (
+            <p>No managed smoke test preview loaded yet.</p>
+          )}
+        </div>
         <div class="form-row">
           <label>
             Source ID

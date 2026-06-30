@@ -23,7 +23,7 @@ Implemented or visible today:
 - Scholar Chat agentic workflow planning preview
 - Scholar Chat execution-gate preview for later workflow steps
 - runtime diagnostic previews and guarded execution candidates for developer use
-- managed llama-server lifecycle hardening and diagnostic chat validation for the local runtime boundary
+- managed llama-server lifecycle hardening plus diagnostic chat and smoke validation for the local runtime boundary
 
 ## What AEGIS Scholar is
 

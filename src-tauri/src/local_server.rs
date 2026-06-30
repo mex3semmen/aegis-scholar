@@ -83,6 +83,16 @@ pub enum ManagedLlamaServerChatDiagnosticStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedLlamaServerSmokeDiagnosticStatus {
+    Blocked,
+    ServerNotRunning,
+    SmokeSucceeded,
+    SmokeFailed,
+    TimedOut,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ManagedLlamaServerNotice {
     pub kind: String,
     pub message: String,
@@ -203,6 +213,52 @@ pub struct ManagedLlamaServerChatDiagnosticPreview {
     pub no_grounding_applied: bool,
     pub no_artifact_write: bool,
     pub no_persistence: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ManagedLlamaServerSmokeDiagnosticRequest {
+    pub allow_smoke_execution: bool,
+    pub prompt: Option<String>,
+    pub max_output_tokens: Option<u32>,
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ManagedLlamaServerSmokeDiagnosticPreview {
+    pub status: ManagedLlamaServerSmokeDiagnosticStatus,
+    pub execution_attempted: bool,
+    pub lifecycle_status: ManagedLlamaServerLifecycleStatus,
+    pub health_status: ManagedLlamaServerHealthStatus,
+    pub owns_active_server: bool,
+    pub port_occupied: bool,
+    pub port_occupied_by_unmanaged_process: bool,
+    pub port_occupancy_status: ManagedLlamaServerPortOccupancyStatus,
+    pub host: Option<String>,
+    pub port: Option<u16>,
+    pub alias: Option<String>,
+    pub safe_model_file_name: Option<String>,
+    pub prompt_char_count: usize,
+    pub max_output_tokens: u32,
+    pub timeout_ms: u64,
+    pub http_status: Option<u16>,
+    pub response_preview: String,
+    pub response_preview_truncated: bool,
+    pub extracted_output_preview: Option<String>,
+    pub error_preview: String,
+    pub error_preview_truncated: bool,
+    pub duration_ms: u64,
+    pub blockers: Vec<ManagedLlamaServerNotice>,
+    pub warnings: Vec<ManagedLlamaServerNotice>,
+    pub next_required_actions: Vec<String>,
+    pub summary: String,
+    pub diagnostic_only: bool,
+    pub not_scholar_chat_answer: bool,
+    pub no_grounding_applied: bool,
+    pub no_evidence_pack_used: bool,
+    pub no_artifact_write: bool,
+    pub no_audit_write: bool,
+    pub no_persistence: bool,
+    pub no_final_answer_created: bool,
 }
 
 #[derive(Clone, Default)]
@@ -1110,7 +1166,7 @@ fn run_managed_llama_server_chat_diagnostic_from_status(
             let parsed: Result<Value, _> = serde_json::from_str(&body);
             match parsed {
                 Ok(parsed_json) => {
-                    if let Some(extracted_message) = extract_chat_completion_message(&parsed_json) {
+                    if let Some(extracted_message) = extract_completion_text(&parsed_json) {
                         let (extracted_message_preview, _) =
                             compact_text_preview(&extracted_message, CHAT_DIAGNOSTIC_MESSAGE_PREVIEW_LIMIT);
                         let mut success_warnings = warnings;
@@ -1238,6 +1294,469 @@ fn run_managed_llama_server_chat_diagnostic_from_status(
                 warnings,
                 vec!["Review the managed server status and retry the diagnostic.".to_string()],
                 format!("The managed chat diagnostic request failed: {error}"),
+            );
+        }
+    }
+}
+
+pub fn run_managed_llama_server_smoke_diagnostic(
+    state: &ManagedLlamaServerState,
+    request: ManagedLlamaServerSmokeDiagnosticRequest,
+) -> AegisResult<ManagedLlamaServerSmokeDiagnosticPreview> {
+    let status = inspect_managed_llama_server_status(state)?;
+    Ok(run_managed_llama_server_smoke_diagnostic_from_status(&status, request))
+}
+
+fn run_managed_llama_server_smoke_diagnostic_from_status(
+    status: &ManagedLlamaServerStatusPreview,
+    request: ManagedLlamaServerSmokeDiagnosticRequest,
+) -> ManagedLlamaServerSmokeDiagnosticPreview {
+    let normalized = normalize_smoke_diagnostic_request(request);
+    let mut blockers = status.blockers.clone();
+    let mut warnings = status.warnings.clone();
+    warnings.push(notice(
+        "diagnostic_only",
+        "This is a diagnostic-only local model smoke test; it does not create a Scholar Chat answer.",
+    ));
+    if normalized.prompt_truncated {
+        warnings.push(notice(
+            "prompt_truncated",
+            "The smoke diagnostic prompt was truncated to keep the request bounded.",
+        ));
+    }
+    if normalized.max_output_tokens_was_clamped {
+        warnings.push(notice(
+            "max_output_tokens_clamped",
+            "The smoke diagnostic max_output_tokens value was clamped to the bounded request limit.",
+        ));
+    }
+    if normalized.timeout_ms_was_clamped {
+        warnings.push(notice(
+            "timeout_clamped",
+            "The smoke diagnostic timeout was clamped to the bounded request range.",
+        ));
+    }
+
+    if !normalized.allow_smoke_execution {
+        blockers.push(notice(
+            "smoke_execution_consent_missing",
+            "Smoke diagnostic consent is required before a local request is sent.",
+        ));
+        return smoke_diagnostic_preview(
+            ManagedLlamaServerSmokeDiagnosticStatus::Blocked,
+            false,
+            status,
+            normalized,
+            None,
+            String::new(),
+            false,
+            None,
+            String::new(),
+            false,
+            0,
+            blockers,
+            warnings,
+            vec!["Enable smoke diagnostic consent, then run the smoke test again.".to_string()],
+            "The managed smoke diagnostic is blocked until explicit consent is granted.".to_string(),
+        );
+    }
+
+    if !status.owns_active_server {
+        if status.port_occupied_by_unmanaged_process {
+            blockers.push(notice(
+                "external_server_detected",
+                "The managed llama-server port is already occupied by an unmanaged process.",
+            ));
+            return smoke_diagnostic_preview(
+                ManagedLlamaServerSmokeDiagnosticStatus::Blocked,
+                false,
+                status,
+                normalized,
+                None,
+                String::new(),
+                false,
+                None,
+                String::new(),
+                false,
+                0,
+                blockers,
+                warnings,
+                vec!["Stop the external process or choose another port before running the smoke test.".to_string()],
+                "The managed smoke diagnostic is blocked because the occupied port is not AEGIS-owned.".to_string(),
+            );
+        }
+        blockers.push(notice(
+            "server_not_running",
+            "The managed llama-server is not running yet.",
+        ));
+        return smoke_diagnostic_preview(
+            ManagedLlamaServerSmokeDiagnosticStatus::ServerNotRunning,
+            false,
+            status,
+            normalized,
+            None,
+            String::new(),
+            false,
+            None,
+            String::new(),
+            false,
+            0,
+            blockers,
+            warnings,
+            vec!["Start the managed server with explicit consent before running the smoke test.".to_string()],
+            "The managed smoke diagnostic cannot run until an AEGIS-owned server is running.".to_string(),
+        );
+    }
+
+    if !matches!(status.lifecycle_status, ManagedLlamaServerLifecycleStatus::Running)
+        || !matches!(status.health_status, ManagedLlamaServerHealthStatus::Ready)
+    {
+        blockers.push(notice(
+            "server_not_ready",
+            "The managed llama-server must be running and health-ready before the smoke diagnostic can run.",
+        ));
+        return smoke_diagnostic_preview(
+            ManagedLlamaServerSmokeDiagnosticStatus::ServerNotRunning,
+            false,
+            status,
+            normalized,
+            None,
+            String::new(),
+            false,
+            None,
+            String::new(),
+            false,
+            0,
+            blockers,
+            warnings,
+            vec![
+                "Start the managed server with explicit consent.".to_string(),
+                "Wait until health reports ready, then run the smoke test again.".to_string(),
+            ],
+            "The managed smoke diagnostic is not ready yet because the server is not health-ready.".to_string(),
+        );
+    }
+
+    let Some(host) = status.host.clone() else {
+        blockers.push(notice(
+            "host_missing",
+            "The managed llama-server host is missing from the tracked status.",
+        ));
+        return smoke_diagnostic_preview(
+            ManagedLlamaServerSmokeDiagnosticStatus::ServerNotRunning,
+            false,
+            status,
+            normalized,
+            None,
+            String::new(),
+            false,
+            None,
+            String::new(),
+            false,
+            0,
+            blockers,
+            warnings,
+            vec!["Review the managed launch state and retry once the host is available.".to_string()],
+            "The managed llama-server host is not available for the smoke diagnostic.".to_string(),
+        );
+    };
+    if !is_local_host(&host) {
+        blockers.push(notice(
+            "host_not_local",
+            "The managed smoke diagnostic only targets localhost or 127.0.0.1.",
+        ));
+        return smoke_diagnostic_preview(
+            ManagedLlamaServerSmokeDiagnosticStatus::Blocked,
+            false,
+            status,
+            normalized,
+            None,
+            String::new(),
+            false,
+            None,
+            String::new(),
+            false,
+            0,
+            blockers,
+            warnings,
+            vec!["Restore the managed server to localhost and retry the smoke diagnostic.".to_string()],
+            "The managed smoke diagnostic is blocked because the managed server is not localhost-bound.".to_string(),
+        );
+    }
+    let Some(port) = status.port else {
+        blockers.push(notice(
+            "port_missing",
+            "The managed llama-server port is missing from the tracked status.",
+        ));
+        return smoke_diagnostic_preview(
+            ManagedLlamaServerSmokeDiagnosticStatus::ServerNotRunning,
+            false,
+            status,
+            normalized,
+            None,
+            String::new(),
+            false,
+            None,
+            String::new(),
+            false,
+            0,
+            blockers,
+            warnings,
+            vec!["Review the managed launch state and retry once the port is available.".to_string()],
+            "The managed llama-server port is not available for the smoke diagnostic.".to_string(),
+        );
+    };
+
+    let timeout_ms = normalized.timeout_ms;
+    let client = match Client::builder()
+        .timeout(Duration::from_millis(timeout_ms))
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => {
+            blockers.push(notice(
+                "client_build_failed",
+                "The managed smoke diagnostic client could not be created.",
+            ));
+            let error_text = format!("The managed smoke diagnostic client could not be created: {error}");
+            let (error_preview, error_preview_truncated) =
+                compact_text_preview(&error_text, CHAT_DIAGNOSTIC_RESPONSE_PREVIEW_LIMIT);
+            return smoke_diagnostic_preview(
+                ManagedLlamaServerSmokeDiagnosticStatus::SmokeFailed,
+                false,
+                status,
+                normalized,
+                None,
+                String::new(),
+                false,
+                None,
+                error_preview,
+                error_preview_truncated,
+                0,
+                blockers,
+                warnings,
+                vec!["Review the local runtime environment and retry the smoke test.".to_string()],
+                error_text,
+            );
+        }
+    };
+
+    let url = format!("http://{host}:{port}/v1/completions");
+    let model = status
+        .alias
+        .clone()
+        .or_else(|| status.safe_model_file_name.clone())
+        .unwrap_or_else(|| DEFAULT_ALIAS.to_string());
+    let payload = json!({
+        "model": model,
+        "prompt": normalized.prompt,
+        "max_tokens": normalized.max_output_tokens,
+        "temperature": 0.2_f32,
+        "stream": false,
+    });
+
+    let start = Instant::now();
+    let response = client.post(&url).json(&payload).send();
+    let duration_ms = start
+        .elapsed()
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64;
+
+    match response {
+        Ok(response) => {
+            let http_status_code = response.status();
+            let http_status = Some(http_status_code.as_u16());
+            let success_status = http_status_code.is_success();
+            let body = response.text().unwrap_or_default();
+            let (response_preview, response_preview_truncated) =
+                preview_text(&body, CHAT_DIAGNOSTIC_RESPONSE_PREVIEW_LIMIT);
+            let parsed: Result<Value, _> = serde_json::from_str(&body);
+            match parsed {
+                Ok(parsed_json) => {
+                    if success_status {
+                        if let Some(extracted_output) = extract_completion_text(&parsed_json) {
+                            let (extracted_output_preview, _) =
+                                compact_text_preview(&extracted_output, CHAT_DIAGNOSTIC_MESSAGE_PREVIEW_LIMIT);
+                            let mut success_warnings = warnings;
+                            success_warnings.push(notice(
+                                "diagnostic_success",
+                                "The managed smoke diagnostic request succeeded and remained diagnostic-only.",
+                            ));
+                            success_warnings.push(notice(
+                                "not_scholar_chat_answer",
+                                "The smoke output preview is not a Scholar Chat answer.",
+                            ));
+                            return smoke_diagnostic_preview(
+                                ManagedLlamaServerSmokeDiagnosticStatus::SmokeSucceeded,
+                                true,
+                                status,
+                                normalized,
+                                http_status,
+                                response_preview,
+                                response_preview_truncated,
+                                Some(extracted_output_preview),
+                                String::new(),
+                                false,
+                                duration_ms,
+                                blockers,
+                                success_warnings,
+                                vec!["Stop the managed server when you no longer need it.".to_string()],
+                                "The managed smoke diagnostic succeeded and remains diagnostic-only.".to_string(),
+                            );
+                        }
+
+                        blockers.push(notice(
+                            "output_missing",
+                            "The managed smoke diagnostic response did not include completion text.",
+                        ));
+                        warnings.push(notice(
+                            "response_parse_failed",
+                            "The response parsed as JSON, but no completion text could be extracted.",
+                        ));
+                        let error_text = "The managed smoke diagnostic response could not be parsed into completion text.".to_string();
+                        let (error_preview, error_preview_truncated) =
+                            compact_text_preview(&error_text, CHAT_DIAGNOSTIC_RESPONSE_PREVIEW_LIMIT);
+                        return smoke_diagnostic_preview(
+                            ManagedLlamaServerSmokeDiagnosticStatus::SmokeFailed,
+                            true,
+                            status,
+                            normalized,
+                            http_status,
+                            response_preview,
+                            response_preview_truncated,
+                            None,
+                            error_preview,
+                            error_preview_truncated,
+                            duration_ms,
+                            blockers,
+                            warnings,
+                            vec!["Inspect the raw response preview and retry the smoke test.".to_string()],
+                            error_text,
+                        );
+                    }
+
+                    blockers.push(notice(
+                        "unexpected_http_status",
+                        "The managed smoke diagnostic response returned a non-success HTTP status.",
+                    ));
+                    warnings.push(notice(
+                        "response_not_success",
+                        "Inspect the bounded raw response preview and retry the smoke test.",
+                    ));
+                    let error_text = format!(
+                        "The managed smoke diagnostic response returned HTTP {}.",
+                        http_status_code.as_u16()
+                    );
+                    let (error_preview, error_preview_truncated) =
+                        compact_text_preview(&error_text, CHAT_DIAGNOSTIC_RESPONSE_PREVIEW_LIMIT);
+                    return smoke_diagnostic_preview(
+                        ManagedLlamaServerSmokeDiagnosticStatus::SmokeFailed,
+                        true,
+                        status,
+                        normalized,
+                        http_status,
+                        response_preview,
+                        response_preview_truncated,
+                        None,
+                        error_preview,
+                        error_preview_truncated,
+                        duration_ms,
+                        blockers,
+                        warnings,
+                        vec!["Inspect the raw response preview and retry the smoke test.".to_string()],
+                        error_text,
+                    );
+                }
+                Err(error) => {
+                    blockers.push(notice(
+                        "response_parse_failed",
+                        "The managed smoke diagnostic response body was not valid JSON.",
+                    ));
+                    warnings.push(notice(
+                        "response_not_parseable",
+                        "Inspect the bounded raw response preview and retry the smoke test.",
+                    ));
+                    let error_text = format!("The managed smoke diagnostic response was not valid JSON: {error}");
+                    let (error_preview, error_preview_truncated) =
+                        compact_text_preview(&error_text, CHAT_DIAGNOSTIC_RESPONSE_PREVIEW_LIMIT);
+                    return smoke_diagnostic_preview(
+                        ManagedLlamaServerSmokeDiagnosticStatus::SmokeFailed,
+                        true,
+                        status,
+                        normalized,
+                        http_status,
+                        response_preview,
+                        response_preview_truncated,
+                        None,
+                        error_preview,
+                        error_preview_truncated,
+                        duration_ms,
+                        blockers,
+                        warnings,
+                        vec!["Inspect the raw response preview and retry the smoke test.".to_string()],
+                        error_text,
+                    );
+                }
+            }
+        }
+        Err(error) if error.is_timeout() => {
+            blockers.push(notice(
+                "request_timeout",
+                "The managed smoke diagnostic request timed out.",
+            ));
+            warnings.push(notice(
+                "timeout",
+                "The bounded smoke diagnostic timeout elapsed before a response was received.",
+            ));
+            let error_text = format!("The managed smoke diagnostic timed out after {duration_ms} ms.");
+            let (error_preview, error_preview_truncated) =
+                compact_text_preview(&error_text, CHAT_DIAGNOSTIC_RESPONSE_PREVIEW_LIMIT);
+            return smoke_diagnostic_preview(
+                ManagedLlamaServerSmokeDiagnosticStatus::TimedOut,
+                true,
+                status,
+                normalized,
+                None,
+                String::new(),
+                false,
+                None,
+                error_preview,
+                error_preview_truncated,
+                duration_ms,
+                blockers,
+                warnings,
+                vec!["Retry the smoke test or increase the bounded timeout.".to_string()],
+                error_text,
+            );
+        }
+        Err(error) => {
+            blockers.push(notice(
+                "request_failed",
+                "The managed smoke diagnostic request failed before a usable response arrived.",
+            ));
+            warnings.push(notice(
+                "request_error",
+                "Inspect the bounded response preview and local server status.",
+            ));
+            let error_text = format!("The managed smoke diagnostic request failed: {error}");
+            let (error_preview, error_preview_truncated) =
+                compact_text_preview(&error_text, CHAT_DIAGNOSTIC_RESPONSE_PREVIEW_LIMIT);
+            return smoke_diagnostic_preview(
+                ManagedLlamaServerSmokeDiagnosticStatus::SmokeFailed,
+                true,
+                status,
+                normalized,
+                None,
+                String::new(),
+                false,
+                None,
+                error_preview,
+                error_preview_truncated,
+                duration_ms,
+                blockers,
+                warnings,
+                vec!["Review the managed server status and retry the smoke test.".to_string()],
+                error_text,
             );
         }
     }
@@ -1477,9 +1996,15 @@ fn normalize_chat_diagnostic_request(
     }
 }
 
-fn extract_chat_completion_message(parsed: &Value) -> Option<String> {
+fn extract_completion_text(parsed: &Value) -> Option<String> {
     let choices = parsed.get("choices")?.as_array()?;
     let first_choice = choices.first()?;
+    if let Some(text) = first_choice.get("text").and_then(|value| value.as_str()) {
+        let content = text.trim().to_string();
+        if !content.is_empty() {
+            return Some(content);
+        }
+    }
     let message = first_choice.get("message")?;
     let content = message.get("content")?.as_str()?.trim().to_string();
     if content.is_empty() {
@@ -1492,6 +2017,110 @@ fn extract_chat_completion_message(parsed: &Value) -> Option<String> {
 fn compact_text_preview(value: &str, limit: usize) -> (String, bool) {
     let compacted = value.split_whitespace().collect::<Vec<_>>().join(" ");
     preview_text(&compacted, limit)
+}
+
+struct NormalizedSmokeDiagnosticRequest {
+    prompt: String,
+    prompt_char_count: usize,
+    prompt_truncated: bool,
+    allow_smoke_execution: bool,
+    max_output_tokens: u32,
+    max_output_tokens_was_clamped: bool,
+    timeout_ms: u64,
+    timeout_ms_was_clamped: bool,
+}
+
+fn normalize_smoke_diagnostic_request(
+    request: ManagedLlamaServerSmokeDiagnosticRequest,
+) -> NormalizedSmokeDiagnosticRequest {
+    let prompt = normalize_optional_text(request.prompt)
+        .unwrap_or_else(|| "Say READY in one short sentence.".to_string());
+    let mut prompt_chars = prompt.chars();
+    let prompt = prompt_chars
+        .by_ref()
+        .take(CHAT_DIAGNOSTIC_PROMPT_PREVIEW_LIMIT)
+        .collect::<String>();
+    let prompt_truncated = prompt_chars.next().is_some();
+
+    let raw_max_output_tokens = request
+        .max_output_tokens
+        .filter(|value| *value > 0)
+        .unwrap_or(16);
+    let max_output_tokens = raw_max_output_tokens.min(32);
+    let max_output_tokens_was_clamped = max_output_tokens != raw_max_output_tokens;
+
+    let raw_timeout_ms = request
+        .timeout_ms
+        .filter(|value| *value > 0)
+        .unwrap_or(30_000);
+    let timeout_ms = raw_timeout_ms.clamp(500, 30_000);
+    let timeout_ms_was_clamped = timeout_ms != raw_timeout_ms;
+
+    NormalizedSmokeDiagnosticRequest {
+        prompt_char_count: prompt.chars().count(),
+        prompt,
+        prompt_truncated,
+        allow_smoke_execution: request.allow_smoke_execution,
+        max_output_tokens,
+        max_output_tokens_was_clamped,
+        timeout_ms,
+        timeout_ms_was_clamped,
+    }
+}
+
+fn smoke_diagnostic_preview(
+    status: ManagedLlamaServerSmokeDiagnosticStatus,
+    execution_attempted: bool,
+    managed_status: &ManagedLlamaServerStatusPreview,
+    normalized: NormalizedSmokeDiagnosticRequest,
+    http_status: Option<u16>,
+    response_preview: String,
+    response_preview_truncated: bool,
+    extracted_output_preview: Option<String>,
+    error_preview: String,
+    error_preview_truncated: bool,
+    duration_ms: u64,
+    blockers: Vec<ManagedLlamaServerNotice>,
+    warnings: Vec<ManagedLlamaServerNotice>,
+    next_required_actions: Vec<String>,
+    summary: String,
+) -> ManagedLlamaServerSmokeDiagnosticPreview {
+    ManagedLlamaServerSmokeDiagnosticPreview {
+        status,
+        execution_attempted,
+        lifecycle_status: managed_status.lifecycle_status.clone(),
+        health_status: managed_status.health_status.clone(),
+        owns_active_server: managed_status.owns_active_server,
+        port_occupied: managed_status.port_occupied,
+        port_occupied_by_unmanaged_process: managed_status.port_occupied_by_unmanaged_process,
+        port_occupancy_status: managed_status.port_occupancy_status.clone(),
+        host: managed_status.host.clone(),
+        port: managed_status.port,
+        alias: managed_status.alias.clone(),
+        safe_model_file_name: managed_status.safe_model_file_name.clone(),
+        prompt_char_count: normalized.prompt_char_count,
+        max_output_tokens: normalized.max_output_tokens,
+        timeout_ms: normalized.timeout_ms,
+        http_status,
+        response_preview,
+        response_preview_truncated,
+        extracted_output_preview,
+        error_preview,
+        error_preview_truncated,
+        duration_ms,
+        blockers,
+        warnings,
+        next_required_actions,
+        summary,
+        diagnostic_only: true,
+        not_scholar_chat_answer: true,
+        no_grounding_applied: true,
+        no_evidence_pack_used: true,
+        no_artifact_write: true,
+        no_audit_write: true,
+        no_persistence: true,
+        no_final_answer_created: true,
+    }
 }
 
 fn chat_diagnostic_preview(
@@ -2092,6 +2721,24 @@ fn main() {
                     r#"{"id":"chatcmpl-test","object":"chat.completion","created":1,"model":"aegis-local-gemma","choices":[{"index":0,"message":{"role":"assistant","content":"READY"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}"#,
                 )
             }
+        } else if request.starts_with("POST /v1/completions") {
+            if request.contains("MALFORMED_SMOKE_DIAGNOSTIC") {
+                ("HTTP/1.1 200 OK", "{not valid json")
+            } else {
+                if request.contains("SLOW_SMOKE_DIAGNOSTIC") {
+                    thread::sleep(Duration::from_millis(650));
+                }
+                let smoke_text = if request.contains("LONG_SMOKE_DIAGNOSTIC") {
+                    "READY ".repeat(128)
+                } else {
+                    "READY".to_string()
+                };
+                let response = format!(
+                    r#"{{"id":"cmpl-test","object":"text_completion","created":1,"model":"aegis-local-gemma","choices":[{{"index":0,"text":"{}","finish_reason":"stop"}}],"usage":{{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}}}"#,
+                    smoke_text
+                );
+                ("HTTP/1.1 200 OK", Box::leak(response.into_boxed_str()) as &str)
+            }
         } else {
             ("HTTP/1.1 404 Not Found", "not found")
         };
@@ -2170,6 +2817,33 @@ fn main() {
             no_artifact_write: true,
             no_lan_binding_by_default: true,
         }
+    }
+
+    fn smoke_diagnostic_request(
+        allow_smoke_execution: bool,
+        prompt: Option<&str>,
+        max_output_tokens: Option<u32>,
+        timeout_ms: Option<u64>,
+    ) -> ManagedLlamaServerSmokeDiagnosticRequest {
+        ManagedLlamaServerSmokeDiagnosticRequest {
+            allow_smoke_execution,
+            prompt: prompt.map(|value| value.to_string()),
+            max_output_tokens,
+            timeout_ms,
+        }
+    }
+
+    fn assert_managed_llama_server_smoke_boundary_fields(
+        preview: &ManagedLlamaServerSmokeDiagnosticPreview,
+    ) {
+        assert!(preview.diagnostic_only);
+        assert!(preview.not_scholar_chat_answer);
+        assert!(preview.no_grounding_applied);
+        assert!(preview.no_evidence_pack_used);
+        assert!(preview.no_artifact_write);
+        assert!(preview.no_audit_write);
+        assert!(preview.no_persistence);
+        assert!(preview.no_final_answer_created);
     }
 
     fn spawn_chat_helper_server(
@@ -2668,5 +3342,195 @@ fn main() {
         assert_eq!(result.status, ManagedLlamaServerChatDiagnosticStatus::TimedOut);
         assert!(result.request_attempted);
         assert!(result.blockers.iter().any(|notice| notice.kind == "request_timeout"));
+    }
+
+    #[test]
+    fn smoke_diagnostic_blocks_without_consent() {
+        let result = run_managed_llama_server_smoke_diagnostic_from_status(
+            &managed_chat_status_preview(
+                ManagedLlamaServerLifecycleStatus::Running,
+                ManagedLlamaServerHealthStatus::Ready,
+                Some("127.0.0.1"),
+                Some(48921),
+                Some(DEFAULT_ALIAS),
+                Some("gemma.gguf"),
+            ),
+            smoke_diagnostic_request(false, Some("Say READY in one short sentence."), Some(16), Some(5_000)),
+        );
+
+        assert_eq!(result.status, ManagedLlamaServerSmokeDiagnosticStatus::Blocked);
+        assert!(!result.execution_attempted);
+        assert!(result.blockers.iter().any(|notice| notice.kind == "smoke_execution_consent_missing"));
+        assert_managed_llama_server_smoke_boundary_fields(&result);
+    }
+
+    #[test]
+    fn smoke_diagnostic_reports_server_not_running_when_managed_server_is_not_active() {
+        let result = run_managed_llama_server_smoke_diagnostic_from_status(
+            &status_preview_from_empty(
+                ManagedLlamaServerLifecycleStatus::NotStarted,
+                ManagedLlamaServerHealthStatus::NotStarted,
+                "No AEGIS-managed llama-server is running.".to_string(),
+            ),
+            smoke_diagnostic_request(true, Some("Say READY in one short sentence."), Some(16), Some(5_000)),
+        );
+
+        assert_eq!(result.status, ManagedLlamaServerSmokeDiagnosticStatus::ServerNotRunning);
+        assert!(!result.execution_attempted);
+        assert!(result.blockers.iter().any(|notice| notice.kind == "server_not_running"));
+        assert_managed_llama_server_smoke_boundary_fields(&result);
+    }
+
+    #[test]
+    fn smoke_diagnostic_rejects_remote_host() {
+        let result = run_managed_llama_server_smoke_diagnostic_from_status(
+            &managed_chat_status_preview(
+                ManagedLlamaServerLifecycleStatus::Running,
+                ManagedLlamaServerHealthStatus::Ready,
+                Some("0.0.0.0"),
+                Some(48921),
+                Some(DEFAULT_ALIAS),
+                Some("gemma.gguf"),
+            ),
+            smoke_diagnostic_request(true, Some("Say READY in one short sentence."), Some(16), Some(5_000)),
+        );
+
+        assert_eq!(result.status, ManagedLlamaServerSmokeDiagnosticStatus::Blocked);
+        assert!(!result.execution_attempted);
+        assert!(result.blockers.iter().any(|notice| notice.kind == "host_not_local"));
+        assert_managed_llama_server_smoke_boundary_fields(&result);
+    }
+
+    #[test]
+    fn smoke_diagnostic_succeeds_with_bounded_and_truncated_output() {
+        let temp = tempdir().unwrap();
+        let helper_temp = tempdir().unwrap();
+        let executable = helper_server_executable(&helper_temp);
+        let model = temp.path().join("gemma.gguf");
+        fs::write(&model, "model").unwrap();
+        let port = free_port();
+        let _guard = ChildGuard(Some(spawn_chat_helper_server(
+            &executable,
+            &model,
+            "127.0.0.1",
+            port,
+            DEFAULT_ALIAS,
+        )));
+        wait_for_chat_helper_server("127.0.0.1", port);
+
+        let result = run_managed_llama_server_smoke_diagnostic_from_status(
+            &managed_chat_status_preview(
+                ManagedLlamaServerLifecycleStatus::Running,
+                ManagedLlamaServerHealthStatus::Ready,
+                Some("127.0.0.1"),
+                Some(port),
+                Some(DEFAULT_ALIAS),
+                Some("gemma.gguf"),
+            ),
+            smoke_diagnostic_request(true, Some("LONG_SMOKE_DIAGNOSTIC"), Some(999), Some(5_000)),
+        );
+
+        assert_eq!(result.status, ManagedLlamaServerSmokeDiagnosticStatus::SmokeSucceeded);
+        assert!(result.execution_attempted);
+        assert_eq!(result.http_status, Some(200));
+        assert!(result.response_preview.contains("text_completion"));
+        assert!(result.response_preview_truncated);
+        assert!(result
+            .extracted_output_preview
+            .as_deref()
+            .map_or(false, |value| value.chars().count() <= CHAT_DIAGNOSTIC_MESSAGE_PREVIEW_LIMIT + 1));
+        assert!(result.warnings.iter().any(|notice| notice.kind == "diagnostic_only"));
+        assert!(result.warnings.iter().any(|notice| notice.kind == "diagnostic_success"));
+        assert!(result.warnings.iter().any(|notice| notice.kind == "not_scholar_chat_answer"));
+        assert_managed_llama_server_smoke_boundary_fields(&result);
+    }
+
+    #[test]
+    fn smoke_diagnostic_times_out_when_response_is_too_slow() {
+        let temp = tempdir().unwrap();
+        let helper_temp = tempdir().unwrap();
+        let executable = helper_server_executable(&helper_temp);
+        let model = temp.path().join("gemma.gguf");
+        fs::write(&model, "model").unwrap();
+        let port = free_port();
+        let _guard = ChildGuard(Some(spawn_chat_helper_server(
+            &executable,
+            &model,
+            "127.0.0.1",
+            port,
+            DEFAULT_ALIAS,
+        )));
+        wait_for_chat_helper_server("127.0.0.1", port);
+
+        let result = run_managed_llama_server_smoke_diagnostic_from_status(
+            &managed_chat_status_preview(
+                ManagedLlamaServerLifecycleStatus::Running,
+                ManagedLlamaServerHealthStatus::Ready,
+                Some("127.0.0.1"),
+                Some(port),
+                Some(DEFAULT_ALIAS),
+                Some("gemma.gguf"),
+            ),
+            smoke_diagnostic_request(true, Some("SLOW_SMOKE_DIAGNOSTIC"), Some(16), Some(1)),
+        );
+
+        assert_eq!(result.status, ManagedLlamaServerSmokeDiagnosticStatus::TimedOut);
+        assert!(result.execution_attempted);
+        assert!(result.blockers.iter().any(|notice| notice.kind == "request_timeout"));
+        assert_managed_llama_server_smoke_boundary_fields(&result);
+    }
+
+    #[test]
+    fn smoke_diagnostic_refuses_unmanaged_server_and_leaves_it_running() {
+        let temp = tempdir().unwrap();
+        let helper_temp = tempdir().unwrap();
+        let executable = helper_server_executable(&helper_temp);
+        let model = temp.path().join("gemma.gguf");
+        fs::write(&model, "model").unwrap();
+        let port = free_port();
+        let external_child = spawn_chat_helper_server(
+            &executable,
+            &model,
+            "127.0.0.1",
+            port,
+            DEFAULT_ALIAS,
+        );
+        let _guard = ChildGuard(Some(external_child));
+        wait_for_chat_helper_server("127.0.0.1", port);
+
+        let state = ManagedLlamaServerState::default();
+        let start_result = start_managed_llama_server(
+            temp.path(),
+            &state,
+            ManagedLlamaServerStartRequest {
+                allow_server_start: true,
+                launch_plan_request: launch_request(
+                    Some(executable.to_string_lossy().as_ref()),
+                    Some(model.to_string_lossy().as_ref()),
+                    Some("127.0.0.1"),
+                    Some(port),
+                    Some(DEFAULT_ALIAS),
+                    Some(DEFAULT_CONTEXT_WINDOW),
+                    Some(DEFAULT_GPU_LAYERS),
+                ),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(start_result.lifecycle_status, ManagedLlamaServerLifecycleStatus::ExternalServerDetected);
+        assert!(start_result.port_occupied_by_unmanaged_process);
+
+        let result = run_managed_llama_server_smoke_diagnostic(
+            &state,
+            smoke_diagnostic_request(true, Some("Say READY in one short sentence."), Some(16), Some(5_000)),
+        )
+        .unwrap();
+
+        assert_eq!(result.status, ManagedLlamaServerSmokeDiagnosticStatus::Blocked);
+        assert!(!result.execution_attempted);
+        assert!(result.blockers.iter().any(|notice| notice.kind == "external_server_detected"));
+        assert_managed_llama_server_smoke_boundary_fields(&result);
+
+        wait_for_chat_helper_server("127.0.0.1", port);
     }
 }
