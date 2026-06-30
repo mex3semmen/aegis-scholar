@@ -29,6 +29,48 @@ type EvidencePackBuildSummary = {
   requestedMaxResults: EvidencePackMaxResults;
 };
 
+type EvidencePackMetadata = {
+  source_id: string;
+  version_id: string;
+  evidence_pack_id: string;
+  query: string;
+  created_at: string;
+  retrieval_index_version: string;
+  result_count: number;
+  item_count: number;
+  warning_count: number;
+  evidence_pack_version: string;
+};
+
+type DraftClaim = {
+  claim_id: string;
+  status: string;
+  text: string;
+  evidence_ids: string[];
+  chunk_ids: string[];
+  locators: unknown[];
+  confidence: string;
+};
+
+type AnswerDraft = {
+  answer_draft_id: string;
+  evidence_pack_id: string;
+  source_id: string;
+  version_id: string;
+  query: string;
+  created_at: string;
+  draft_mode: string;
+  claim_count: number;
+  unsupported_count: number;
+  claims: DraftClaim[];
+  warnings: string[];
+};
+
+type AnswerDraftBuildSummary = {
+  draft: AnswerDraft;
+  sourceTitle: string;
+};
+
 const ELIGIBLE_SOURCE_STATUSES = new Set([
   "indexed",
   "evidence_ready",
@@ -49,6 +91,14 @@ function actionStatusLabel(status: EvidencePackActionStatus) {
   }
 }
 
+function compactClaimPreview(text: string, maxChars = 180) {
+  const compacted = text.split(/\s+/).filter(Boolean).join(" ").trim();
+  if (compacted.length <= maxChars) {
+    return compacted;
+  }
+  return `${compacted.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`;
+}
+
 export default function EvidencePacksWorkspace(props: any): JSX.Element {
   const [selectedSourceId, setSelectedSourceId] = createSignal("");
   const [sourceSelectionTouched, setSourceSelectionTouched] = createSignal(false);
@@ -58,6 +108,12 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
   const [validationError, setValidationError] = createSignal<string | null>(null);
   const [actionError, setActionError] = createSignal<string | null>(null);
   const [buildSummary, setBuildSummary] = createSignal<EvidencePackBuildSummary | null>(null);
+  const [answerDraftStatus, setAnswerDraftStatus] = createSignal<EvidencePackActionStatus>("not_started");
+  const [answerDraftRunningPackId, setAnswerDraftRunningPackId] = createSignal<string | null>(null);
+  const [answerDraftError, setAnswerDraftError] = createSignal<string | null>(null);
+  const [answerDraftSummary, setAnswerDraftSummary] = createSignal<AnswerDraftBuildSummary | null>(null);
+  let previousExternalSourceSelection: string | null = null;
+  let answerDraftRequestVersion = 0;
 
   const eligibleSources = () =>
     (props.sourceContext as EvidencePackSource[])
@@ -71,6 +127,34 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
     setBuildSummary(null);
   }
 
+  function resetAnswerDraftResult() {
+    answerDraftRequestVersion += 1;
+    setAnswerDraftStatus("not_started");
+    setAnswerDraftRunningPackId(null);
+    setAnswerDraftError(null);
+    setAnswerDraftSummary(null);
+  }
+
+  const workspaceMutationRunning = () =>
+    actionStatus() === "running" || answerDraftStatus() === "running";
+
+  createEffect(() => {
+    const externalSelection = [
+      props.selectedEvidencePackSourceId,
+      ...(props.sourceContextSelectedIds as string[]),
+    ].join("|");
+    if (previousExternalSourceSelection !== null && externalSelection !== previousExternalSourceSelection) {
+      if (answerDraftStatus() === "running") {
+        answerDraftRequestVersion += 1;
+        setAnswerDraftError(null);
+        setAnswerDraftSummary(null);
+      } else {
+        resetAnswerDraftResult();
+      }
+    }
+    previousExternalSourceSelection = externalSelection;
+  });
+
   createEffect(() => {
     const sources = eligibleSources();
     const currentSourceId = selectedSourceId();
@@ -81,6 +165,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
       if (!sourceSelectionTouched() && selectedContextSource && selectedContextSource.source_id !== currentSourceId) {
         setSelectedSourceId(selectedContextSource.source_id);
         resetActionResult();
+        resetAnswerDraftResult();
       }
       return;
     }
@@ -91,12 +176,14 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
     setSourceSelectionTouched(false);
     setSelectedSourceId(selectedContextSource?.source_id ?? existingEvidenceSource?.source_id ?? sources[0]?.source_id ?? "");
     resetActionResult();
+    resetAnswerDraftResult();
   });
 
   function selectSource(sourceId: string) {
     setSourceSelectionTouched(true);
     setSelectedSourceId(sourceId);
     resetActionResult();
+    resetAnswerDraftResult();
   }
 
   function updateQuery(value: string) {
@@ -119,7 +206,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
   }
 
   async function buildEvidencePack() {
-    if (actionStatus() === "running") {
+    if (workspaceMutationRunning()) {
       return;
     }
 
@@ -168,6 +255,72 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
     }
   }
 
+  function explainAnswerDraftError(error: unknown) {
+    const sanitized = props.sanitizeBackendError(error);
+    const normalized = sanitized.toLowerCase().replace(/[_\s-]+/g, "");
+    if (normalized.includes("answerdraftemptyevidence") || normalized.includes("evidencepackempty")) {
+      return "The selected Evidence Pack contains no evidence items.";
+    }
+    if (normalized.includes("evidencepackmissing")) {
+      return "The selected Evidence Pack is no longer available. Reload the Evidence Pack list.";
+    }
+    if (normalized.includes("answerdraftinvalidid") || normalized.includes("evidencepackinvalidid")) {
+      return "The selected Evidence Pack ID is invalid.";
+    }
+    if (normalized.includes("evidencepackreadfailed")) {
+      return "The selected Evidence Pack could not be read.";
+    }
+    return sanitized;
+  }
+
+  async function buildAnswerDraft(item: EvidencePackMetadata) {
+    if (workspaceMutationRunning()) {
+      return;
+    }
+
+    const source = (props.sourceContext as EvidencePackSource[]).find(
+      (candidate) => candidate.source_id === item.source_id,
+    );
+    const requestVersion = ++answerDraftRequestVersion;
+    setAnswerDraftStatus("running");
+    setAnswerDraftRunningPackId(item.evidence_pack_id);
+    setAnswerDraftError(null);
+    setAnswerDraftSummary(null);
+    try {
+      const draft = await invoke<AnswerDraft>("build_answer_draft", {
+        root: ".",
+        source_id: item.source_id,
+        evidence_pack_id: item.evidence_pack_id,
+      });
+      await Promise.all([
+        props.refreshCorpusStatus(),
+        props.refreshSourceContext(true),
+        props.loadEvidencePacksBySourceId(item.source_id),
+      ]);
+      if (requestVersion !== answerDraftRequestVersion) {
+        setAnswerDraftStatus("not_started");
+        setAnswerDraftRunningPackId(null);
+        return;
+      }
+      setAnswerDraftSummary({
+        draft,
+        sourceTitle: source?.title || draft.source_id,
+      });
+      setAnswerDraftStatus("succeeded");
+      setAnswerDraftRunningPackId(null);
+    } catch (error) {
+      if (requestVersion !== answerDraftRequestVersion) {
+        setAnswerDraftStatus("not_started");
+        setAnswerDraftRunningPackId(null);
+        return;
+      }
+      setAnswerDraftStatus("failed");
+      setAnswerDraftRunningPackId(null);
+      setAnswerDraftError(explainAnswerDraftError(error));
+      setAnswerDraftSummary(null);
+    }
+  }
+
   const selectedSource = () =>
     eligibleSources().find((source) => source.source_id === selectedSourceId()) ?? null;
 
@@ -194,7 +347,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
               <select
                 value={selectedSourceId()}
                 onChange={(event) => selectSource(event.currentTarget.value)}
-                disabled={actionStatus() === "running"}
+                disabled={workspaceMutationRunning()}
               >
                 {eligibleSources().map((source) => (
                   <option value={source.source_id}>
@@ -210,7 +363,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
                 value={query()}
                 onInput={(event) => updateQuery(event.currentTarget.value)}
                 placeholder="Which evidence supports the research question?"
-                disabled={actionStatus() === "running"}
+                disabled={workspaceMutationRunning()}
               />
             </label>
             <label>
@@ -218,7 +371,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
               <select
                 value={maxResults()}
                 onChange={(event) => updateMaxResults(event.currentTarget.value)}
-                disabled={actionStatus() === "running"}
+                disabled={workspaceMutationRunning()}
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -234,7 +387,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
         {actionError() ? <p class="error">{actionError()}</p> : null}
 
         <div class="hero-actions">
-          <button onClick={buildEvidencePack} disabled={actionStatus() === "running" || !selectedSource()}>
+          <button onClick={buildEvidencePack} disabled={workspaceMutationRunning() || !selectedSource()}>
             {actionStatus() === "running" ? "Building..." : "Build Evidence Pack"}
           </button>
         </div>
@@ -255,13 +408,18 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
       </section>
 
       <section class="evidence-pack-list">
-        <h4>Existing Evidence Packs</h4>
+        <div class="answer-draft-action-header">
+          <h4>Existing Evidence Packs</h4>
+          <span class={`status-pill status-${answerDraftStatus()}`}>
+            Answer draft: {actionStatusLabel(answerDraftStatus())}
+          </span>
+        </div>
         {selectedSource() ? (
           <>
             <div class="hero-actions">
               <button
                 onClick={() => props.loadEvidencePacksBySourceId(selectedSourceId())}
-                disabled={props.evidencePacksLoading || actionStatus() === "running"}
+                disabled={props.evidencePacksLoading || workspaceMutationRunning()}
               >
                 {props.evidencePacksLoading ? "Loading..." : "Load Evidence Packs"}
               </button>
@@ -278,7 +436,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
                   </div>
                   {props.evidencePacks.length > 0 ? (
                     <ul class="final-answer-list-items">
-                      {props.evidencePacks.map((item: any) => (
+                      {(props.evidencePacks as EvidencePackMetadata[]).map((item) => (
                         <li>
                           <div class="final-answer-list-item">
                             <span>{item.evidence_pack_id}</span>
@@ -288,6 +446,16 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
                             <small>
                               query={item.query} | retrieval_index_version={item.retrieval_index_version} | pack_version={item.evidence_pack_version}
                             </small>
+                            <div class="hero-actions evidence-pack-row-actions">
+                              <button
+                                onClick={() => buildAnswerDraft(item)}
+                                disabled={workspaceMutationRunning() || props.evidencePacksLoading}
+                              >
+                                {answerDraftRunningPackId() === item.evidence_pack_id
+                                  ? "Building..."
+                                  : "Build answer draft"}
+                              </button>
+                            </div>
                           </div>
                         </li>
                       ))}
@@ -308,6 +476,52 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
         ) : (
           <p>Select an indexed source to load Evidence Packs.</p>
         )}
+
+        {answerDraftError() ? <p class="error">{answerDraftError()}</p> : null}
+        {answerDraftSummary() ? (
+          <section class="compact-note answer-draft-result">
+            <h4>Answer Draft</h4>
+            <p class="muted">
+              Mechanical evidence-only claim scaffold. This is not a grounded answer or final prose.
+            </p>
+            <div class="contract-meta">
+              <div><span>Answer Draft ID</span><strong>{answerDraftSummary()!.draft.answer_draft_id}</strong></div>
+              <div><span>Evidence Pack ID</span><strong>{answerDraftSummary()!.draft.evidence_pack_id}</strong></div>
+              <div><span>Source</span><strong>{answerDraftSummary()!.sourceTitle}</strong></div>
+              <div><span>Source ID</span><strong>{answerDraftSummary()!.draft.source_id}</strong></div>
+              <div><span>Query</span><strong>{answerDraftSummary()!.draft.query}</strong></div>
+              <div><span>Draft mode</span><strong>{props.formatSnakeCaseLabel(answerDraftSummary()!.draft.draft_mode)}</strong></div>
+              <div><span>Claims</span><strong>{answerDraftSummary()!.draft.claim_count}</strong></div>
+              <div><span>Unsupported</span><strong>{answerDraftSummary()!.draft.unsupported_count}</strong></div>
+              <div><span>Warnings</span><strong>{answerDraftSummary()!.draft.warnings.length}</strong></div>
+            </div>
+            {answerDraftSummary()!.draft.claims.length > 0 ? (
+              <>
+                {answerDraftSummary()!.draft.claims.length > 3 ? (
+                  <p class="muted">Showing 3 of {answerDraftSummary()!.draft.claim_count} claims.</p>
+                ) : null}
+                <ul class="final-answer-list-items answer-draft-claim-list">
+                  {answerDraftSummary()!.draft.claims.slice(0, 3).map((claim) => (
+                    <li>
+                      <article class="final-answer-list-item answer-draft-claim">
+                        <div class="answer-draft-claim-header">
+                          <span>{props.formatSnakeCaseLabel(claim.status)}</span>
+                          <small>{props.formatSnakeCaseLabel(claim.confidence)}</small>
+                        </div>
+                        <p>{compactClaimPreview(claim.text)}</p>
+                        <small>
+                          evidence={claim.evidence_ids.length} | chunks={claim.chunk_ids.length} | locators={claim.locators.length}
+                        </small>
+                      </article>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p>No claims returned.</p>
+            )}
+          </section>
+        ) : null}
       </section>
     </div>
   );

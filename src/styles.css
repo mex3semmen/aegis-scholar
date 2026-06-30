@@ -627,6 +627,39 @@ pre {
   margin-top: 1.25rem;
 }
 
+.answer-draft-action-header,
+.answer-draft-claim-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.evidence-pack-row-actions {
+  margin-top: 0.65rem;
+}
+
+.answer-draft-result {
+  margin-top: 1rem;
+}
+
+.answer-draft-result h4 {
+  margin: 0;
+}
+
+.answer-draft-claim-list {
+  margin-top: 0.8rem;
+}
+
+.answer-draft-claim {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.answer-draft-claim p {
+  margin: 0;
+}
+
 .status-not_started {
   background: rgba(148, 163, 184, 0.14);
   color: #cbd5e1;
@@ -825,7 +858,9 @@ pre {
 
   .source-import-panel-header,
   .source-import-step-heading,
-  .evidence-pack-action-header {
+  .evidence-pack-action-header,
+  .answer-draft-action-header,
+  .answer-draft-claim-header {
     flex-direction: column;
   }
 }
