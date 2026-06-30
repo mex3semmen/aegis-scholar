@@ -2,6 +2,8 @@ name: verify
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 permissions:
@@ -14,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -26,6 +30,31 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Run verification
+      - name: Build frontend
         shell: pwsh
-        run: .\scripts\verify.ps1
+        run: npm run build
+
+      - name: Check Rust backend
+        shell: pwsh
+        run: cargo check --manifest-path .\src-tauri\Cargo.toml
+
+      - name: Run V1 scope check
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File .\scripts\scope-check-v1.ps1
+
+      - name: Check whitespace in changed diff
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ("${{ github.event_name }}" -eq 'pull_request') {
+              git fetch --no-tags origin "${{ github.base_ref }}" --depth=1
+              git diff --check "origin/${{ github.base_ref }}...HEAD"
+          }
+          elseif ("${{ github.event_name }}" -eq 'push') {
+              if ((git rev-list --count HEAD) -gt 1) {
+                  git diff --check HEAD~1..HEAD
+              }
+              else {
+                  git show --check --format= HEAD
+              }
+          }

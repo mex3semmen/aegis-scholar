@@ -98,6 +98,7 @@ Phase 146.0 adds a read-only Answer Artifact export preview gate that summarizes
 Phase 147.0 clarifies the first-run path from local source import through contract-only Answer Artifacts and export readiness with status-derived next steps and less diagnostic primary copy, without changing workflow execution.
 Phase 148.0 clarifies the explicit export write boundary, local destination input, non-blocking issue warnings, and bundle-internal result paths without changing export behavior or format.
 Phase 149.0 adds repo-local Codex operating rules, a reusable phase template, a V1/V2/V3 delivery map, and non-destructive verification helpers so future implementation prompts can stay shorter without changing product UX behavior.
+Phase 150.0 mirrors the local verification baseline on GitHub with a minimal Windows CI workflow for build, cargo check, scope review, and diff/whitespace checking. It changes no product UX behavior.
 
 ## Acceptance Criteria For Future UX Work
 
