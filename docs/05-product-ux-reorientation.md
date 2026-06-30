@@ -92,6 +92,7 @@ Phase 140.0 is the Sources workspace import-wizard pass that turns local source 
 Phase 141.0 adds an explicit, user-triggered Evidence Pack build action for indexed local sources while keeping Scholar Chat preview-only and answer generation out of scope.
 Phase 142.0 adds an explicit Answer Draft build action for existing Evidence Packs. The result remains a mechanical evidence-only claim scaffold; GroundedAnswer, FinalAnswer, citations, and LLM prose remain out of scope.
 Phase 143.0 adds an explicit Grounded Answer build action for the currently displayed Answer Draft. The result is a mechanical contract-only statement scaffold; FinalAnswer, citations, and LLM prose remain out of scope.
+Phase 144.0 adds an explicit Final Answer build action for the currently displayed Grounded Answer. The result remains a mechanical contract-only artifact without natural prose synthesis, citations, export, or LLM output.
 
 ## Acceptance Criteria For Future UX Work
 

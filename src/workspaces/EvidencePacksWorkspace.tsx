@@ -102,6 +102,37 @@ type GroundedAnswerBuildSummary = {
   sourceTitle: string;
 };
 
+type FinalAnswerStatement = {
+  statement_id: string;
+  grounded_statement_id: string;
+  status: string;
+  text: string;
+  claim_ids: string[];
+  evidence_ids: string[];
+  chunk_ids: string[];
+  locators: unknown[];
+  support_level: string;
+};
+
+type FinalAnswer = {
+  final_answer_id: string;
+  grounded_answer_id: string;
+  source_id: string;
+  version_id: string;
+  query: string;
+  created_at: string;
+  answer_mode: string;
+  statement_count: number;
+  unsupported_count: number;
+  statements: FinalAnswerStatement[];
+  warnings: string[];
+};
+
+type FinalAnswerBuildSummary = {
+  answer: FinalAnswer;
+  sourceTitle: string;
+};
+
 const ELIGIBLE_SOURCE_STATUSES = new Set([
   "indexed",
   "evidence_ready",
@@ -146,9 +177,13 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
   const [groundedAnswerStatus, setGroundedAnswerStatus] = createSignal<EvidencePackActionStatus>("not_started");
   const [groundedAnswerError, setGroundedAnswerError] = createSignal<string | null>(null);
   const [groundedAnswerSummary, setGroundedAnswerSummary] = createSignal<GroundedAnswerBuildSummary | null>(null);
+  const [finalAnswerStatus, setFinalAnswerStatus] = createSignal<EvidencePackActionStatus>("not_started");
+  const [finalAnswerError, setFinalAnswerError] = createSignal<string | null>(null);
+  const [finalAnswerSummary, setFinalAnswerSummary] = createSignal<FinalAnswerBuildSummary | null>(null);
   let previousExternalSourceSelection: string | null = null;
   let answerDraftRequestVersion = 0;
   let groundedAnswerRequestVersion = 0;
+  let finalAnswerRequestVersion = 0;
 
   const eligibleSources = () =>
     (props.sourceContext as EvidencePackSource[])
@@ -180,10 +215,21 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
     setGroundedAnswerStatus("not_started");
   }
 
+  function resetFinalAnswerResult(preserveRunning = false) {
+    finalAnswerRequestVersion += 1;
+    setFinalAnswerError(null);
+    setFinalAnswerSummary(null);
+    if (preserveRunning && finalAnswerStatus() === "running") {
+      return;
+    }
+    setFinalAnswerStatus("not_started");
+  }
+
   const workspaceMutationRunning = () =>
     actionStatus() === "running" ||
     answerDraftStatus() === "running" ||
-    groundedAnswerStatus() === "running";
+    groundedAnswerStatus() === "running" ||
+    finalAnswerStatus() === "running";
 
   createEffect(() => {
     const externalSelection = [
@@ -199,6 +245,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
         resetAnswerDraftResult();
       }
       resetGroundedAnswerResult(true);
+      resetFinalAnswerResult(true);
     }
     previousExternalSourceSelection = externalSelection;
   });
@@ -215,6 +262,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
         resetActionResult();
         resetAnswerDraftResult();
         resetGroundedAnswerResult(true);
+        resetFinalAnswerResult(true);
       }
       return;
     }
@@ -227,6 +275,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
     resetActionResult();
     resetAnswerDraftResult();
     resetGroundedAnswerResult(true);
+    resetFinalAnswerResult(true);
   });
 
   function selectSource(sourceId: string) {
@@ -235,6 +284,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
     resetActionResult();
     resetAnswerDraftResult();
     resetGroundedAnswerResult();
+    resetFinalAnswerResult();
   }
 
   function updateQuery(value: string) {
@@ -333,6 +383,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
       (candidate) => candidate.source_id === item.source_id,
     );
     resetGroundedAnswerResult();
+    resetFinalAnswerResult();
     const requestVersion = ++answerDraftRequestVersion;
     setAnswerDraftStatus("running");
     setAnswerDraftRunningPackId(item.evidence_pack_id);
@@ -398,6 +449,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
     }
 
     resetGroundedAnswerResult();
+    resetFinalAnswerResult();
     const requestVersion = ++groundedAnswerRequestVersion;
     setGroundedAnswerStatus("running");
     try {
@@ -431,8 +483,76 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
     }
   }
 
+  function explainFinalAnswerError(error: unknown) {
+    const sanitized = props.sanitizeBackendError(error);
+    const normalized = sanitized.toLowerCase().replace(/[_\s-]+/g, "");
+    if (normalized.includes("finalansweremptygroundedanswer")) {
+      return "The current Grounded Answer contains no statements.";
+    }
+    if (normalized.includes("groundedanswermissing")) {
+      return "The current Grounded Answer is no longer available.";
+    }
+    if (normalized.includes("groundedanswerreadfailed")) {
+      return "The current Grounded Answer could not be read.";
+    }
+    if (normalized.includes("finalanswerinputmissing")) {
+      return "The Final Answer input is missing.";
+    }
+    if (normalized.includes("finalanswerinvalidid") || normalized.includes("groundedanswerinvalidid")) {
+      return "The current Grounded Answer ID is invalid.";
+    }
+    if (normalized.includes("finalanswerreadfailed")) {
+      return "The Final Answer could not be read.";
+    }
+    if (normalized.includes("finalanswerwritefailed")) {
+      return "The Final Answer could not be written.";
+    }
+    return sanitized;
+  }
+
+  async function buildFinalAnswer() {
+    const currentGroundedAnswer = groundedAnswerSummary();
+    if (workspaceMutationRunning() || !currentGroundedAnswer) {
+      return;
+    }
+
+    resetFinalAnswerResult();
+    const requestVersion = ++finalAnswerRequestVersion;
+    setFinalAnswerStatus("running");
+    try {
+      const answer = await invoke<FinalAnswer>("build_final_answer", {
+        root: ".",
+        source_id: currentGroundedAnswer.answer.source_id,
+        grounded_answer_id: currentGroundedAnswer.answer.grounded_answer_id,
+      });
+      await Promise.all([
+        props.refreshCorpusStatus(),
+        props.refreshSourceContext(true),
+        props.loadEvidencePacksBySourceId(currentGroundedAnswer.answer.source_id),
+      ]);
+      if (requestVersion !== finalAnswerRequestVersion) {
+        setFinalAnswerStatus("not_started");
+        return;
+      }
+      setFinalAnswerSummary({
+        answer,
+        sourceTitle: currentGroundedAnswer.sourceTitle,
+      });
+      setFinalAnswerStatus("succeeded");
+    } catch (error) {
+      if (requestVersion !== finalAnswerRequestVersion) {
+        setFinalAnswerStatus("not_started");
+        return;
+      }
+      setFinalAnswerStatus("failed");
+      setFinalAnswerError(explainFinalAnswerError(error));
+      setFinalAnswerSummary(null);
+    }
+  }
+
   function reloadEvidencePacks() {
     resetGroundedAnswerResult();
+    resetFinalAnswerResult();
     return props.loadEvidencePacksBySourceId(selectedSourceId());
   }
 
@@ -650,7 +770,12 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
         {groundedAnswerError() ? <p class="error">{groundedAnswerError()}</p> : null}
         {groundedAnswerSummary() ? (
           <section class="compact-note grounded-answer-result">
-            <h4>Grounded Answer</h4>
+            <div class="final-answer-action-header">
+              <h4>Grounded Answer</h4>
+              <span class={`status-pill status-${finalAnswerStatus()}`}>
+                Final answer: {actionStatusLabel(finalAnswerStatus())}
+              </span>
+            </div>
             <p class="muted">
               Mechanical contract-only statement scaffold. This is not final prose or an LLM answer.
             </p>
@@ -676,6 +801,56 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
                     <li>
                       <article class="final-answer-list-item grounded-statement">
                         <div class="grounded-statement-header">
+                          <span>{props.formatSnakeCaseLabel(statement.status)}</span>
+                          <small>{props.formatSnakeCaseLabel(statement.support_level)}</small>
+                        </div>
+                        <p>{compactClaimPreview(statement.text)}</p>
+                        <small>
+                          claims={statement.claim_ids.length} | evidence={statement.evidence_ids.length} | chunks={statement.chunk_ids.length} | locators={statement.locators.length}
+                        </small>
+                      </article>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p>No statements returned.</p>
+            )}
+            <div class="hero-actions final-answer-actions">
+              <button onClick={buildFinalAnswer} disabled={workspaceMutationRunning()}>
+                {finalAnswerStatus() === "running" ? "Building..." : "Build final answer"}
+              </button>
+            </div>
+          </section>
+        ) : null}
+        {finalAnswerError() ? <p class="error">{finalAnswerError()}</p> : null}
+        {finalAnswerSummary() ? (
+          <section class="compact-note final-answer-result">
+            <h4>Final Answer</h4>
+            <p class="muted">
+              Mechanical contract-only artifact. This is not natural prose, citation output, or an LLM answer.
+            </p>
+            <div class="contract-meta">
+              <div><span>Final Answer ID</span><strong>{finalAnswerSummary()!.answer.final_answer_id}</strong></div>
+              <div><span>Grounded Answer ID</span><strong>{finalAnswerSummary()!.answer.grounded_answer_id}</strong></div>
+              <div><span>Source</span><strong>{finalAnswerSummary()!.sourceTitle}</strong></div>
+              <div><span>Source ID</span><strong>{finalAnswerSummary()!.answer.source_id}</strong></div>
+              <div><span>Query</span><strong>{finalAnswerSummary()!.answer.query}</strong></div>
+              <div><span>Answer mode</span><strong>{props.formatSnakeCaseLabel(finalAnswerSummary()!.answer.answer_mode)}</strong></div>
+              <div><span>Statements</span><strong>{finalAnswerSummary()!.answer.statement_count}</strong></div>
+              <div><span>Unsupported</span><strong>{finalAnswerSummary()!.answer.unsupported_count}</strong></div>
+              <div><span>Warnings</span><strong>{finalAnswerSummary()!.answer.warnings.length}</strong></div>
+            </div>
+            {finalAnswerSummary()!.answer.statements.length > 0 ? (
+              <>
+                {finalAnswerSummary()!.answer.statements.length > 3 ? (
+                  <p class="muted">Showing 3 of {finalAnswerSummary()!.answer.statement_count} statements.</p>
+                ) : null}
+                <ul class="final-answer-list-items final-contract-statement-list">
+                  {finalAnswerSummary()!.answer.statements.slice(0, 3).map((statement) => (
+                    <li>
+                      <article class="final-answer-list-item final-contract-statement">
+                        <div class="final-contract-statement-header">
                           <span>{props.formatSnakeCaseLabel(statement.status)}</span>
                           <small>{props.formatSnakeCaseLabel(statement.support_level)}</small>
                         </div>

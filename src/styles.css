@@ -691,6 +691,37 @@ pre {
   margin: 0;
 }
 
+.final-answer-action-header,
+.final-contract-statement-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.final-answer-action-header h4,
+.final-answer-result h4 {
+  margin: 0;
+}
+
+.final-answer-actions,
+.final-answer-result {
+  margin-top: 1rem;
+}
+
+.final-contract-statement-list {
+  margin-top: 0.8rem;
+}
+
+.final-contract-statement {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.final-contract-statement p {
+  margin: 0;
+}
+
 .status-not_started {
   background: rgba(148, 163, 184, 0.14);
   color: #cbd5e1;
@@ -893,7 +924,9 @@ pre {
   .answer-draft-action-header,
   .answer-draft-claim-header,
   .grounded-answer-action-header,
-  .grounded-statement-header {
+  .grounded-statement-header,
+  .final-answer-action-header,
+  .final-contract-statement-header {
     flex-direction: column;
   }
 }
