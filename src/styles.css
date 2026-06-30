@@ -602,6 +602,31 @@ pre {
   margin-top: 1rem;
 }
 
+.evidence-pack-action-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.evidence-pack-action-header h3,
+.evidence-pack-action h4,
+.evidence-pack-list h4 {
+  margin: 0;
+}
+
+.evidence-pack-action {
+  margin-top: 1rem;
+}
+
+.evidence-pack-build-summary {
+  margin-top: 1rem;
+}
+
+.evidence-pack-list {
+  margin-top: 1.25rem;
+}
+
 .status-not_started {
   background: rgba(148, 163, 184, 0.14);
   color: #cbd5e1;
@@ -799,7 +824,8 @@ pre {
   }
 
   .source-import-panel-header,
-  .source-import-step-heading {
+  .source-import-step-heading,
+  .evidence-pack-action-header {
     flex-direction: column;
   }
 }

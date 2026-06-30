@@ -2237,8 +2237,9 @@ type AnswerArtifactExportBundleInspection = {
 };
 
 function sanitizeBackendError(error: unknown) {
-  const message = String(error);
-  return message.replace(/[A-Za-z]:\\[^"]+/g, "[path hidden]").replace(/E:\\[^"]+/g, "[path hidden]");
+  return String(error)
+    .replace(/[A-Za-z]:\\[^"'\n]+/g, "[path hidden]")
+    .replace(/\.aegis[\\/][^"'\n]+/g, "[path hidden]");
 }
 
 function locatorSummary(locator: CitationLocator) {
@@ -2802,17 +2803,6 @@ export default function App() {
     } finally {
       setEvidencePacksLoading(false);
     }
-  }
-
-  async function loadEvidencePacks() {
-    const selectedSourceId = selectedEvidencePackSourceId();
-    if (!selectedSourceId) {
-      setEvidencePacks(null);
-      setEvidencePacksError(null);
-      setEvidencePacksSourceId("");
-      return;
-    }
-    await loadEvidencePacksBySourceId(selectedSourceId);
   }
 
   async function loadArtifactManifest() {
@@ -10092,11 +10082,17 @@ export default function App() {
         </div>
         <EvidencePacksWorkspace
           selectedEvidencePackSourceId={selectedEvidencePackSourceId()}
-          loadEvidencePacks={loadEvidencePacks}
+          sourceContext={scholarChatSourceContext()}
+          sourceContextSelectedIds={scholarChatSourceContextSelectedIds()}
+          loadEvidencePacksBySourceId={loadEvidencePacksBySourceId}
           evidencePacksLoading={evidencePacksLoading()}
           evidencePacksError={evidencePacksError()}
           evidencePacksSourceId={evidencePacksSourceId()}
           evidencePacks={evidencePacks()}
+          refreshCorpusStatus={loadStatus}
+          refreshSourceContext={loadScholarChatSourceContext}
+          sanitizeBackendError={sanitizeBackendError}
+          formatSnakeCaseLabel={formatSnakeCaseLabel}
         />
         <div class="artifact-overview">
           <h3>Retrieval index</h3>

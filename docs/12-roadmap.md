@@ -26,8 +26,9 @@ This roadmap now has a clear split between implemented foundations, preview-firs
 | Current / completed Phase 138.0 | managed server lifecycle hardening |
 | Current / completed Phase 139.0 | managed server chat diagnostic |
 | Current / completed Phase 140.0 | source import wizard MVP |
-| Known missing product workflows | actual source import wizard, scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
-| Recommended next product slices | actual source import wizard, scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
+| Current / completed Phase 141.0 | Evidence Pack action from indexed source |
+| Known missing product workflows | scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
+| Recommended next product slices | scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 
 Phase 123.0 created the docs-only project knowledge base for external orientation and GitHub Wiki readiness.
 Phase 124.0 is the docs QA pass. It tightens terminology, trims overclaiming, and keeps the knowledge base safe for GitHub-facing use without changing production code, frontend code, backend code, Tauri command wiring, or tests.
@@ -48,6 +49,7 @@ Phase 137.0 is the managed llama-server lifecycle pass. It owns the backend proc
 Phase 138.0 is the managed server lifecycle hardening pass. It adds localhost port preflight, ownership clarity, and shutdown cleanup for the AEGIS-managed llama-server while still refusing to stop external servers or route output into Scholar Chat answers.
 Phase 139.0 is the managed server chat diagnostic pass. It adds a consent-gated, diagnostic-only local chat completion request for the already-managed localhost server and keeps Scholar Chat answer generation out of scope.
 Phase 140.0 adds a local Source Import Wizard MVP in the Sources workspace. It accepts a local file path plus existing source metadata, drives the existing register -> extract -> chunk -> retrieval-index pipeline step by step, refreshes corpus status and source context after each successful step, and keeps Scholar Chat preview-only.
+Phase 141.0 adds an explicit Evidence Pack action for an already indexed local source. It accepts a query and conservative result limit, uses the existing `build_evidence_pack` command, refreshes source and Evidence Pack context after success, and does not generate an answer or citations.
 Phase 116 remains backend-only, preview-only, and in-memory. It does not add Evidence Pack creation, citations, writes, retrieval execution, provider expansion, runtime/model/LLM behavior, or answer generation.
 Phase 117.0 adds a backend-only Local Evidence Pack Creation MVP. It uses existing local source/retrieval/evidence data and managed Evidence Pack storage, stays deterministic and path-safe, and does not add network access, model/runtime/LLM behavior, or answer generation.
 Phase 118.0 adds a backend-only PDF Text Extraction MVP. It supports local PDFs when a text layer is present, preserves page-level locators, reuses the existing extraction-report / source-registry / corpus-layout contracts, and stays OCR-free and preview-only. It does not add OCR, web requests, scraping, downloads, connectors, source import, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
