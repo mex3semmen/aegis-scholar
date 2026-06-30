@@ -2542,7 +2542,7 @@ export default function App() {
       });
       setStatus(result);
     } catch (err) {
-      setStatusError(String(err));
+      setStatusError(sanitizeBackendError(err));
     }
   }
 
@@ -2959,11 +2959,11 @@ export default function App() {
     return (
       <div class="warning-box">
         <h4>No local sources yet</h4>
-        <p>Register a local source to begin the manual pipeline. AEGIS Scholar can then extract text, create chunks, build retrieval indexes, and later create Evidence Packs.</p>
+        <p>Use the Source Import Wizard to register a local file and then move through extraction, chunking, and retrieval indexing step by step. AEGIS Scholar can later create Evidence Packs from already indexed sources.</p>
         <div class="contract-meta">
           <div>
             <span>Supported now</span>
-            <strong>Markdown / text notes, PDF text-layer extraction</strong>
+            <strong>Markdown / text notes, dataset notes, web snapshots, PDF text-layer extraction</strong>
           </div>
           <div>
             <span>Not yet</span>
@@ -2972,7 +2972,7 @@ export default function App() {
         </div>
         <h4>Next actions</h4>
         <ul>
-          <li>Use the existing source registration flow if available.</li>
+          <li>Use the Source Import Wizard to register a local file.</li>
           <li>Check corpus status.</li>
           <li>Then run extraction, chunking, and retrieval.</li>
         </ul>
@@ -2984,9 +2984,9 @@ export default function App() {
     return (
       <details class="muted">
         <summary>Manual source workflow hints</summary>
-        <p>Use this help text after registering or selecting a source. The chat workflow plan above remains the primary entry point.</p>
+        <p>Use this help text after registering or selecting a source. The chat workflow plan above remains the primary entry point, and the Source Import Wizard handles the local onboarding slice.</p>
         <ol>
-          <li><strong>Register a local source</strong> - Markdown / text notes and PDF text-layer extraction are supported now.</li>
+          <li><strong>Register a local source</strong> - Markdown / text notes, PDF text-layer extraction, dataset notes, and web snapshots are supported now.</li>
           <li><strong>Extract text</strong> - scanned PDF OCR is not supported yet.</li>
           <li><strong>Chunk the source</strong> - keep source locators and provenance intact.</li>
           <li><strong>Build / inspect retrieval</strong> - preview retrieval candidates and retrieval index health.</li>
@@ -5155,6 +5155,8 @@ export default function App() {
         setScholarChatPreview={setScholarChatPreview}
         setScholarChatExecutionGatePreview={setScholarChatExecutionGatePreview}
         formatSnakeCaseLabel={formatSnakeCaseLabel}
+        refreshCorpusStatus={loadStatus}
+        refreshSourceContext={loadScholarChatSourceContext}
       />
 
         <ScholarChatWorkspace

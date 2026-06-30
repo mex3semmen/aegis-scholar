@@ -88,6 +88,7 @@ Phase 136.0 is the local runtime probe validation pass that sharpens the readine
 Phase 137.0 is the managed llama-server lifecycle pass that keeps backend-owned localhost startup, health, and stop controls visible in Developer Diagnostics while remaining preview-first and answer-generation-free.
 Phase 138.0 is the managed server lifecycle hardening pass that adds port preflight, ownership clarity, and shutdown cleanup for the already-managed llama-server without turning the output into a Scholar Chat answer.
 Phase 139.0 is the managed server chat diagnostic pass that adds a consent-gated, diagnostic-only local chat completion request for the already-managed localhost server while keeping Scholar Chat answer generation out of scope.
+Phase 140.0 is the Sources workspace import-wizard pass that turns local source onboarding into a guided register -> extract -> chunk -> index flow while keeping Scholar Chat preview-only and diagnostics secondary.
 
 ## Acceptance Criteria For Future UX Work
 
