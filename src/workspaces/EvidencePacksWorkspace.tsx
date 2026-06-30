@@ -529,6 +529,7 @@ export default function EvidencePacksWorkspace(props: any): JSX.Element {
         props.refreshCorpusStatus(),
         props.refreshSourceContext(true),
         props.loadEvidencePacksBySourceId(currentGroundedAnswer.answer.source_id),
+        props.refreshAnswerArtifactsForSource(currentGroundedAnswer.answer.source_id),
       ]);
       if (requestVersion !== finalAnswerRequestVersion) {
         setFinalAnswerStatus("not_started");

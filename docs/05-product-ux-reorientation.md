@@ -93,6 +93,7 @@ Phase 141.0 adds an explicit, user-triggered Evidence Pack build action for inde
 Phase 142.0 adds an explicit Answer Draft build action for existing Evidence Packs. The result remains a mechanical evidence-only claim scaffold; GroundedAnswer, FinalAnswer, citations, and LLM prose remain out of scope.
 Phase 143.0 adds an explicit Grounded Answer build action for the currently displayed Answer Draft. The result is a mechanical contract-only statement scaffold; FinalAnswer, citations, and LLM prose remain out of scope.
 Phase 144.0 adds an explicit Final Answer build action for the currently displayed Grounded Answer. The result remains a mechanical contract-only artifact without natural prose synthesis, citations, export, or LLM output.
+Phase 145.0 keeps the existing Answer Artifact overview, health, and optional issue data synchronized after a successful Final Answer build without adding export behavior, citations, or new artifact viewers.
 
 ## Acceptance Criteria For Future UX Work
 

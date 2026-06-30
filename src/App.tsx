@@ -2586,6 +2586,29 @@ export default function App() {
     await loadArtifactOverviewBySourceId(selectedSourceId);
   }
 
+  async function refreshAnswerArtifactsForSource(targetSourceId: string) {
+    const trimmedSourceId = targetSourceId.trim();
+    if (!trimmedSourceId) {
+      return;
+    }
+
+    const shouldRefreshIssues = artifactIssuesHasRun();
+    const currentFinalAnswer = finalAnswer();
+    const currentDetailSourceId = currentFinalAnswer?.source_id ?? artifactOverview()?.source_id;
+    if (finalAnswerId().trim() && currentDetailSourceId && currentDetailSourceId !== trimmedSourceId) {
+      setFinalAnswerId("");
+      setFinalAnswer(null);
+      setFinalAnswerError(null);
+    }
+
+    await Promise.allSettled([
+      loadArtifactSources(true),
+      loadArtifactOverviewBySourceId(trimmedSourceId),
+      loadArtifactHealth(true),
+      shouldRefreshIssues ? loadArtifactIssues(true) : Promise.resolve(),
+    ]);
+  }
+
   async function loadRetrievalIndex(preserveSelection = false, sourceIdOverride?: string) {
     const trimmedSourceId = (sourceIdOverride ?? sourceId()).trim();
     if (!trimmedSourceId) {
@@ -3662,7 +3685,7 @@ export default function App() {
   }
 
   function selectedFinalAnswerDetail() {
-    const selectedSourceId = selectedAnswerArtifactSourceId();
+    const selectedSourceId = artifactOverview()?.source_id.trim() ?? "";
     const selectedFinalAnswerId = finalAnswerId().trim();
     const currentFinalAnswer = finalAnswer();
     if (!selectedSourceId || !selectedFinalAnswerId || !currentFinalAnswer) {
@@ -3778,8 +3801,13 @@ export default function App() {
   }
 
   async function selectFinalAnswer(finalAnswerMetadata: FinalAnswerMetadata) {
+    const overviewSourceId = artifactOverview()?.source_id.trim() ?? "";
+    if (!overviewSourceId) {
+      setFinalAnswerError("Answer artifact overview source is required to load final-answer details.");
+      return;
+    }
     setFinalAnswerId(finalAnswerMetadata.final_answer_id);
-    await loadFinalAnswerByIds(sourceId().trim(), finalAnswerMetadata.final_answer_id);
+    await loadFinalAnswerByIds(overviewSourceId, finalAnswerMetadata.final_answer_id);
   }
 
   async function previewScholarChatAgenticWorkflowPlan() {
@@ -9988,10 +10016,9 @@ export default function App() {
           )}
         </div>
         <div class="artifact-overview">
-          <h3>Final answers</h3>
-          <p class="muted">Read-only final-answer metadata for the selected answer artifact source.</p>
-          {selectedAnswerArtifactSourceId() ? (
-            artifactOverview() ? (
+          <h3>Answer artifact overview</h3>
+          <p class="muted">Read-only artifact counts and final-answer metadata for the loaded overview source.</p>
+          {artifactOverview() ? (
               <>
                 <div class="contract-meta">
                   <div><span>Source ID</span><strong>{artifactOverview()!.source_id}</strong></div>
@@ -10073,11 +10100,12 @@ export default function App() {
                   )}
                 </div>
               </>
-            ) : (
-              <p>Loading final answers for the selected source...</p>
-            )
+          ) : artifactOverviewLoading() ? (
+            <p>Loading answer artifact overview...</p>
+          ) : selectedAnswerArtifactSourceId() ? (
+            <p>No answer artifact overview loaded for the selected source.</p>
           ) : (
-            <p>Select an answer artifact source to load final answers.</p>
+            <p>Select an answer artifact source to load its overview.</p>
           )}
         </div>
         <EvidencePacksWorkspace
@@ -10091,6 +10119,7 @@ export default function App() {
           evidencePacks={evidencePacks()}
           refreshCorpusStatus={loadStatus}
           refreshSourceContext={loadScholarChatSourceContext}
+          refreshAnswerArtifactsForSource={refreshAnswerArtifactsForSource}
           sanitizeBackendError={sanitizeBackendError}
           formatSnakeCaseLabel={formatSnakeCaseLabel}
         />
