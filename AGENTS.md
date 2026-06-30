@@ -53,9 +53,47 @@ Rust owns sensitive local authority:
 
 Frontend must call Tauri commands only. No general-purpose shell access may be exposed to the UI.
 
+## Operating rules
+
+Use these rules as the default Codex/agent operating boundary for this repo:
+
+- local-first is the default product boundary
+- local sources are the source of truth
+- model knowledge is never the source of truth
+- preview before mutation
+- mutation only after an explicit user click or approval gate
+- no automatic LLM, export, network, or filesystem step without an explicit gate
+- no local paths in normal UI cards
+- do not render locator contents unless a phase explicitly allows it
+- keep phases small and scoped
+- do not perform a large refactor without an explicit goal
+- code/test-first when code changes are in scope
+- keep docs updates minimal and synchronized after code changes
+
+## Product maturity track
+
+AEGIS Scholar is being built in three product stages:
+
+- V1: local workflow MVP, artifact UX, and export UX without LLM prose
+- V2: consent-gated local LLM answer generation with grounding, citations, and review gates
+- V3: agentic local scholar workflows with plan/act/verify loops and approval gates
+
+Recommended sequence:
+
+- stabilize V1 before broadening scope
+- start V2 only after the V1 happy path is stable
+- start V3 only after V2 grounding and review gates are reliable
+
 ## Phase discipline
 
 If a prompt says Phase 1, implement only Phase 1.
+
+General phase rules:
+
+- implement only the requested phase scope
+- prefer additive, local changes over broad rewrites
+- preserve stricter constraints already documented for earlier phases
+- do not turn preview or explicit user actions into automatic chained behavior unless a phase explicitly requires it
 
 For Phase 1, do not implement:
 
@@ -121,6 +159,25 @@ git diff --check
 ```
 
 If a command cannot run because the repo does not yet contain package/project files, report that clearly.
+
+Minimum phase-close verification always includes:
+
+```text
+npm run build
+cargo check --manifest-path .\src-tauri\Cargo.toml
+git diff --check
+```
+
+## Final report format
+
+Final implementation reports should end with these sections:
+
+- Files changed
+- Implemented
+- Intentionally not implemented
+- Verification
+- Scope check
+- Risks / follow-up
 
 ## Git rules
 
