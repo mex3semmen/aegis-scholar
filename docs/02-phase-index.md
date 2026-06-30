@@ -26,7 +26,7 @@ This is a compressed status index, not a full changelog.
 | Phase 136.0 | complete | local runtime probe validation | `src/App.tsx`, `src/workspaces/ScholarChatWorkspace.tsx`, `src/styles.css`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | exact `.gguf` and llama.cpp probe flow is clarified; diagnostics remain secondary and answer generation stays absent |
 | Phase 137.0 | complete | managed llama-server lifecycle | `src-tauri/src/local_server.rs`, `src-tauri/src/lib.rs`, `src/App.tsx`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | preview/start/health/stop stay consent-gated and localhost-only; managed output still does not feed Scholar Chat answers |
 | Phase 138.0 | complete | managed server lifecycle hardening | `src-tauri/src/local_server.rs`, `src-tauri/src/lib.rs`, `src/App.tsx`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | port preflight, ownership clarity, and shutdown cleanup stay consent-gated and localhost-only; external servers are never stopped |
-| Phase 139.0 | complete | managed server smoke diagnostic | `src-tauri/src/local_server.rs`, `src-tauri/src/lib.rs`, `src/App.tsx`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | diagnostic-only local smoke requests stay consent-gated, localhost-only, and answer-generation-free; external servers remain unmanaged |
+| Phase 139.0 | complete | managed server chat diagnostic | `src-tauri/src/local_server.rs`, `src-tauri/src/lib.rs`, `src/App.tsx`, `docs/05-product-ux-reorientation.md`, `docs/12-roadmap.md` | diagnostic-only local chat requests stay consent-gated, localhost-only, and answer-generation-free; external servers remain unmanaged |
 | Phase 117.0 | implemented | local Evidence Pack creation MVP | Evidence Pack backend path and managed storage | integrate with broader product surfaces |
 | Phase 118.0 | implemented | PDF text-layer extraction MVP with page-level locators | extraction and locator handling | OCR and broad PDF ingestion remain out of scope |
 | Phase 119.0 | implemented | first-run source import readiness UI | frontend guidance surfaces | actual import wizard remains missing |
@@ -52,7 +52,7 @@ The most relevant recent product milestones are:
 - Phase 136.0 local runtime probe validation
 - Phase 137.0 managed llama-server lifecycle
 - Phase 138.0 managed server lifecycle hardening
-- Phase 139.0 managed server smoke diagnostic
+- Phase 139.0 managed server chat diagnostic
 - Evidence Pack planning and creation
 - PDF text-layer extraction
 - first-run and source workflow guidance
