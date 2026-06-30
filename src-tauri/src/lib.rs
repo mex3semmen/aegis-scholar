@@ -27,6 +27,7 @@ use grounded_answer::{build_grounded_answer as build_grounded_answer_impl, read_
 use local_server::{
     check_managed_llama_server_health as check_managed_llama_server_health_impl,
     run_managed_llama_server_chat_diagnostic as run_managed_llama_server_chat_diagnostic_impl,
+    run_managed_llama_server_smoke_diagnostic as run_managed_llama_server_smoke_diagnostic_impl,
     inspect_managed_llama_server_status as inspect_managed_llama_server_status_impl,
     preview_managed_llama_server_launch_plan as preview_managed_llama_server_launch_plan_impl,
     start_managed_llama_server as start_managed_llama_server_impl,
@@ -37,6 +38,8 @@ use local_server::{
     ManagedLlamaServerLaunchPlanRequest,
     ManagedLlamaServerStartRequest,
     ManagedLlamaServerState,
+    ManagedLlamaServerSmokeDiagnosticPreview,
+    ManagedLlamaServerSmokeDiagnosticRequest,
     ManagedLlamaServerStatusPreview,
 };
 use local_runtime::{
@@ -855,6 +858,14 @@ fn run_managed_llama_server_chat_diagnostic(
 }
 
 #[tauri::command]
+fn run_managed_llama_server_smoke_diagnostic(
+    state: tauri::State<'_, ManagedLlamaServerState>,
+    request: ManagedLlamaServerSmokeDiagnosticRequest,
+) -> Result<ManagedLlamaServerSmokeDiagnosticPreview, String> {
+    run_managed_llama_server_smoke_diagnostic_impl(&state, request).map_err(to_user_error)
+}
+
+#[tauri::command]
 fn inspect_managed_llama_server_status(
     state: tauri::State<'_, ManagedLlamaServerState>,
 ) -> Result<ManagedLlamaServerStatusPreview, String> {
@@ -950,6 +961,7 @@ pub fn run() {
             check_managed_llama_server_health,
             stop_managed_llama_server,
             run_managed_llama_server_chat_diagnostic,
+            run_managed_llama_server_smoke_diagnostic,
             inspect_managed_llama_server_status,
         ])
         .on_window_event(|window, event| {
