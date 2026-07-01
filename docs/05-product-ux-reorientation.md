@@ -104,6 +104,7 @@ Phase 154.0 implements the Scholar Chat session store foundation: session histor
 Phase 155.0 implements the Scholar Chat session rail UI: nested session history appears inside Scholar Chat, users can switch sessions or start a new one explicitly, and the existing preview/check behavior and session-store backend remain unchanged.
 Phase 156.0 implements the Scholar Chat session rename/delete controls: the rail gains explicit per-session rename and delete actions, delete uses a clear confirmation step, and the existing preview/check behavior and session-store backend remain unchanged.
 Phase 157.0 implements a frontend browser smoke harness for the Vite dev server: it loads the real app in Chromium with a test-only Tauri shim, checks the shell and Scholar Chat session rail are visible, and leaves product behavior unchanged.
+Phase 158.0 extends the existing Windows verify workflow so the browser smoke runs in CI alongside the current build and backend checks, without changing product behavior.
 
 ## Acceptance Criteria For Future UX Work
 
