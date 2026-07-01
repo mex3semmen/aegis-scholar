@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test:browser-smoke": "playwright test tests/browser-smoke.spec.ts",
-    "verify:fast": "powershell -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -Fast"
+    "verify:fast": "powershell -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -Fast",
+    "verify": "powershell -ExecutionPolicy Bypass -File ./scripts/verify.ps1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
