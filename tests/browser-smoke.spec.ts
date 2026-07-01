@@ -120,11 +120,14 @@ async function expectWorkspaceReachable(
   }
 }
 
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(installBrowserSmokeTauriShim);
-});
+type BrowserSmokeErrorCapture = {
+  pageErrors: Error[];
+  consoleErrors: string[];
+  assertNoErrors: () => void;
+  waitForCounts: (expected: { pageErrors: number; consoleErrors: number }) => Promise<void>;
+};
 
-test("loads the shell and Scholar Chat smoke surface", async ({ page }) => {
+function installBrowserErrorCapture(page: Page): BrowserSmokeErrorCapture {
   const pageErrors: Error[] = [];
   const consoleErrors: string[] = [];
 
@@ -136,6 +139,29 @@ test("loads the shell and Scholar Chat smoke surface", async ({ page }) => {
       consoleErrors.push(message.text());
     }
   });
+
+  return {
+    pageErrors,
+    consoleErrors,
+    assertNoErrors: () => {
+      expect(pageErrors).toEqual([]);
+      expect(consoleErrors).toEqual([]);
+    },
+    waitForCounts: async (expected) => {
+      await expect.poll(() => ({
+        pageErrors: pageErrors.length,
+        consoleErrors: consoleErrors.length,
+      })).toEqual(expected);
+    },
+  };
+}
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(installBrowserSmokeTauriShim);
+});
+
+test("loads the shell and Scholar Chat smoke surface", async ({ page }) => {
+  const browserErrors = installBrowserErrorCapture(page);
 
   await page.goto("/");
 
@@ -169,6 +195,21 @@ test("loads the shell and Scholar Chat smoke surface", async ({ page }) => {
     return Boolean(globalWindow.isTauri && globalWindow.__TAURI_INTERNALS__?.invoke);
   });
   expect(hasTauriShim).toBe(true);
-  expect(pageErrors).toEqual([]);
-  expect(consoleErrors).toEqual([]);
+  browserErrors.assertNoErrors();
+});
+
+test("captures browser runtime errors", async ({ page }) => {
+  const browserErrors = installBrowserErrorCapture(page);
+
+  await page.setContent("<!doctype html><html><head><title>Browser smoke sentinel</title></head><body>Browser smoke sentinel</body></html>");
+  await page.evaluate(() => {
+    console.error("browser smoke sentinel console error");
+    setTimeout(() => {
+      throw new Error("browser smoke sentinel page error");
+    }, 0);
+  });
+
+  await browserErrors.waitForCounts({ pageErrors: 1, consoleErrors: 1 });
+  expect(browserErrors.consoleErrors).toEqual(["browser smoke sentinel console error"]);
+  expect(browserErrors.pageErrors.map((error) => error.message)).toEqual(["browser smoke sentinel page error"]);
 });
