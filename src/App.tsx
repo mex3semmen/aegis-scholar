@@ -8548,21 +8548,6 @@ export default function App() {
             <p>Select an answer artifact source to load its overview.</p>
           )}
         </div>
-        <EvidencePacksWorkspace
-          selectedEvidencePackSourceId={selectedEvidencePackSourceId()}
-          sourceContext={scholarChatSourceContext()}
-          sourceContextSelectedIds={scholarChatSourceContextSelectedIds()}
-          loadEvidencePacksBySourceId={loadEvidencePacksBySourceId}
-          evidencePacksLoading={evidencePacksLoading()}
-          evidencePacksError={evidencePacksError()}
-          evidencePacksSourceId={evidencePacksSourceId()}
-          evidencePacks={evidencePacks()}
-          refreshCorpusStatus={loadStatus}
-          refreshSourceContext={loadScholarChatSourceContext}
-          refreshAnswerArtifactsForSource={refreshAnswerArtifactsForSource}
-          sanitizeBackendError={sanitizeBackendError}
-          formatSnakeCaseLabel={formatSnakeCaseLabel}
-        />
         <div class="artifact-overview">
           <h3>Retrieval index</h3>
           <p class="muted">Read-only retrieval metadata for the source ID above.</p>
@@ -8753,6 +8738,21 @@ export default function App() {
           <p>No final answer loaded yet.</p>
         )}
       </section>
+        <EvidencePacksWorkspace
+          selectedEvidencePackSourceId={selectedEvidencePackSourceId()}
+          sourceContext={scholarChatSourceContext()}
+          sourceContextSelectedIds={scholarChatSourceContextSelectedIds()}
+          loadEvidencePacksBySourceId={loadEvidencePacksBySourceId}
+          evidencePacksLoading={evidencePacksLoading()}
+          evidencePacksError={evidencePacksError()}
+          evidencePacksSourceId={evidencePacksSourceId()}
+          evidencePacks={evidencePacks()}
+          refreshCorpusStatus={loadStatus}
+          refreshSourceContext={loadScholarChatSourceContext}
+          refreshAnswerArtifactsForSource={refreshAnswerArtifactsForSource}
+          sanitizeBackendError={sanitizeBackendError}
+          formatSnakeCaseLabel={formatSnakeCaseLabel}
+        />
       </div>
     </WorkspaceShell>
   );
