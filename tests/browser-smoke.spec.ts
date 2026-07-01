@@ -120,6 +120,10 @@ test("loads the shell and Scholar Chat smoke surface", async ({ page }) => {
   await sourcesWorkspaceButton.click();
   await expect(page.getByRole("heading", { level: 2, name: "Sources" })).toBeVisible();
   await expect(page.locator('[data-workspace="sources"]')).toBeVisible();
+  const evidencePacksWorkspaceButton = workspaceNav.getByRole("button", { name: /Evidence Packs/ });
+  await expect(evidencePacksWorkspaceButton).toBeVisible();
+  await evidencePacksWorkspaceButton.click();
+  await expect(page.getByRole("heading", { name: "Evidence Packs" })).toBeVisible();
   const hasTauriShim = await page.evaluate(() => {
     const globalWindow = window as Window & { isTauri?: boolean; __TAURI_INTERNALS__?: { invoke?: unknown } };
     return Boolean(globalWindow.isTauri && globalWindow.__TAURI_INTERNALS__?.invoke);
