@@ -17,3 +17,6 @@ src-tauri/gen/
 .aegis/rag/indexes/
 .aegis/audit/*.db
 .aegis/audit/*.db-*
+
+test-results/
+playwright-report/
