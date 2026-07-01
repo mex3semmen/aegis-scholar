@@ -13,7 +13,8 @@
     "test:backend": "cargo test --manifest-path ./src-tauri/Cargo.toml",
     "verify:fast": "powershell -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -Fast",
     "verify:backend": "powershell -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -BackendOnly",
-    "verify": "powershell -ExecutionPolicy Bypass -File ./scripts/verify.ps1"
+    "verify": "powershell -ExecutionPolicy Bypass -File ./scripts/verify.ps1",
+    "test": "npm run test:browser-smoke && npm run test:backend"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
