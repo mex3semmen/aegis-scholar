@@ -114,4 +114,15 @@ test("loads the shell and Scholar Chat smoke surface", async ({ page }) => {
   await expect(page.getByRole("complementary", { name: "Scholar Chat sessions" })).toBeVisible();
   await expect(page.getByText("Browser smoke session")).toBeVisible();
   await expect(page.getByText("Transcript loaded. Composer state stays in memory.")).toBeVisible();
+  const workspaceNav = page.getByRole("complementary", { name: "Workspace navigation" });
+  const sourcesWorkspaceButton = workspaceNav.getByRole("button", { name: /Sources/ });
+  await expect(sourcesWorkspaceButton).toBeVisible();
+  await sourcesWorkspaceButton.click();
+  await expect(page.getByRole("heading", { level: 2, name: "Sources" })).toBeVisible();
+  await expect(page.locator('[data-workspace="sources"]')).toBeVisible();
+  const hasTauriShim = await page.evaluate(() => {
+    const globalWindow = window as Window & { isTauri?: boolean; __TAURI_INTERNALS__?: { invoke?: unknown } };
+    return Boolean(globalWindow.isTauri && globalWindow.__TAURI_INTERNALS__?.invoke);
+  });
+  expect(hasTauriShim).toBe(true);
 });
