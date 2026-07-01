@@ -106,6 +106,18 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("loads the shell and Scholar Chat smoke surface", async ({ page }) => {
+  const pageErrors: Error[] = [];
+  const consoleErrors: string[] = [];
+
+  page.on("pageerror", (error) => {
+    pageErrors.push(error);
+  });
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      consoleErrors.push(message.text());
+    }
+  });
+
   await page.goto("/");
 
   await expect(page.locator(".app-shell")).toBeVisible();
@@ -129,4 +141,6 @@ test("loads the shell and Scholar Chat smoke surface", async ({ page }) => {
     return Boolean(globalWindow.isTauri && globalWindow.__TAURI_INTERNALS__?.invoke);
   });
   expect(hasTauriShim).toBe(true);
+  expect(pageErrors).toEqual([]);
+  expect(consoleErrors).toEqual([]);
 });
