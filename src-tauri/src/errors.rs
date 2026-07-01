@@ -184,6 +184,27 @@ pub enum AegisError {
     #[error("Scholar chat invalid source id")]
     ScholarChatInvalidSourceId,
 
+    #[error("Scholar chat session not found: {0}")]
+    ScholarChatSessionNotFound(String),
+
+    #[error("Scholar chat session invalid id")]
+    ScholarChatSessionInvalidId,
+
+    #[error("Scholar chat session invalid title")]
+    ScholarChatSessionInvalidTitle,
+
+    #[error("Scholar chat session index read failed")]
+    ScholarChatSessionIndexReadFailed,
+
+    #[error("Scholar chat session index write failed")]
+    ScholarChatSessionIndexWriteFailed,
+
+    #[error("Scholar chat session transcript read failed")]
+    ScholarChatSessionTranscriptReadFailed,
+
+    #[error("Scholar chat session transcript write failed")]
+    ScholarChatSessionTranscriptWriteFailed,
+
     #[error("Local model runtime invalid path")]
     LocalModelRuntimeInvalidPath,
 

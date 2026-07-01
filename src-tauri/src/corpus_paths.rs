@@ -36,9 +36,26 @@ impl CorpusPaths {
         self.audit_dir().join("events.jsonl")
     }
 
+    pub fn chat_dir(&self) -> PathBuf {
+        self.aegis_dir().join("chat")
+    }
+
+    pub fn chat_index_path(&self) -> PathBuf {
+        self.chat_dir().join("index.json")
+    }
+
+    pub fn chat_sessions_dir(&self) -> PathBuf {
+        self.chat_dir().join("sessions")
+    }
+
+    pub fn chat_session_path(&self, session_id: &str) -> PathBuf {
+        self.chat_sessions_dir().join(format!("{session_id}.jsonl"))
+    }
+
     pub fn ensure_layout(&self) -> AegisResult<()> {
         fs::create_dir_all(self.sources_dir())?;
         fs::create_dir_all(self.audit_dir())?;
+        fs::create_dir_all(self.chat_sessions_dir())?;
         Ok(())
     }
 

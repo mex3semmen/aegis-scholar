@@ -50,6 +50,15 @@ export type ScholarChatTranscriptMessage = {
   execution_gate_preview?: ScholarChatAgenticWorkflowExecutionGatePreview;
 };
 
+export type ScholarChatSessionSummary = {
+  session_id: string;
+  title: string;
+  created_at: number;
+  updated_at: number;
+  message_count: number;
+  last_message_at: number | null;
+};
+
 export type ScholarChatGroundingPlan = {
   selected_source_count: number;
   local_corpus_required: boolean;

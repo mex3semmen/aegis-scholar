@@ -1,4 +1,5 @@
 mod audit;
+mod chat_sessions;
 mod corpus_authority;
 mod corpus_paths;
 mod chunking;
@@ -78,6 +79,16 @@ use local_runtime::{
     LocalRuntimeValidationPreviewRequest,
 };
 use retrieval::{RetrievalIndex, RetrievalResponse, RetrievalService};
+use chat_sessions::{
+    append_scholar_chat_transcript_entry as append_scholar_chat_transcript_entry_impl,
+    create_scholar_chat_session as create_scholar_chat_session_impl,
+    delete_scholar_chat_session as delete_scholar_chat_session_impl,
+    load_scholar_chat_session_transcript as load_scholar_chat_session_transcript_impl,
+    list_scholar_chat_sessions as list_scholar_chat_sessions_impl,
+    rename_scholar_chat_session as rename_scholar_chat_session_impl,
+    ScholarChatSessionSummary,
+    ScholarChatTranscriptMessage,
+};
 use scholar_chat::{
     preview_scholar_chat_answer_readiness as preview_scholar_chat_answer_readiness_impl,
     preview_scholar_chat_draft_inference as preview_scholar_chat_draft_inference_impl,
@@ -575,6 +586,53 @@ fn preview_scholar_chat_prompt_pack(root: String, request: ScholarChatRequest) -
 }
 
 #[tauri::command]
+fn list_scholar_chat_sessions(root: String) -> Result<Vec<ScholarChatSessionSummary>, String> {
+    list_scholar_chat_sessions_impl(root)
+}
+
+#[tauri::command]
+fn create_scholar_chat_session(
+    root: String,
+    title: Option<String>,
+) -> Result<ScholarChatSessionSummary, String> {
+    create_scholar_chat_session_impl(root, title)
+}
+
+#[tauri::command]
+fn rename_scholar_chat_session(
+    root: String,
+    session_id: String,
+    title: String,
+) -> Result<ScholarChatSessionSummary, String> {
+    rename_scholar_chat_session_impl(root, session_id, title)
+}
+
+#[tauri::command]
+fn delete_scholar_chat_session(
+    root: String,
+    session_id: String,
+) -> Result<ScholarChatSessionSummary, String> {
+    delete_scholar_chat_session_impl(root, session_id)
+}
+
+#[tauri::command]
+fn load_scholar_chat_session_transcript(
+    root: String,
+    session_id: String,
+) -> Result<Vec<ScholarChatTranscriptMessage>, String> {
+    load_scholar_chat_session_transcript_impl(root, session_id)
+}
+
+#[tauri::command]
+fn append_scholar_chat_transcript_entry(
+    root: String,
+    session_id: String,
+    message: ScholarChatTranscriptMessage,
+) -> Result<ScholarChatSessionSummary, String> {
+    append_scholar_chat_transcript_entry_impl(root, session_id, message)
+}
+
+#[tauri::command]
 fn preview_local_model_runtime_health(root: String, config: LocalModelRuntimeConfig) -> Result<LocalModelRuntimeHealthPreview, String> {
     preview_local_model_runtime_health_impl(root, config)
         .map_err(to_user_error)
@@ -909,6 +967,12 @@ pub fn run() {
             preview_scholar_chat_request,
             preview_scholar_chat_agentic_workflow_plan,
             preview_scholar_chat_agentic_workflow_execution_gate,
+            list_scholar_chat_sessions,
+            create_scholar_chat_session,
+            rename_scholar_chat_session,
+            delete_scholar_chat_session,
+            load_scholar_chat_session_transcript,
+            append_scholar_chat_transcript_entry,
             preview_scholar_chat_answer_readiness,
             preview_scholar_chat_draft_inference,
             preview_scholar_chat_draft_grounding_inspection,

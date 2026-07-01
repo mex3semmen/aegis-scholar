@@ -99,6 +99,8 @@ Phase 147.0 clarifies the first-run path from local source import through contra
 Phase 148.0 clarifies the explicit export write boundary, local destination input, non-blocking issue warnings, and bundle-internal result paths without changing export behavior or format.
 Phase 149.0 adds repo-local Codex operating rules, a reusable phase template, a V1/V2/V3 delivery map, and non-destructive verification helpers so future implementation prompts can stay shorter without changing product UX behavior.
 Phase 150.0 mirrors the local verification baseline on GitHub with a minimal Windows CI workflow for build, cargo check, scope review, and diff/whitespace checking. It changes no product UX behavior.
+Phase 151.0 implements the chat-first shell polish pass: the area-switcher remains the sidebar model, the repeated workspace banner is reduced to a minimal title line, shell-local design tokens are introduced for the nav and composer chrome, and Scholar Chat keeps the same preview and execution-gate behavior while feeling calmer and more chat-like.
+Phase 154.0 implements the Scholar Chat session store foundation: session history is per-project, file-backed under `.aegis/chat/`, SQLite is still out of scope, and no session rail UI is added yet.
 
 ## Acceptance Criteria For Future UX Work
 

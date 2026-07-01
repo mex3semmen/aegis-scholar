@@ -31,6 +31,7 @@ import type {
   ScholarChatPromptContextItem,
   ScholarChatPromptPack,
   ScholarChatPromptPackPreviewResponse,
+  ScholarChatSessionSummary,
   ScholarChatScientificMetadataQueryPlanStatus,
   ScholarChatScientificMetadataProviderRequestStatus,
   ScholarChatScientificMetadataProviderRequestStrategy,
@@ -308,6 +309,8 @@ export default function App() {
   const [scholarChatPromptPackLoading, setScholarChatPromptPackLoading] = createSignal(false);
   const [scholarChatPromptPackHasRun, setScholarChatPromptPackHasRun] = createSignal(false);
   const [scholarChatTranscript, setScholarChatTranscript] = createSignal<ScholarChatTranscriptMessage[]>([]);
+  const [scholarChatSessionId, setScholarChatSessionId] = createSignal<string | null>(null);
+  const [scholarChatSessionSummaries, setScholarChatSessionSummaries] = createSignal<ScholarChatSessionSummary[]>([]);
   const [scholarChatScientificMetadataProviderRequestPreview, setScholarChatScientificMetadataProviderRequestPreview] = createSignal<ScholarChatScientificMetadataProviderRequestPreview | null>(null);
   const [scholarChatScientificMetadataProviderRequestError, setScholarChatScientificMetadataProviderRequestError] = createSignal<string | null>(null);
   const [scholarChatScientificMetadataProviderRequestValidationError, setScholarChatScientificMetadataProviderRequestValidationError] = createSignal<string | null>(null);
@@ -1502,32 +1505,31 @@ export default function App() {
     });
   }
 
-  function ensureScholarChatUserTranscriptMessage(prompt: string) {
+  function ensureScholarChatUserTranscriptMessage(prompt: string): ScholarChatTranscriptMessage | null {
     const normalizedPrompt = prompt.trim();
     if (!normalizedPrompt) {
-      return;
+      return null;
     }
     const lastUserMessage = [...scholarChatTranscript()].reverse().find((item) => item.role === "user");
     if (lastUserMessage && lastUserMessage.prompt === normalizedPrompt) {
-      return;
+      return null;
     }
-    setScholarChatTranscript((current) => [
-      ...current,
-      {
-        id: nextScholarChatTranscriptId(),
-        role: "user",
-        kind: "prompt",
-        prompt: normalizedPrompt,
-        title: "You",
-        content: normalizedPrompt,
-        created_at: Date.now(),
-      },
-    ]);
+    const message: ScholarChatTranscriptMessage = {
+      id: nextScholarChatTranscriptId(),
+      role: "user",
+      kind: "prompt",
+      prompt: normalizedPrompt,
+      title: "You",
+      content: normalizedPrompt,
+      created_at: Date.now(),
+    };
+    setScholarChatTranscript((current) => [...current, message]);
+    return message;
   }
 
   function recordScholarChatWorkflowPreview(prompt: string, result: ScholarChatAgenticWorkflowPlanPreview) {
-    ensureScholarChatUserTranscriptMessage(prompt);
-    updateScholarChatTranscriptMessage({
+    const userMessage = ensureScholarChatUserTranscriptMessage(prompt);
+    const message: ScholarChatTranscriptMessage = {
       id: nextScholarChatTranscriptId(),
       role: "assistant",
       kind: "workflow_preview",
@@ -1536,12 +1538,19 @@ export default function App() {
       content: result.summary,
       created_at: Date.now(),
       workflow_preview: result,
-    });
+    };
+    updateScholarChatTranscriptMessage(message);
+    void (async () => {
+      if (userMessage) {
+        await persistScholarChatTranscriptMessage(userMessage, prompt);
+      }
+      await persistScholarChatTranscriptMessage(message, prompt);
+    })();
   }
 
   function recordScholarChatExecutionGatePreview(prompt: string, result: ScholarChatAgenticWorkflowExecutionGatePreview) {
-    ensureScholarChatUserTranscriptMessage(prompt);
-    updateScholarChatTranscriptMessage({
+    const userMessage = ensureScholarChatUserTranscriptMessage(prompt);
+    const message: ScholarChatTranscriptMessage = {
       id: nextScholarChatTranscriptId(),
       role: "assistant",
       kind: "execution_gate",
@@ -1550,7 +1559,91 @@ export default function App() {
       content: result.blocked_reason || "The next safe step is ready to review.",
       created_at: Date.now(),
       execution_gate_preview: result,
+    };
+    updateScholarChatTranscriptMessage(message);
+    void (async () => {
+      if (userMessage) {
+        await persistScholarChatTranscriptMessage(userMessage, prompt);
+      }
+      await persistScholarChatTranscriptMessage(message, prompt);
+    })();
+  }
+
+  let scholarChatSessionStateLoadPromise: Promise<void> | null = null;
+  let scholarChatSessionCreatePromise: Promise<string> | null = null;
+
+  async function hydrateScholarChatSessionState() {
+    if (scholarChatSessionStateLoadPromise) {
+      return scholarChatSessionStateLoadPromise;
+    }
+    scholarChatSessionStateLoadPromise = (async () => {
+      try {
+        const sessions = await invoke<ScholarChatSessionSummary[]>("list_scholar_chat_sessions", {
+          root: ".",
+        });
+        setScholarChatSessionSummaries(sessions);
+        if (sessions.length > 0) {
+          const activeSession = sessions[0];
+          setScholarChatSessionId(activeSession.session_id);
+          const transcript = await invoke<ScholarChatTranscriptMessage[]>("load_scholar_chat_session_transcript", {
+            root: ".",
+            session_id: activeSession.session_id,
+          });
+          setScholarChatTranscript(transcript);
+        } else {
+          setScholarChatSessionId(null);
+          setScholarChatTranscript([]);
+        }
+      } catch (err) {
+        console.error("Failed to hydrate Scholar Chat sessions", err);
+      }
+    })().finally(() => {
+      scholarChatSessionStateLoadPromise = null;
     });
+    return scholarChatSessionStateLoadPromise;
+  }
+
+  async function ensureScholarChatSession(titleHint: string | null) {
+    await hydrateScholarChatSessionState();
+    const existingSessionId = scholarChatSessionId();
+    if (existingSessionId) {
+      return existingSessionId;
+    }
+    if (!scholarChatSessionCreatePromise) {
+      scholarChatSessionCreatePromise = (async () => {
+        const created = await invoke<ScholarChatSessionSummary>("create_scholar_chat_session", {
+          root: ".",
+          title: titleHint ? compactTextPreview(titleHint, 120) : null,
+        });
+        setScholarChatSessionId(created.session_id);
+        setScholarChatSessionSummaries((current) => [
+          created,
+          ...current.filter((item) => item.session_id !== created.session_id),
+        ]);
+        return created.session_id;
+      })().finally(() => {
+        scholarChatSessionCreatePromise = null;
+      });
+    }
+    return scholarChatSessionCreatePromise;
+  }
+
+  async function persistScholarChatTranscriptMessage(message: ScholarChatTranscriptMessage, titleHint: string | null) {
+    try {
+      const sessionId = await ensureScholarChatSession(titleHint);
+      const updatedSummary = await invoke<ScholarChatSessionSummary>("append_scholar_chat_transcript_entry", {
+        root: ".",
+        session_id: sessionId,
+        message,
+      });
+      setScholarChatSessionId(updatedSummary.session_id);
+      setScholarChatSessionSummaries((current) => [
+        updatedSummary,
+        ...current.filter((item) => item.session_id !== updatedSummary.session_id),
+      ]);
+    } catch (err) {
+      console.error("Failed to persist Scholar Chat transcript message", err);
+    }
   }
 
   function clearScholarChatGroundedAnswerBuildRequestPreview() {
@@ -3233,6 +3326,7 @@ export default function App() {
 
   onMount(() => {
     void loadScholarChatSourceContext();
+    void hydrateScholarChatSessionState();
     void loadStatus();
     void loadManagedLlamaServerStatus();
   });
