@@ -36,6 +36,7 @@ This roadmap now has a clear split between implemented foundations, preview-firs
 | Current / completed Phase 148.0 | Artifact export UX hardening |
 | Current / completed Phase 149.0 | Codex project operating manual |
 | Current / completed Phase 150.0 | CI verification baseline |
+| Current / completed Phase 152.0 | App.tsx size / boundary review |
 | Known missing product workflows | scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 | Recommended next product slices | scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 
@@ -68,6 +69,7 @@ Phase 147.0 improves the frontend-only first-run happy path with clearer empty s
 Phase 148.0 hardens the existing explicit Answer Artifact export UX with clearer local-destination guidance, an explicit filesystem-write boundary, non-blocking issue warnings, and a better-labeled post-export result. It does not change export commands, format, path validation, bundle inspection, or backend behavior.
 Phase 149.0 adds repo-local Codex operating guidance, reusable phase templates, a staged V1/V2/V3 delivery map, and non-destructive verification and scope-check helper scripts. It changes no product code, backend behavior, dependencies, export logic, or UI workflow behavior.
 Phase 150.0 adds a minimal GitHub Actions verification baseline for pull requests and pushes to `main`. It mirrors the existing local build, cargo check, scope-check, and whitespace verification flow without changing product code, dependencies, release behavior, or bundle/build outputs beyond CI verification.
+Phase 152.0 adds a docs-only boundary review for the oversized `src/App.tsx` surface. It documents current structure, safe future extraction candidates, risk tiers, and small follow-up refactor phases without changing product code, dependencies, runtime behavior, or UI behavior.
 Phase 116 remains backend-only, preview-only, and in-memory. It does not add Evidence Pack creation, citations, writes, retrieval execution, provider expansion, runtime/model/LLM behavior, or answer generation.
 Phase 117.0 adds a backend-only Local Evidence Pack Creation MVP. It uses existing local source/retrieval/evidence data and managed Evidence Pack storage, stays deterministic and path-safe, and does not add network access, model/runtime/LLM behavior, or answer generation.
 Phase 118.0 adds a backend-only PDF Text Extraction MVP. It supports local PDFs when a text layer is present, preserves page-level locators, reuses the existing extraction-report / source-registry / corpus-layout contracts, and stays OCR-free and preview-only. It does not add OCR, web requests, scraping, downloads, connectors, source import, model loading, runtime inference, LLM calls, answer generation, Evidence Pack creation, artifact writes, persistence, registry status changes, or audit writes.
