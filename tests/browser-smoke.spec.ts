@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 type TauriInvokeHandler = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
 type BrowserSmokeTauriInternals = {
@@ -101,6 +101,25 @@ function installBrowserSmokeTauriShim() {
   };
 }
 
+async function expectWorkspaceReachable(
+  page: Page,
+  workspaceNav: Locator,
+  options: {
+    buttonName: string | RegExp;
+    headingLevel: number;
+    headingName: string;
+    workspaceMarker?: string;
+  },
+) {
+  const workspaceButton = workspaceNav.getByRole("button", { name: options.buttonName });
+  await expect(workspaceButton).toBeVisible();
+  await workspaceButton.click();
+  await expect(page.getByRole("heading", { level: options.headingLevel, name: options.headingName })).toBeVisible();
+  if (options.workspaceMarker) {
+    await expect(page.locator(`[data-workspace="${options.workspaceMarker}"]`)).toBeVisible();
+  }
+}
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(installBrowserSmokeTauriShim);
 });
@@ -127,21 +146,24 @@ test("loads the shell and Scholar Chat smoke surface", async ({ page }) => {
   await expect(page.getByText("Browser smoke session")).toBeVisible();
   await expect(page.getByText("Transcript loaded. Composer state stays in memory.")).toBeVisible();
   const workspaceNav = page.getByRole("complementary", { name: "Workspace navigation" });
-  const sourcesWorkspaceButton = workspaceNav.getByRole("button", { name: /Sources/ });
-  await expect(sourcesWorkspaceButton).toBeVisible();
-  await sourcesWorkspaceButton.click();
-  await expect(page.getByRole("heading", { level: 2, name: "Sources" })).toBeVisible();
-  await expect(page.locator('[data-workspace="sources"]')).toBeVisible();
-  const evidencePacksWorkspaceButton = workspaceNav.getByRole("button", { name: /Evidence Packs/ });
-  await expect(evidencePacksWorkspaceButton).toBeVisible();
-  await evidencePacksWorkspaceButton.click();
-  await expect(page.getByRole("heading", { level: 1, name: "Evidence Packs" })).toBeVisible();
-  await expect(page.locator('[data-workspace="evidence_packs"]')).toBeVisible();
-  const developerDiagnosticsWorkspaceButton = workspaceNav.getByRole("button", { name: "Artifacts & Diagnostics" });
-  await expect(developerDiagnosticsWorkspaceButton).toBeVisible();
-  await developerDiagnosticsWorkspaceButton.click();
-  await expect(page.getByRole("heading", { level: 1, name: "Artifacts & Diagnostics" })).toBeVisible();
-  await expect(page.locator('[data-workspace="developer_diagnostics"]')).toBeVisible();
+  await expectWorkspaceReachable(page, workspaceNav, {
+    buttonName: /Sources/,
+    headingLevel: 2,
+    headingName: "Sources",
+    workspaceMarker: "sources",
+  });
+  await expectWorkspaceReachable(page, workspaceNav, {
+    buttonName: /Evidence Packs/,
+    headingLevel: 1,
+    headingName: "Evidence Packs",
+    workspaceMarker: "evidence_packs",
+  });
+  await expectWorkspaceReachable(page, workspaceNav, {
+    buttonName: "Artifacts & Diagnostics",
+    headingLevel: 1,
+    headingName: "Artifacts & Diagnostics",
+    workspaceMarker: "developer_diagnostics",
+  });
   const hasTauriShim = await page.evaluate(() => {
     const globalWindow = window as Window & { isTauri?: boolean; __TAURI_INTERNALS__?: { invoke?: unknown } };
     return Boolean(globalWindow.isTauri && globalWindow.__TAURI_INTERNALS__?.invoke);
