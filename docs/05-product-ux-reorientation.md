@@ -103,6 +103,7 @@ Phase 151.0 implements the chat-first shell polish pass: the area-switcher remai
 Phase 154.0 implements the Scholar Chat session store foundation: session history is per-project, file-backed under `.aegis/chat/`, SQLite is still out of scope, and no session rail UI is added yet.
 Phase 155.0 implements the Scholar Chat session rail UI: nested session history appears inside Scholar Chat, users can switch sessions or start a new one explicitly, and the existing preview/check behavior and session-store backend remain unchanged.
 Phase 156.0 implements the Scholar Chat session rename/delete controls: the rail gains explicit per-session rename and delete actions, delete uses a clear confirmation step, and the existing preview/check behavior and session-store backend remain unchanged.
+Phase 157.0 implements a frontend browser smoke harness for the Vite dev server: it loads the real app in Chromium with a test-only Tauri shim, checks the shell and Scholar Chat session rail are visible, and leaves product behavior unchanged.
 
 ## Acceptance Criteria For Future UX Work
 
