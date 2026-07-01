@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test:browser-smoke": "playwright test tests/browser-smoke.spec.ts",
+    "test:backend": "cargo test --manifest-path ./src-tauri/Cargo.toml",
     "verify:fast": "powershell -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -Fast",
     "verify:backend": "powershell -ExecutionPolicy Bypass -File ./scripts/verify.ps1 -BackendOnly",
     "verify": "powershell -ExecutionPolicy Bypass -File ./scripts/verify.ps1"
