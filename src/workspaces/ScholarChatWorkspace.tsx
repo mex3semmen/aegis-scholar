@@ -218,7 +218,7 @@ export default function ScholarChatWorkspace(props: any): JSX.Element {
       </div>
 
       <div class="chat-column">
-        <div class="chat-surface">
+        <div class="chat-surface chat-surface--calm">
           {!hasTranscript ? (
             <div class="chat-welcome-card">
               <div class="chat-welcome-copy">
@@ -244,7 +244,7 @@ export default function ScholarChatWorkspace(props: any): JSX.Element {
             </div>
           ) : null}
 
-          <div class="chat-composer" aria-label="Scholar Chat composer">
+          <div class="chat-composer chat-composer--anchored" aria-label="Scholar Chat composer">
             <label class="composer-field">
               Prompt
               <textarea

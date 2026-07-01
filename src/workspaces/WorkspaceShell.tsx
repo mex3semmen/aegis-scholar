@@ -22,7 +22,11 @@ export default function WorkspaceShell(props: WorkspaceShellProps): JSX.Element 
         <p class="eyebrow">Workspaces</p>
         <div class="workspace-nav-list">
           {props.workspaceSections.map((item) => (
-            <button classList={{ active: props.activeWorkspace === item.value }} onClick={() => props.onActivate(item.value)}>
+            <button
+              type="button"
+              classList={{ active: props.activeWorkspace === item.value }}
+              onClick={() => props.onActivate(item.value)}
+            >
               <span>{item.label}</span>
               <small>{item.description}</small>
             </button>
@@ -32,7 +36,6 @@ export default function WorkspaceShell(props: WorkspaceShellProps): JSX.Element 
 
       <div class="workspace-content">
         <section class="workspace-banner">
-          <p class="eyebrow">AEGIS Scholar</p>
           <h1>{props.activeLabel || "Scholar Chat"}</h1>
           <p class="muted">{props.activeDescription || "Chat-first academic workflow"}</p>
         </section>
