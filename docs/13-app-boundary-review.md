@@ -285,3 +285,14 @@ The following should explicitly stay out of the first extraction phases:
 Treat `App.tsx` reduction as a sequence of small mechanical cleanup phases, not as a one-time architecture rewrite.
 
 The best next move is to reduce presentation and helper bulk first, then reevaluate the remaining orchestration complexity with smaller diffs and clearer boundaries.
+
+
+## Phase 153.0 result
+
+Phase 153.0 completes the first low-risk extraction promised by this review:
+
+- pure frontend types moved to `src/appTypes.ts`
+- stateless helpers moved to `src/appHelpers.ts`
+- `renderMetricGrid`, constants, signals, loaders, invoke handlers, mutation flows, and JSX stayed in `src/App.tsx`
+
+This confirms the recommended order: types and state-free helpers can move first without touching orchestration or render boundaries.
