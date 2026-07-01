@@ -1,4 +1,4 @@
-import type { JSX } from "solid-js";
+import { createSignal, type JSX } from "solid-js";
 import type {
   GroundingPolicy,
   ScholarChatMode,
@@ -15,8 +15,12 @@ type ScholarChatWorkspaceProps = {
   transcript: ScholarChatTranscriptMessage[];
   sessions: ScholarChatSessionSummary[];
   activeSessionId: string | null;
+  sessionRailError: string | null;
+  sessionActionLoading: { kind: "rename" | "delete"; sessionId: string } | null;
   onSelectSession: (sessionId: string) => void;
   onNewSession: () => void;
+  onRenameSession: (sessionId: string, title: string) => Promise<boolean>;
+  onDeleteSession: (sessionId: string) => Promise<boolean>;
   suggestions: PromptSuggestion[];
   runtimeReadinessNote: string;
   prompt: string;
@@ -44,6 +48,10 @@ function formatSessionMessageCount(messageCount: number) {
 }
 
 export default function ScholarChatWorkspace(props: ScholarChatWorkspaceProps): JSX.Element {
+  const [editingSessionId, setEditingSessionId] = createSignal<string | null>(null);
+  const [editingSessionTitle, setEditingSessionTitle] = createSignal("");
+  const [renameValidationError, setRenameValidationError] = createSignal<string | null>(null);
+  const [deleteConfirmSessionId, setDeleteConfirmSessionId] = createSignal<string | null>(null);
   const hasTranscript = props.transcript.length > 0;
 
   function renderTranscriptMessage(message: any) {
@@ -250,6 +258,55 @@ export default function ScholarChatWorkspace(props: ScholarChatWorkspaceProps): 
     );
   }
 
+  function beginRenameSession(session: ScholarChatSessionSummary) {
+    setDeleteConfirmSessionId(null);
+    setRenameValidationError(null);
+    setEditingSessionTitle(session.title);
+    setEditingSessionId(session.session_id);
+    queueMicrotask(() => {
+      const input = document.getElementById(`session-rename-${session.session_id}`) as HTMLInputElement | null;
+      input?.focus();
+      input?.select();
+    });
+  }
+
+  function cancelRenameSession() {
+    setEditingSessionId(null);
+    setEditingSessionTitle("");
+    setRenameValidationError(null);
+  }
+
+  async function commitRenameSession(sessionId: string) {
+    const trimmedTitle = editingSessionTitle().trim();
+    if (!trimmedTitle) {
+      setRenameValidationError("Session title cannot be blank.");
+      return;
+    }
+
+    const success = await props.onRenameSession(sessionId, trimmedTitle);
+    if (success) {
+      cancelRenameSession();
+    }
+  }
+
+  function beginDeleteSession(session: ScholarChatSessionSummary) {
+    setEditingSessionId(null);
+    setEditingSessionTitle("");
+    setRenameValidationError(null);
+    setDeleteConfirmSessionId(session.session_id);
+  }
+
+  function cancelDeleteSession() {
+    setDeleteConfirmSessionId(null);
+  }
+
+  async function commitDeleteSession(sessionId: string) {
+    const success = await props.onDeleteSession(sessionId);
+    if (success) {
+      cancelDeleteSession();
+    }
+  }
+
   return (
     <section class="chat-workspace" id="scholar-chat" data-workspace="scholar_chat">
       <div class="chat-workspace-header">
@@ -267,7 +324,15 @@ export default function ScholarChatWorkspace(props: ScholarChatWorkspaceProps): 
               <p class="eyebrow">Sessions</p>
               <p class="muted">Saved per project. History loads here only when you choose it.</p>
             </div>
-            <button type="button" class="secondary-action chat-session-new-action" onClick={props.onNewSession}>
+            <button
+              type="button"
+              class="secondary-action chat-session-new-action"
+              onClick={() => {
+                cancelRenameSession();
+                cancelDeleteSession();
+                props.onNewSession();
+              }}
+            >
               New session
             </button>
           </div>
@@ -281,18 +346,134 @@ export default function ScholarChatWorkspace(props: ScholarChatWorkspaceProps): 
             </strong>
           </div>
 
+          {props.sessionActionLoading ? (
+            <p class="chat-session-rail-loading muted">
+              {props.sessionActionLoading.kind === "rename" ? "Renaming session..." : "Deleting session..."}
+            </p>
+          ) : null}
+
+          {props.sessionRailError ? <p class="chat-session-rail-error">{props.sessionRailError}</p> : null}
+
           {props.sessions.length > 0 ? (
-            <div class="chat-session-list" role="list" aria-label="Saved Scholar Chat sessions">
+            <div class="chat-session-list" aria-label="Saved Scholar Chat sessions">
               {props.sessions.map((session) => (
-                <button
-                  type="button"
-                  role="listitem"
-                  classList={{ active: props.activeSessionId === session.session_id }}
-                  onClick={() => props.onSelectSession(session.session_id)}
+                <article
+                  class="chat-session-item"
+                  classList={{
+                    active: props.activeSessionId === session.session_id,
+                    editing: editingSessionId() === session.session_id,
+                    confirming: deleteConfirmSessionId() === session.session_id,
+                  }}
                 >
-                  <span>{session.title}</span>
-                  <small>{formatSessionMessageCount(session.message_count)}</small>
-                </button>
+                  <button
+                    type="button"
+                    class="chat-session-select"
+                    classList={{ active: props.activeSessionId === session.session_id }}
+                    aria-current={props.activeSessionId === session.session_id ? "true" : undefined}
+                    disabled={Boolean(props.sessionActionLoading)}
+                    onClick={() => {
+                      cancelRenameSession();
+                      cancelDeleteSession();
+                      props.onSelectSession(session.session_id);
+                    }}
+                  >
+                    <span>{session.title}</span>
+                    <small>{formatSessionMessageCount(session.message_count)}</small>
+                  </button>
+
+                  {!editingSessionId() && !deleteConfirmSessionId() ? (
+                    <div class="chat-session-item-actions">
+                      <button
+                        type="button"
+                        class="chat-session-secondary-action"
+                        disabled={Boolean(props.sessionActionLoading)}
+                        onClick={() => beginRenameSession(session)}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        type="button"
+                        class="chat-session-danger-action"
+                        disabled={Boolean(props.sessionActionLoading)}
+                        onClick={() => beginDeleteSession(session)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {editingSessionId() === session.session_id ? (
+                    <div class="chat-session-inline-editor">
+                      <label class="chat-session-inline-field">
+                        Rename session
+                        <input
+                          id={`session-rename-${session.session_id}`}
+                          type="text"
+                          value={editingSessionTitle()}
+                          onInput={(event) => {
+                            setEditingSessionTitle(event.currentTarget.value);
+                            setRenameValidationError(null);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              void commitRenameSession(session.session_id);
+                            }
+                            if (event.key === "Escape") {
+                              event.preventDefault();
+                              cancelRenameSession();
+                            }
+                          }}
+                          disabled={Boolean(props.sessionActionLoading)}
+                          placeholder="Enter a new session title"
+                        />
+                      </label>
+                      {renameValidationError() ? <p class="chat-session-inline-error">{renameValidationError()}</p> : null}
+                      <div class="chat-session-inline-actions">
+                        <button
+                          type="button"
+                          class="chat-session-save-action"
+                          disabled={Boolean(props.sessionActionLoading) || !editingSessionTitle().trim()}
+                          onClick={() => void commitRenameSession(session.session_id)}
+                        >
+                          {props.sessionActionLoading?.kind === "rename" && props.sessionActionLoading.sessionId === session.session_id ? "Saving..." : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          class="chat-session-cancel-action"
+                          disabled={Boolean(props.sessionActionLoading)}
+                          onClick={cancelRenameSession}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {deleteConfirmSessionId() === session.session_id ? (
+                    <div class="chat-session-delete-panel">
+                      <p class="chat-session-delete-copy">Delete removes saved session history for this project.</p>
+                      <div class="chat-session-inline-actions">
+                        <button
+                          type="button"
+                          class="chat-session-danger-action"
+                          disabled={Boolean(props.sessionActionLoading)}
+                          onClick={() => void commitDeleteSession(session.session_id)}
+                        >
+                          {props.sessionActionLoading?.kind === "delete" && props.sessionActionLoading.sessionId === session.session_id ? "Deleting..." : "Delete session"}
+                        </button>
+                        <button
+                          type="button"
+                          class="chat-session-cancel-action"
+                          disabled={Boolean(props.sessionActionLoading)}
+                          onClick={cancelDeleteSession}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </article>
               ))}
             </div>
           ) : (

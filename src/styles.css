@@ -296,36 +296,141 @@ button:disabled {
   gap: var(--aegis-space-2);
 }
 
-.chat-session-list button {
+.chat-session-item {
+  display: grid;
+  gap: var(--aegis-space-2);
+  border: 1px solid var(--aegis-color-border-soft);
+  border-radius: 18px;
+  padding: 0.75rem;
+  background: var(--aegis-color-surface-panel);
+}
+
+.chat-session-item.active {
+  border-color: var(--aegis-color-border-accent-soft);
+}
+
+.chat-session-select {
   display: grid;
   gap: 0.16rem;
   text-align: left;
   background: var(--aegis-color-surface-shell-button);
-  border-radius: 16px;
+  border-radius: 14px;
   border: 1px solid var(--aegis-color-border-soft);
   padding: 0.78rem 0.82rem;
   color: var(--aegis-color-text-strong);
   box-shadow: none;
+  width: 100%;
 }
 
-.chat-session-list button:hover {
+.chat-session-select:hover {
   background: var(--aegis-color-surface-shell-button-hover);
   border-color: var(--aegis-color-border-accent-soft);
 }
 
-.chat-session-list button.active {
+.chat-session-select.active {
   border-color: rgba(96, 165, 250, 0.3);
   background: var(--aegis-color-surface-shell-button-active);
   box-shadow: inset 3px 0 0 var(--aegis-color-accent);
 }
 
-.chat-session-list button span {
+.chat-session-select span {
   font-weight: 600;
 }
 
-.chat-session-list button small {
+.chat-session-select small {
   color: var(--aegis-color-text-muted);
   line-height: 1.35;
+}
+
+.chat-session-item-actions,
+.chat-session-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--aegis-space-2);
+}
+
+.chat-session-item-actions button,
+.chat-session-inline-actions button {
+  min-width: 0;
+  padding: 0.56rem 0.7rem;
+}
+
+.chat-session-secondary-action {
+  background: var(--aegis-color-surface-shell-button);
+  border-color: var(--aegis-color-border-soft);
+}
+
+.chat-session-secondary-action:hover {
+  background: var(--aegis-color-surface-shell-button-hover);
+}
+
+.chat-session-danger-action {
+  background: rgba(127, 29, 29, 0.34);
+  border-color: rgba(248, 113, 113, 0.32);
+  color: #fee2e2;
+}
+
+.chat-session-danger-action:hover {
+  background: rgba(153, 27, 27, 0.46);
+}
+
+.chat-session-save-action {
+  background: linear-gradient(180deg, var(--aegis-color-accent-strong) 0%, var(--aegis-color-accent-deep) 100%);
+  border-color: var(--aegis-color-border-accent-soft);
+}
+
+.chat-session-save-action:hover {
+  background: linear-gradient(180deg, var(--aegis-color-accent) 0%, var(--aegis-color-accent-strong) 100%);
+}
+
+.chat-session-cancel-action {
+  background: var(--aegis-color-surface-shell-button);
+  border-color: var(--aegis-color-border-soft);
+}
+
+.chat-session-cancel-action:hover {
+  background: var(--aegis-color-surface-shell-button-hover);
+}
+
+.chat-session-inline-editor,
+.chat-session-delete-panel {
+  display: grid;
+  gap: var(--aegis-space-2);
+  padding: 0.85rem;
+  border: 1px solid var(--aegis-color-border-soft);
+  border-radius: 14px;
+  background: var(--aegis-color-surface-panel-strong);
+}
+
+.chat-session-inline-field {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--aegis-color-text-muted);
+}
+
+.chat-session-inline-field input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0;
+}
+
+.chat-session-inline-error,
+.chat-session-rail-error,
+.chat-session-rail-loading {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.chat-session-rail-error,
+.chat-session-inline-error {
+  color: #fca5a5;
+}
+
+.chat-session-delete-copy {
+  margin: 0;
+  color: var(--aegis-color-text-muted);
+  line-height: 1.45;
 }
 
 .chat-session-empty-state {
@@ -1275,6 +1380,16 @@ pre {
   .chat-session-rail {
     position: static;
     max-height: none;
+  }
+
+  .chat-session-item-actions,
+  .chat-session-inline-actions {
+    flex-direction: column;
+  }
+
+  .chat-session-item-actions button,
+  .chat-session-inline-actions button {
+    width: 100%;
   }
 
   .chat-surface {

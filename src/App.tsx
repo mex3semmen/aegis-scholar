@@ -311,6 +311,11 @@ export default function App() {
   const [scholarChatTranscript, setScholarChatTranscript] = createSignal<ScholarChatTranscriptMessage[]>([]);
   const [scholarChatSessionId, setScholarChatSessionId] = createSignal<string | null>(null);
   const [scholarChatSessionSummaries, setScholarChatSessionSummaries] = createSignal<ScholarChatSessionSummary[]>([]);
+  const [scholarChatSessionRailError, setScholarChatSessionRailError] = createSignal<string | null>(null);
+  const [scholarChatSessionActionLoading, setScholarChatSessionActionLoading] = createSignal<{
+    kind: "rename" | "delete";
+    sessionId: string;
+  } | null>(null);
   const [scholarChatScientificMetadataProviderRequestPreview, setScholarChatScientificMetadataProviderRequestPreview] = createSignal<ScholarChatScientificMetadataProviderRequestPreview | null>(null);
   const [scholarChatScientificMetadataProviderRequestError, setScholarChatScientificMetadataProviderRequestError] = createSignal<string | null>(null);
   const [scholarChatScientificMetadataProviderRequestValidationError, setScholarChatScientificMetadataProviderRequestValidationError] = createSignal<string | null>(null);
@@ -1614,6 +1619,27 @@ export default function App() {
     return scholarChatSessionStateLoadPromise;
   }
 
+  async function refreshScholarChatSessionSummaries() {
+    try {
+      const sessions = await invoke<ScholarChatSessionSummary[]>("list_scholar_chat_sessions", {
+        root: ".",
+      });
+      setScholarChatSessionSummaries(sessions);
+      const currentSessionId = scholarChatSessionId();
+      if (currentSessionId && !sessions.some((item) => item.session_id === currentSessionId)) {
+        scholarChatSessionViewRequestId += 1;
+        setScholarChatSessionId(null);
+        setScholarChatTranscript([]);
+        resetScholarChatConversationPreviewState();
+      }
+      setScholarChatSessionRailError(null);
+      return sessions;
+    } catch (err) {
+      setScholarChatSessionRailError(sanitizeBackendError(err));
+      return null;
+    }
+  }
+
   function startScholarChatNewSession() {
     scholarChatSessionViewRequestId += 1;
     setScholarChatSessionId(null);
@@ -1646,6 +1672,69 @@ export default function App() {
         return;
       }
       setScholarChatError(sanitizeBackendError(err));
+    }
+  }
+
+  async function renameScholarChatSession(sessionId: string, title: string) {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      setScholarChatSessionRailError("Session title cannot be blank.");
+      return false;
+    }
+
+    if (scholarChatSessionActionLoading()) {
+      return false;
+    }
+
+    setScholarChatSessionRailError(null);
+    setScholarChatSessionActionLoading({ kind: "rename", sessionId });
+    try {
+      const updatedSession = await invoke<ScholarChatSessionSummary>("rename_scholar_chat_session", {
+        root: ".",
+        session_id: sessionId,
+        title: trimmedTitle,
+      });
+      setScholarChatSessionSummaries((current) => [
+        updatedSession,
+        ...current.filter((item) => item.session_id !== updatedSession.session_id),
+      ]);
+      await refreshScholarChatSessionSummaries();
+      return true;
+    } catch (err) {
+      setScholarChatSessionRailError(sanitizeBackendError(err));
+      return false;
+    } finally {
+      setScholarChatSessionActionLoading((current) => (current?.kind === "rename" && current.sessionId === sessionId ? null : current));
+    }
+  }
+
+  async function deleteScholarChatSession(sessionId: string) {
+    if (scholarChatSessionActionLoading()) {
+      return false;
+    }
+
+    const wasActiveSession = scholarChatSessionId() === sessionId;
+    setScholarChatSessionRailError(null);
+    setScholarChatSessionActionLoading({ kind: "delete", sessionId });
+    try {
+      const deletedSession = await invoke<ScholarChatSessionSummary>("delete_scholar_chat_session", {
+        root: ".",
+        session_id: sessionId,
+      });
+      setScholarChatSessionSummaries((current) => current.filter((item) => item.session_id !== deletedSession.session_id));
+      if (wasActiveSession) {
+        scholarChatSessionViewRequestId += 1;
+        setScholarChatSessionId(null);
+        setScholarChatTranscript([]);
+        resetScholarChatConversationPreviewState();
+      }
+      await refreshScholarChatSessionSummaries();
+      return true;
+    } catch (err) {
+      setScholarChatSessionRailError(sanitizeBackendError(err));
+      return false;
+    } finally {
+      setScholarChatSessionActionLoading((current) => (current?.kind === "delete" && current.sessionId === sessionId ? null : current));
     }
   }
 
@@ -3419,8 +3508,12 @@ export default function App() {
           transcript={scholarChatTranscript()}
           sessions={scholarChatSessionSummaries()}
           activeSessionId={scholarChatSessionId()}
+          sessionRailError={scholarChatSessionRailError()}
+          sessionActionLoading={scholarChatSessionActionLoading()}
           onSelectSession={selectScholarChatSession}
           onNewSession={startScholarChatNewSession}
+          onRenameSession={renameScholarChatSession}
+          onDeleteSession={deleteScholarChatSession}
           suggestions={SCHOLAR_CHAT_PROMPT_SUGGESTIONS}
           runtimeReadinessNote={managedLlamaServerReadinessSummary()}
           prompt={scholarChatPrompt()}
