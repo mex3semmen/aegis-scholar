@@ -33,17 +33,9 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 
-      - name: Build frontend
+      - name: Run fast verify
         shell: pwsh
-        run: npm run build
-
-      - name: Run browser smoke
-        shell: pwsh
-        run: npm run test:browser-smoke
-
-      - name: Check Rust backend
-        shell: pwsh
-        run: cargo check --manifest-path .\src-tauri\Cargo.toml
+        run: npm run verify:fast
 
       - name: Run V1 scope check
         shell: pwsh
