@@ -1571,24 +1571,35 @@ export default function App() {
 
   let scholarChatSessionStateLoadPromise: Promise<void> | null = null;
   let scholarChatSessionCreatePromise: Promise<string> | null = null;
+  let scholarChatSessionViewRequestId = 0;
 
   async function hydrateScholarChatSessionState() {
     if (scholarChatSessionStateLoadPromise) {
       return scholarChatSessionStateLoadPromise;
     }
+    const requestId = ++scholarChatSessionViewRequestId;
     scholarChatSessionStateLoadPromise = (async () => {
       try {
         const sessions = await invoke<ScholarChatSessionSummary[]>("list_scholar_chat_sessions", {
           root: ".",
         });
+        if (requestId !== scholarChatSessionViewRequestId) {
+          return;
+        }
         setScholarChatSessionSummaries(sessions);
         if (sessions.length > 0) {
-          const activeSession = sessions[0];
+          const currentSessionId = scholarChatSessionId();
+          const activeSession = currentSessionId
+            ? sessions.find((item) => item.session_id === currentSessionId) ?? sessions[0]
+            : sessions[0];
           setScholarChatSessionId(activeSession.session_id);
           const transcript = await invoke<ScholarChatTranscriptMessage[]>("load_scholar_chat_session_transcript", {
             root: ".",
             session_id: activeSession.session_id,
           });
+          if (requestId !== scholarChatSessionViewRequestId) {
+            return;
+          }
           setScholarChatTranscript(transcript);
         } else {
           setScholarChatSessionId(null);
@@ -1603,8 +1614,42 @@ export default function App() {
     return scholarChatSessionStateLoadPromise;
   }
 
+  function startScholarChatNewSession() {
+    scholarChatSessionViewRequestId += 1;
+    setScholarChatSessionId(null);
+    setScholarChatTranscript([]);
+    resetScholarChatConversationPreviewState();
+  }
+
+  async function selectScholarChatSession(sessionId: string) {
+    const trimmedSessionId = sessionId.trim();
+    if (!trimmedSessionId || trimmedSessionId === scholarChatSessionId()) {
+      return;
+    }
+
+    const requestId = ++scholarChatSessionViewRequestId;
+    setScholarChatError(null);
+    setScholarChatValidationError(null);
+    try {
+      const transcript = await invoke<ScholarChatTranscriptMessage[]>("load_scholar_chat_session_transcript", {
+        root: ".",
+        session_id: trimmedSessionId,
+      });
+      if (requestId !== scholarChatSessionViewRequestId) {
+        return;
+      }
+      setScholarChatSessionId(trimmedSessionId);
+      setScholarChatTranscript(transcript);
+      resetScholarChatConversationPreviewState();
+    } catch (err) {
+      if (requestId !== scholarChatSessionViewRequestId) {
+        return;
+      }
+      setScholarChatError(sanitizeBackendError(err));
+    }
+  }
+
   async function ensureScholarChatSession(titleHint: string | null) {
-    await hydrateScholarChatSessionState();
     const existingSessionId = scholarChatSessionId();
     if (existingSessionId) {
       return existingSessionId;
@@ -3353,25 +3398,29 @@ export default function App() {
     >
       <div class="workspace-stack">
         <SourcesWorkspace
-        status={status()}
-        statusError={statusError()}
-        sourceContextLoading={scholarChatSourceContextLoading()}
-        sourceContextError={scholarChatSourceContextError()}
-        sourceContext={scholarChatSourceContext()}
-        sourceContextSelectedIds={scholarChatSourceContextSelectedIds()}
-        renderFirstRunSourceReadiness={renderFirstRunSourceReadiness}
-        renderSourceWorkflowActionHints={renderSourceWorkflowActionHints}
-        selectedSourceSummary={scholarChatSelectedSourceIdsSummary()}
-        toggleSourceContext={toggleScholarChatSourceContext}
-        setScholarChatPreview={setScholarChatPreview}
-        setScholarChatExecutionGatePreview={setScholarChatExecutionGatePreview}
-        formatSnakeCaseLabel={formatSnakeCaseLabel}
-        refreshCorpusStatus={loadStatus}
-        refreshSourceContext={loadScholarChatSourceContext}
-      />
+          status={status()}
+          statusError={statusError()}
+          sourceContextLoading={scholarChatSourceContextLoading()}
+          sourceContextError={scholarChatSourceContextError()}
+          sourceContext={scholarChatSourceContext()}
+          sourceContextSelectedIds={scholarChatSourceContextSelectedIds()}
+          renderFirstRunSourceReadiness={renderFirstRunSourceReadiness}
+          renderSourceWorkflowActionHints={renderSourceWorkflowActionHints}
+          selectedSourceSummary={scholarChatSelectedSourceIdsSummary()}
+          toggleSourceContext={toggleScholarChatSourceContext}
+          setScholarChatPreview={setScholarChatPreview}
+          setScholarChatExecutionGatePreview={setScholarChatExecutionGatePreview}
+          formatSnakeCaseLabel={formatSnakeCaseLabel}
+          refreshCorpusStatus={loadStatus}
+          refreshSourceContext={loadScholarChatSourceContext}
+        />
 
         <ScholarChatWorkspace
           transcript={scholarChatTranscript()}
+          sessions={scholarChatSessionSummaries()}
+          activeSessionId={scholarChatSessionId()}
+          onSelectSession={selectScholarChatSession}
+          onNewSession={startScholarChatNewSession}
           suggestions={SCHOLAR_CHAT_PROMPT_SUGGESTIONS}
           runtimeReadinessNote={managedLlamaServerReadinessSummary()}
           prompt={scholarChatPrompt()}
@@ -3399,12 +3448,12 @@ export default function App() {
           setScholarChatGroundingPolicy(value as GroundingPolicy);
           resetScholarChatConversationPreviewState();
         }}
-        renderMetricGrid={renderMetricGrid}
-        formatSnakeCaseLabel={formatSnakeCaseLabel}
-      />
+          renderMetricGrid={renderMetricGrid}
+          formatSnakeCaseLabel={formatSnakeCaseLabel}
+        />
 
-      <details class="advanced-panels">
-            <summary>Advanced preview panels</summary>
+        <details class="advanced-panels">
+          <summary>Advanced preview panels</summary>
         <div class="artifact-overview">
           <h3>Retrieval preview</h3>
           <p class="muted">

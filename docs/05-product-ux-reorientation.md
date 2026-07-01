@@ -101,6 +101,7 @@ Phase 149.0 adds repo-local Codex operating rules, a reusable phase template, a 
 Phase 150.0 mirrors the local verification baseline on GitHub with a minimal Windows CI workflow for build, cargo check, scope review, and diff/whitespace checking. It changes no product UX behavior.
 Phase 151.0 implements the chat-first shell polish pass: the area-switcher remains the sidebar model, the repeated workspace banner is reduced to a minimal title line, shell-local design tokens are introduced for the nav and composer chrome, and Scholar Chat keeps the same preview and execution-gate behavior while feeling calmer and more chat-like.
 Phase 154.0 implements the Scholar Chat session store foundation: session history is per-project, file-backed under `.aegis/chat/`, SQLite is still out of scope, and no session rail UI is added yet.
+Phase 155.0 implements the Scholar Chat session rail UI: nested session history appears inside Scholar Chat, users can switch sessions or start a new one explicitly, and the existing preview/check behavior and session-store backend remain unchanged.
 
 ## Acceptance Criteria For Future UX Work
 

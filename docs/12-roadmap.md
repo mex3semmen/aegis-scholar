@@ -38,6 +38,7 @@ This roadmap now has a clear split between implemented foundations, preview-firs
 | Current / completed Phase 150.0 | CI verification baseline |
 | Current / completed Phase 152.0 | App.tsx size / boundary review |
 | Current / completed Phase 153.0 | App shared types and helpers extraction |
+| Current / completed Phase 155.0 | Scholar Chat session rail UI |
 | Known missing product workflows | scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 | Recommended next product slices | scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 

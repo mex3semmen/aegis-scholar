@@ -5,6 +5,8 @@
   --aegis-color-text-muted: #94a3b8;
   --aegis-color-border: #334155;
   --aegis-color-border-strong: #475569;
+  --aegis-color-border-soft: rgba(148, 163, 184, 0.12);
+  --aegis-color-border-accent-soft: rgba(96, 165, 250, 0.18);
   --aegis-color-surface-page-top: #081120;
   --aegis-color-surface-page-mid: #0f172a;
   --aegis-color-surface-page-bottom: #111827;
@@ -12,21 +14,32 @@
   --aegis-color-surface-1: #0f172a;
   --aegis-color-surface-2: #1e293b;
   --aegis-color-surface-3: #334155;
+  --aegis-color-surface-shell: rgba(2, 6, 23, 0.42);
+  --aegis-color-surface-shell-soft: rgba(15, 23, 42, 0.42);
+  --aegis-color-surface-shell-button: rgba(15, 23, 42, 0.18);
+  --aegis-color-surface-shell-button-hover: rgba(30, 41, 59, 0.42);
+  --aegis-color-surface-shell-button-active: rgba(15, 23, 42, 0.72);
+  --aegis-color-surface-panel: rgba(2, 6, 23, 0.28);
+  --aegis-color-surface-panel-strong: rgba(2, 6, 23, 0.54);
+  --aegis-color-surface-panel-soft: rgba(15, 23, 42, 0.62);
   --aegis-color-accent: #60a5fa;
   --aegis-color-accent-strong: #3b82f6;
   --aegis-color-accent-deep: #1d4ed8;
+  --aegis-color-accent-soft: rgba(96, 165, 250, 0.14);
   --aegis-space-1: 0.35rem;
   --aegis-space-2: 0.55rem;
   --aegis-space-3: 0.75rem;
   --aegis-space-4: 1rem;
   --aegis-space-5: 1.25rem;
   --aegis-space-6: 1.5rem;
+  --aegis-space-7: 1.75rem;
   --aegis-space-8: 2rem;
   --aegis-radius-sm: 8px;
   --aegis-radius-md: 12px;
   --aegis-radius-lg: 16px;
   --aegis-radius-xl: 18px;
   --aegis-radius-2xl: 20px;
+  --aegis-radius-3xl: 24px;
   --aegis-shadow-soft: 0 16px 34px rgba(2, 6, 23, 0.18);
   color: var(--aegis-color-text);
   background:
@@ -88,11 +101,11 @@ button:disabled {
   grid-template-columns: 240px minmax(0, 1fr);
   gap: var(--aegis-space-6);
   align-items: start;
-  --shell-sidebar-surface: rgba(2, 6, 23, 0.42);
-  --shell-sidebar-border: rgba(148, 163, 184, 0.12);
-  --shell-sidebar-button-surface: rgba(15, 23, 42, 0.18);
-  --shell-sidebar-button-surface-hover: rgba(30, 41, 59, 0.42);
-  --shell-sidebar-button-surface-active: rgba(15, 23, 42, 0.72);
+  --shell-sidebar-surface: var(--aegis-color-surface-shell);
+  --shell-sidebar-border: var(--aegis-color-border-soft);
+  --shell-sidebar-button-surface: var(--aegis-color-surface-shell-button);
+  --shell-sidebar-button-surface-hover: var(--aegis-color-surface-shell-button-hover);
+  --shell-sidebar-button-surface-active: var(--aegis-color-surface-shell-button-active);
   --shell-sidebar-button-border: rgba(71, 85, 105, 0.28);
   --shell-sidebar-button-border-hover: rgba(96, 165, 250, 0.22);
   --shell-sidebar-button-border-active: rgba(96, 165, 250, 0.28);
@@ -197,7 +210,7 @@ button:disabled {
 .chat-workspace-header {
   display: grid;
   gap: 0.22rem;
-  max-width: var(--shell-chat-header-max);
+  max-width: 800px;
 }
 
 .chat-workspace-header h2 {
@@ -206,9 +219,138 @@ button:disabled {
   line-height: 1.2;
 }
 
+.chat-workspace-body {
+  display: grid;
+  grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
+  gap: var(--aegis-space-4);
+  align-items: start;
+}
+
+.chat-session-rail {
+  position: sticky;
+  top: 1rem;
+  display: grid;
+  gap: var(--aegis-space-3);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  border: 1px solid var(--aegis-color-border-soft);
+  border-radius: var(--aegis-radius-3xl);
+  padding: var(--aegis-space-4);
+  background: linear-gradient(180deg, var(--aegis-color-surface-shell) 0%, var(--aegis-color-surface-shell-soft) 100%);
+  backdrop-filter: blur(14px);
+}
+
+.chat-session-rail-header {
+  display: grid;
+  gap: var(--aegis-space-2);
+}
+
+.chat-session-rail-copy {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.chat-session-rail-copy p {
+  margin: 0;
+}
+
+.chat-session-new-action {
+  width: 100%;
+  background: var(--aegis-color-surface-shell-button);
+  border-color: rgba(71, 85, 105, 0.28);
+}
+
+.chat-session-new-action:hover {
+  background: var(--aegis-color-surface-shell-button-hover);
+}
+
+.chat-session-rail-status {
+  display: grid;
+  gap: 0.2rem;
+  border: 1px solid var(--aegis-color-border-soft);
+  border-radius: 16px;
+  padding: 0.8rem 0.85rem;
+  background: var(--aegis-color-surface-panel);
+}
+
+.chat-session-rail-status span {
+  color: var(--aegis-color-text-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.chat-session-rail-status strong {
+  color: var(--aegis-color-text-strong);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.chat-session-rail-status--active {
+  border-color: var(--aegis-color-border-accent-soft);
+  background: linear-gradient(180deg, var(--aegis-color-surface-panel-strong) 0%, var(--aegis-color-surface-panel) 100%);
+}
+
+.chat-session-list {
+  display: grid;
+  gap: var(--aegis-space-2);
+}
+
+.chat-session-list button {
+  display: grid;
+  gap: 0.16rem;
+  text-align: left;
+  background: var(--aegis-color-surface-shell-button);
+  border-radius: 16px;
+  border: 1px solid var(--aegis-color-border-soft);
+  padding: 0.78rem 0.82rem;
+  color: var(--aegis-color-text-strong);
+  box-shadow: none;
+}
+
+.chat-session-list button:hover {
+  background: var(--aegis-color-surface-shell-button-hover);
+  border-color: var(--aegis-color-border-accent-soft);
+}
+
+.chat-session-list button.active {
+  border-color: rgba(96, 165, 250, 0.3);
+  background: var(--aegis-color-surface-shell-button-active);
+  box-shadow: inset 3px 0 0 var(--aegis-color-accent);
+}
+
+.chat-session-list button span {
+  font-weight: 600;
+}
+
+.chat-session-list button small {
+  color: var(--aegis-color-text-muted);
+  line-height: 1.35;
+}
+
+.chat-session-empty-state {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px dashed var(--aegis-color-border-soft);
+  border-radius: 16px;
+  padding: 0.9rem;
+  background: var(--aegis-color-surface-panel);
+}
+
+.chat-session-empty-state h3,
+.chat-session-empty-state p {
+  margin: 0;
+}
+
+.chat-session-empty-state p {
+  color: var(--aegis-color-text-muted);
+  line-height: 1.45;
+}
+
 .chat-column {
   display: flex;
   justify-content: center;
+  min-width: 0;
 }
 
 .chat-surface {
@@ -232,9 +374,9 @@ button:disabled {
   display: grid;
   gap: 0.75rem;
   padding: 1rem 1.05rem;
-  border: 1px solid rgba(96, 165, 250, 0.14);
+  border: 1px solid var(--aegis-color-accent-soft);
   border-radius: 18px;
-  background: rgba(2, 6, 23, 0.28);
+  background: var(--aegis-color-surface-panel);
 }
 
 .chat-welcome-copy {
@@ -260,10 +402,10 @@ button:disabled {
   display: grid;
   gap: 0.28rem;
   text-align: left;
-  border: 1px solid rgba(96, 165, 250, 0.14);
+  border: 1px solid var(--aegis-color-accent-soft);
   border-radius: 14px;
   padding: 0.75rem 0.8rem;
-  background: rgba(15, 23, 42, 0.62);
+  background: var(--aegis-color-surface-panel-soft);
 }
 
 .chat-suggestion-chip span {
@@ -1124,6 +1266,15 @@ pre {
 
   .workspace-nav {
     position: static;
+  }
+
+  .chat-workspace-body {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-session-rail {
+    position: static;
+    max-height: none;
   }
 
   .chat-surface {
