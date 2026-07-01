@@ -58,6 +58,7 @@ function Invoke-Verification {
         $steps = if ($FastMode) {
             @(
                 New-Step 'npm run build' { npm run build }
+                New-Step 'npm run test:browser-smoke' { npm run test:browser-smoke }
                 New-Step 'cargo check' { cargo check --manifest-path .\src-tauri\Cargo.toml }
                 New-Step 'git diff --check' { git diff --check }
             )
@@ -72,6 +73,7 @@ function Invoke-Verification {
         } else {
             @(
                 New-Step 'npm run build' { npm run build }
+                New-Step 'npm run test:browser-smoke' { npm run test:browser-smoke }
                 New-Step 'cargo test final_answer' { cargo test --manifest-path .\src-tauri\Cargo.toml final_answer -- --nocapture }
                 New-Step 'cargo test answer' { cargo test --manifest-path .\src-tauri\Cargo.toml answer -- --nocapture }
                 New-Step 'cargo test pipeline' { cargo test --manifest-path .\src-tauri\Cargo.toml pipeline -- --nocapture }
