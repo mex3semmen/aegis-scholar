@@ -42,6 +42,7 @@ This roadmap now has a clear split between implemented foundations, preview-firs
 | Current / completed Phase 156.0 | Scholar Chat session rename/delete controls |
 | Current / completed Phase 157.0 | frontend browser smoke harness |
 | Current / completed Phase 158.0 | CI browser smoke integration |
+| Current / completed Phase 160.0 | Headless-first AEGIS Core direction |
 | Known missing product workflows | scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 | Recommended next product slices | scanned PDF OCR, Scholar Chat primary layout cleanup, markdown export / artifact sharing later |
 
@@ -85,6 +86,8 @@ Phase 121.0 adds a Scholar Chat agentic workflow plan preview. It treats the cha
 Phase 122.0 adds a Scholar Chat agentic workflow execution gate preview. It composes the Phase 121 planner and decides whether a future execution step would need context, consent, or clarification, while still remaining preview-only and non-executing. It does not add automatic orchestration, extraction execution, chunking execution, retrieval execution, Evidence Pack creation, answer generation, web requests, scraping, connectors, OCR, broad PDF ingestion, source import behavior, model loading, runtime inference, LLM calls, artifact writes, persistence, registry status changes, or audit writes.
 Phase 124.0 is this docs-only documentation QA / GitHub Wiki readiness review.
 Phase 126.0 is this docs-only wiki copy QA / publication checklist pass.
+Phase 160.0 finalizes the architecture direction only and states that AEGIS Core is the authority while the UI is a client; it adds no implementation, no runtime dependency, no VPN automation, no credential handling, and no publisher scraping.
+Phase 161.0 is the later placeholder for CLI/JSON boundary planning before any OMP adapter implementation; it adds no implementation, no runtime dependency, no VPN automation, no credential handling, and no publisher scraping.
 
 ## Phase 0 — Documentation baseline
 

@@ -105,6 +105,7 @@ Phase 155.0 implements the Scholar Chat session rail UI: nested session history 
 Phase 156.0 implements the Scholar Chat session rename/delete controls: the rail gains explicit per-session rename and delete actions, delete uses a clear confirmation step, and the existing preview/check behavior and session-store backend remain unchanged.
 Phase 157.0 implements a frontend browser smoke harness for the Vite dev server: it loads the real app in Chromium with a test-only Tauri shim, checks the shell and Scholar Chat session rail are visible, and leaves product behavior unchanged.
 Phase 158.0 extends the existing Windows verify workflow so the browser smoke runs in CI alongside the current build and backend checks, without changing product behavior.
+Phase 160.0 continues this direction: the UI remains important but should be thinner over AEGIS Core, developer diagnostics stay secondary, and any future OMP integration must not replace the user-facing research workflow.
 
 ## Acceptance Criteria For Future UX Work
 

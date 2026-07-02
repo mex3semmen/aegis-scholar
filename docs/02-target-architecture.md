@@ -37,6 +37,16 @@ Windows Host
 ```text
 selected context -> prompt -> source registry -> extraction -> chunks -> retrieval -> evidence pack -> grounded answer or skill output
 ```
+## Target boundary split
+
+```text
+aegis-core = authority and scientific workflow contracts
+aegis-cli = future JSON/headless interface
+Tauri/Solid UI = desktop client
+optional OMP/Pi adapter = future boundary that calls explicit AEGIS commands
+```
+
+`aegis-cli` and the adapter are target/future boundaries only; they do not exist yet.
 
 ## Plane separation
 
